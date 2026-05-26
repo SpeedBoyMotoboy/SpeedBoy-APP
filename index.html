@@ -329,8 +329,17 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 /* NOTIFY */
 .notify-bar{background:rgba(245,197,24,.08);border:1px solid rgba(245,197,24,.2);border-radius:10px;padding:10px 14px;margin:0 14px 8px;display:flex;align-items:center;gap:10px;cursor:pointer;}
 .notify-bar.hidden{display:none;}
+.notify-bar.denied{background:rgba(255,61,61,.08);border-color:rgba(255,61,61,.35);}
 .notify-bar-text{font-size:12px;color:var(--muted);flex:1;line-height:1.4;}
+.notify-status{font-size:11px;font-weight:700;color:var(--red);border:1px solid rgba(255,61,61,.5);border-radius:20px;padding:3px 10px;white-space:nowrap;font-family:'Barlow Condensed',sans-serif;}
+.notify-status.hidden{display:none;}
 .btn-allow-notify{background:var(--accent);color:#000;border:none;border-radius:7px;padding:6px 12px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;}
+.notify-steps{list-style:none;padding:0;margin:4px 0 0;counter-reset:step;}
+.notify-steps li{position:relative;padding:9px 0 9px 34px;font-size:13px;color:var(--text);line-height:1.45;border-bottom:1px solid var(--border);}
+.notify-steps li:last-child{border-bottom:none;}
+.notify-steps li::before{counter-increment:step;content:counter(step);position:absolute;left:0;top:8px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#000;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;}
+.notify-help-note{font-size:12px;color:var(--muted);margin:12px 0 2px;line-height:1.5;}
+.btn-notify-test{width:100%;margin-top:14px;background:var(--green);color:#000;border:none;border-radius:10px;padding:12px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;cursor:pointer;}
 
 /* DUAL VALUE CARD */
 .stop-product-val{font-size:11px;color:var(--muted);margin-top:2px;}
@@ -392,6 +401,18 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
   </div>
 </div>
 
+<!-- NOTIFY HELP -->
+<div class="modal-overlay hidden" id="notifyHelpModal">
+  <div class="modal-sheet" style="max-height:90vh;overflow-y:auto;">
+    <div class="modal-header">
+      <div class="modal-name" id="notifyHelpTitle">🔔 Reativar notificações</div>
+      <button class="modal-close" onclick="closeNotifyHelp()">✕</button>
+    </div>
+    <div id="notifyHelpBody"></div>
+    <button class="btn-notify-test hidden" id="notifyTestBtn" onclick="testNotify()">📳 Enviar notificação de teste</button>
+  </div>
+</div>
+
 <!-- HEADER -->
 <div class="header">
   <div class="logo">SPEED<span>BOY</span></div>
@@ -404,9 +425,10 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 
 <!-- ══ HOME ══ -->
 <div class="screen active" id="homeScreen">
-  <div class="notify-bar hidden" id="notifyBar">
-    <div class="notify-bar-text">🔔 Ative as notificações para ser avisado de novos pedidos</div>
-    <button class="btn-allow-notify" onclick="requestNotify()">Ativar</button>
+  <div class="notify-bar hidden" id="notifyBar" onclick="onNotifyBar()">
+    <div class="notify-bar-text" id="notifyBarText">🔔 Ative as notificações para ser avisado de novos pedidos</div>
+    <span class="notify-status hidden" id="notifyStatus">Permissão negada</span>
+    <button class="btn-allow-notify" id="notifyBtn" onclick="event.stopPropagation();onNotifyBar()">Ativar</button>
   </div>
   <div class="home-top">
     <button class="btn-add" onclick="goForm()">＋ Adicionar parada</button>
@@ -3665,14 +3687,36 @@ window.addEventListener('DOMContentLoaded', function(){
 //  NOTIFICAÇÕES
 // ══════════════════════════════════════
 function checkNotifyPermission() {
-  if (!('Notification' in window)) return;
   const bar = document.getElementById('notifyBar');
   if (!bar) return;
-  if (Notification.permission === 'default') {
-    bar.classList.remove('hidden');
-  } else {
+  const text = document.getElementById('notifyBarText');
+  const pill = document.getElementById('notifyStatus');
+  const btn  = document.getElementById('notifyBtn');
+  if (!('Notification' in window)) { bar.classList.add('hidden'); return; }
+  const perm = Notification.permission;
+  if (perm === 'granted') {
     bar.classList.add('hidden');
+    return;
   }
+  bar.classList.remove('hidden');
+  if (perm === 'denied') {
+    bar.classList.add('denied');
+    text.textContent = '🔕 Notificações bloqueadas — você não será avisado de novos pedidos';
+    pill.classList.remove('hidden');
+    btn.textContent = 'Como ativar';
+  } else { // 'default'
+    bar.classList.remove('denied');
+    text.textContent = '🔔 Ative as notificações para ser avisado de novos pedidos';
+    pill.classList.add('hidden');
+    btn.textContent = 'Ativar';
+  }
+}
+
+// Clique no banner OU no botão
+function onNotifyBar() {
+  if (!('Notification' in window)) { toast('Notificações não suportadas neste navegador', 'error'); return; }
+  if (Notification.permission === 'denied') { openNotifyHelp(); return; }
+  requestNotify();
 }
 
 function requestNotify() {
@@ -3680,13 +3724,74 @@ function requestNotify() {
   Notification.requestPermission().then(p => {
     if (p === 'granted') {
       toast('🔔 Notificações ativadas!', 'success');
-      document.getElementById('notifyBar').classList.add('hidden');
+      checkNotifyPermission();
       sendNotify('SPEEDBOY', 'Notificações ativadas! Você será avisado de novos pedidos. 🛵');
     } else {
-      toast('Permissão negada', 'error');
+      checkNotifyPermission();
+      if (p === 'denied') openNotifyHelp(); // bloqueado de vez → mostra como reativar
+      else toast('Toque em "Ativar" e escolha Permitir', ''); // só dispensou o prompt
     }
-  });
+  }).catch(() => {});
 }
+
+// Detecta navegador para instruções específicas
+function notifyHelpSteps() {
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(ua);
+  const isFirefox = /Firefox/.test(ua);
+  if (isIOS) {
+    return ['<strong>No iPhone/iPad o app precisa estar instalado na tela inicial</strong> para notificar.',
+      'No Safari, toque em <strong>Compartilhar</strong> (□↑) e em <strong>Adicionar à Tela de Início</strong>.',
+      'Abra o app pelo ícone na tela inicial (não pelo Safari).',
+      'Toque em <strong>Ativar</strong> aqui no banner e confirme <strong>Permitir</strong>.'];
+  }
+  if (isFirefox) {
+    return ['Toque no ícone de <strong>cadeado 🔒</strong> à esquerda do endereço do site, no topo.',
+      'Toque em <strong>Permissões</strong> (ou na seta ao lado do site).',
+      'Em <strong>Enviar notificações</strong>, remova o bloqueio / mude para <strong>Permitir</strong>.',
+      'Recarregue a página.'];
+  }
+  // Chrome / Android (padrão)
+  return ['Toque no ícone <strong>🔒 / ⚙️ / ⓘ</strong> à esquerda do endereço do site, no topo da tela.',
+    'Toque em <strong>Permissões</strong>.',
+    'Em <strong>Notificações</strong>, mude de <em>Bloquear</em> para <strong>Permitir</strong>.',
+    'Volte e <strong>recarregue</strong> esta página.'];
+}
+
+function openNotifyHelp() {
+  const granted = ('Notification' in window) && Notification.permission === 'granted';
+  const title = document.getElementById('notifyHelpTitle');
+  const body  = document.getElementById('notifyHelpBody');
+  const testBtn = document.getElementById('notifyTestBtn');
+  if (granted) {
+    title.textContent = '🔔 Notificações ativas';
+    body.innerHTML = '<p class="notify-help-note">As notificações estão <strong>ativadas</strong>. Você será avisado de novos pedidos enquanto o app estiver aberto ou em segundo plano recente.</p>'
+      + '<p class="notify-help-note">⚠️ Com o navegador <strong>totalmente fechado</strong> por muito tempo, o aviso pode não chegar. Para garantir, deixe o app aberto/minimizado durante o expediente.</p>';
+    testBtn.classList.remove('hidden');
+  } else {
+    title.textContent = '🔕 Reativar notificações';
+    const steps = notifyHelpSteps().map(s => '<li>' + s + '</li>').join('');
+    body.innerHTML = '<p class="notify-help-note">A permissão está <strong>bloqueada</strong> neste navegador. Por segurança, o app não consegue pedir de novo automaticamente — você precisa reativar manualmente:</p>'
+      + '<ol class="notify-steps">' + steps + '</ol>'
+      + '<p class="notify-help-note">Depois de permitir, recarregue a página. O aviso some sozinho quando a permissão for concedida.</p>';
+    testBtn.classList.add('hidden');
+  }
+  document.getElementById('notifyHelpModal').classList.remove('hidden');
+}
+
+function closeNotifyHelp() {
+  document.getElementById('notifyHelpModal').classList.add('hidden');
+}
+
+function testNotify() {
+  sendNotify('🔔 SPEEDBOY — Teste', 'Se você está vendo isto, as notificações estão funcionando! 🛵', 'test');
+  toast('Notificação de teste enviada', 'success');
+}
+
+// Reavalia ao voltar para o app (ex.: usuário mudou a permissão nas configs do navegador)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') checkNotifyPermission();
+});
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});

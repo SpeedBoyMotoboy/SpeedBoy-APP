@@ -405,8 +405,8 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 <!-- ══ HOME ══ -->
 <div class="screen active" id="homeScreen">
   <div class="notify-bar hidden" id="notifyBar">
-    <div class="notify-bar-text">🔔 Ative as notificações para ser avisado de novos pedidos</div>
-    <button class="btn-allow-notify" onclick="requestNotify()">Ativar</button>
+    <div class="notify-bar-text" id="notifyBarText">🔔 Ative as notificações para ser avisado de novos pedidos</div>
+    <button class="btn-allow-notify" id="notifyBarBtn" onclick="requestNotify()">Ativar</button>
   </div>
   <div class="home-top">
     <button class="btn-add" onclick="goForm()">＋ Adicionar parada</button>
@@ -3687,22 +3687,48 @@ function checkNotifyPermission() {
   if (!('Notification' in window)) return;
   const bar = document.getElementById('notifyBar');
   if (!bar) return;
-  if (Notification.permission === 'default') {
-    bar.classList.remove('hidden');
-  } else {
+  const txt = document.getElementById('notifyBarText');
+  const btn = document.getElementById('notifyBarBtn');
+  const perm = Notification.permission;
+  if (perm === 'granted') {
     bar.classList.add('hidden');
+    return;
   }
+  bar.classList.remove('hidden');
+  if (perm === 'denied') {
+    if (txt) txt.textContent = '🔕 Notificações bloqueadas neste navegador. Toque para ver como reativar.';
+    if (btn) btn.textContent = 'Como ativar';
+  } else {
+    if (txt) txt.textContent = '🔔 Ative as notificações para ser avisado de novos pedidos';
+    if (btn) btn.textContent = 'Ativar';
+  }
+}
+
+function showNotifyHelp() {
+  alert(
+    'As notificações estão BLOQUEADAS no navegador.\n\n' +
+    'O site não consegue desbloquear sozinho — você precisa reativar nas configurações:\n\n' +
+    '1. Toque no cadeado (ou ícone ao lado do endereço do site)\n' +
+    '2. Toque em "Permissões" → "Notificações"\n' +
+    '3. Mude de "Bloquear" para "Permitir"\n' +
+    '4. Recarregue a página\n\n' +
+    'Depois disso o app vai te avisar de novos pedidos.'
+  );
 }
 
 function requestNotify() {
   if (!('Notification' in window)) { toast('Notificações não suportadas neste navegador', 'error'); return; }
+  if (Notification.permission === 'denied') { showNotifyHelp(); return; }
   Notification.requestPermission().then(p => {
     if (p === 'granted') {
       toast('🔔 Notificações ativadas!', 'success');
-      document.getElementById('notifyBar').classList.add('hidden');
+      checkNotifyPermission();
       sendNotify('SPEEDBOY', 'Notificações ativadas! Você será avisado de novos pedidos. 🛵');
+    } else if (p === 'denied') {
+      checkNotifyPermission();
+      showNotifyHelp();
     } else {
-      toast('Permissão negada', 'error');
+      toast('Você precisa permitir para receber avisos', 'error');
     }
   });
 }

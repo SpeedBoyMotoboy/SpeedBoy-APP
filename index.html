@@ -3567,17 +3567,38 @@ function showEditRequest(key,req){
   const msg=`✏️ Cliente quer EDITAR a entrega de "${req.name||'?'}":\n\n${lines}\n\nAceitar alterações?`;
   if(!confirm(msg)){rmClientRequest(key);return;}
   const si=stops.findIndex(s=>s._trackKey===key);
-  if(si>=0){Object.assign(stops[si],req.fields||{});saveStops();renderHome();toast('✅ Entrega de '+req.name+' atualizada','success');}
-  else toast('⚠️ Entrega não encontrada nos stops ativos','error');
+  if(si>=0){ // já aceita → atualiza a parada
+    Object.assign(stops[si],f);saveStops();renderHome();
+    toast('✅ Entrega de '+(req.name||'?')+' atualizada','success');
+  } else if(pendingData[key]){ // ainda pendente → atualiza o pedido pendente
+    Object.assign(pendingData[key],f);
+    updatePending(key,pendingData[key]);renderPending();
+    toast('✅ Pedido de '+(req.name||'?')+' atualizado','success');
+  } else {
+    toast('⚠️ Entrega de '+(req.name||'?')+' não encontrada','error');
+  }
   rmClientRequest(key);
 }
 function showCancelRequest(key,req){
   if(!confirm(`❌ Cliente quer CANCELAR a entrega de "${req.name||'?'}".\n\nAceitar cancelamento?`)){rmClientRequest(key);return;}
   const si=stops.findIndex(s=>s._trackKey===key);
-  if(si>=0){stops.splice(si,1);saveStops();renderHome();toast('🗑️ Entrega de '+(req.name||'?')+' cancelada','success');}
+  if(si>=0){ // já aceita → remove a parada
+    stops.splice(si,1);saveStops();renderHome();
+    toast('🗑️ Entrega de '+(req.name||'?')+' cancelada','success');
+  } else if(pendingData[key]){ // ainda pendente → remove o pedido pendente
+    rmPending(key);
+    toast('🗑️ Pedido de '+(req.name||'?')+' cancelado','success');
+  } else {
+    toast('⚠️ Entrega de '+(req.name||'?')+' não encontrada','error');
+  }
   rmClientRequest(key);
 }
+async function updatePending(key,obj){
+  if(!fbDb)return;
+  try{const room=localStorage.getItem('sb_room_code')||'';const{ref:r,set}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');await set(r(fbDb,'rooms/'+room+'/pending/'+key),JSON.stringify(obj));}catch(e){console.error(e);}
+}
 async function rmClientRequest(key){
+  delete _crSeen[key]; // permite novas solicitações no mesmo pedido
   if(!fbDb)return;
   try{const room=localStorage.getItem('sb_room_code')||'';const{ref:r,remove}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');await remove(r(fbDb,'rooms/'+room+'/client_requests/'+key));}catch(e){console.error(e);}
 }

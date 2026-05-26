@@ -709,6 +709,7 @@ window.submitPedido = function() {
       
       lastSubmittedStops = newStops;
       lastSubmittedKeys = pushRefs.map(function(r){ return r.key; });
+      newStops.forEach(function(s, i){ registerClientOrder(lastSubmittedKeys[i], s, ROOM); });
 
       // Resumo com status badge
       var html = newStops.map(function(s, i) {
@@ -721,8 +722,8 @@ window.submitPedido = function() {
         var typeIcon = s.serviceType === 'retirada' ? '📦 Retirada' : s.serviceType === 'troca' ? '🔄 Troca' : '🛵 Entrega';
         var dateStr  = s.deliveryDate ? ' · 📅 ' + s.deliveryDate : '';
         var key = lastSubmittedKeys[i] || '';
-        var editBtn = key ? '<button class="client-req-btn edit-btn" onclick="window.openEditModal(\'' + key + '\',' + i + ')">✏️ Editar entrega</button>' : '';
-        var cancelBtn = key ? '<button class="client-req-btn cancel-btn" onclick="window.requestCancel(\'' + key + '\',\'' + s.name.replace(/'/g,"\\'") + '\')">❌ Cancelar</button>' : '';
+        var editBtn = key ? '<button class="client-req-btn edit-btn" onclick="window.openEditModal(\'' + key + '\')">✏️ Editar entrega</button>' : '';
+        var cancelBtn = key ? '<button class="client-req-btn cancel-btn" onclick="window.requestCancel(\'' + key + '\')">❌ Cancelar</button>' : '';
         return '<div class="success-item" id="si_' + key + '">' +
           '<strong>' + typeIcon + ' ' + (i+1) + '. ' + s.name + '</strong>' + dateStr + '<br>' +
           '<span style="font-size:11px;color:var(--muted)">' + s.address + timeStr + valStr + '</span><br>' +
@@ -751,17 +752,34 @@ window.submitPedido = function() {
 //  EDITAR / CANCELAR — requisições ao motoboy
 // ═══════════════════════════════════════════════════
 var _editKey = '';
-var _editIdx = -1;
+var _editRoom = '';
+// Registro central dos pedidos do cliente (chave do Firebase -> dados),
+// para permitir editar/cancelar tanto na tela de sucesso quanto no histórico.
+var clientOrders = {};
+function registerClientOrder(key, s, room) {
+  if (!key) return;
+  clientOrders[key] = {
+    name:       s.name       || '',
+    address:    s.address    || '',
+    complement: s.complement || '',
+    reference:  s.reference  || '',
+    notes:      s.notes      || '',
+    timeFrom:   s.timeFrom   || '',
+    timeTo:     s.timeTo     || '',
+    room:       room || ROOM
+  };
+}
 
-window.openEditModal = function(key, idx) {
-  _editKey = key; _editIdx = idx;
-  var s = lastSubmittedStops[idx] || {};
-  document.getElementById('editAddress').value  = s.address  || '';
+window.openEditModal = function(key) {
+  var s = clientOrders[key];
+  if (!s) { showToast('Pedido não encontrado', 'error'); return; }
+  _editKey = key; _editRoom = s.room || clientReqRoom || ROOM;
+  document.getElementById('editAddress').value    = s.address    || '';
   document.getElementById('editComplement').value = s.complement || '';
-  document.getElementById('editReference').value = s.reference || '';
-  document.getElementById('editNotes').value    = s.notes    || '';
-  document.getElementById('editTimeFrom').value = s.timeFrom || '';
-  document.getElementById('editTimeTo').value   = s.timeTo   || '';
+  document.getElementById('editReference').value  = s.reference  || '';
+  document.getElementById('editNotes').value      = s.notes      || '';
+  document.getElementById('editTimeFrom').value   = s.timeFrom   || '';
+  document.getElementById('editTimeTo').value     = s.timeTo     || '';
   document.getElementById('editModal').style.display = 'flex';
 };
 window.closeEditModal = function() {
@@ -769,31 +787,33 @@ window.closeEditModal = function() {
 };
 window.submitEdit = function() {
   if (!_editKey || !db) return;
-  var payload = {
-    type: 'edit',
-    name: (lastSubmittedStops[_editIdx] || {}).name || '',
-    fields: {
-      address:    document.getElementById('editAddress').value.trim(),
-      complement: document.getElementById('editComplement').value.trim(),
-      reference:  document.getElementById('editReference').value.trim(),
-      notes:      document.getElementById('editNotes').value.trim(),
-      timeFrom:   document.getElementById('editTimeFrom').value.trim(),
-      timeTo:     document.getElementById('editTimeTo').value.trim()
-    },
-    ts: Date.now()
+  var room = _editRoom || clientReqRoom || ROOM;
+  var fields = {
+    address:    document.getElementById('editAddress').value.trim(),
+    complement: document.getElementById('editComplement').value.trim(),
+    reference:  document.getElementById('editReference').value.trim(),
+    notes:      document.getElementById('editNotes').value.trim(),
+    timeFrom:   document.getElementById('editTimeFrom').value.trim(),
+    timeTo:     document.getElementById('editTimeTo').value.trim()
   };
-  db.ref('rooms/' + clientReqRoom + '/client_requests/' + _editKey).set(JSON.stringify(payload))
+  var payload = { type: 'edit', name: (clientOrders[_editKey]||{}).name || '', fields: fields, ts: Date.now() };
+  db.ref('rooms/' + room + '/client_requests/' + _editKey).set(JSON.stringify(payload))
     .then(function() {
+      // mantém o registro local atualizado
+      if (clientOrders[_editKey]) Object.assign(clientOrders[_editKey], fields);
       showToast('✏️ Solicitação enviada ao motoboy!', 'success');
       window.closeEditModal();
     })
     .catch(function(e) { showToast('Erro ao enviar: ' + e.message, 'error'); });
 };
-window.requestCancel = function(key, name) {
-  if (!confirm('Tem certeza que deseja cancelar a entrega de ' + name + '?')) return;
+window.requestCancel = function(key) {
+  var o = clientOrders[key] || {};
+  var name = o.name || '';
+  if (!confirm('Tem certeza que deseja cancelar a entrega de ' + (name||'este pedido') + '?')) return;
   if (!db) return;
+  var room = o.room || clientReqRoom || ROOM;
   var payload = { type: 'cancel', name: name, ts: Date.now() };
-  db.ref('rooms/' + clientReqRoom + '/client_requests/' + key).set(JSON.stringify(payload))
+  db.ref('rooms/' + room + '/client_requests/' + key).set(JSON.stringify(payload))
     .then(function() {
       showToast('❌ Cancelamento enviado ao motoboy!', 'success');
       var item = document.getElementById('si_' + key);
@@ -899,7 +919,7 @@ function addToClientHistory(stops, keys) {
     date: new Date().toLocaleDateString('pt-BR'),
     time: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
     room: ROOM,
-    stops: stops.map(function(s, i){ return {name:s.name, address:s.address, serviceType:s.serviceType, city:s.city, deliveryDate:s.deliveryDate, reference:s.reference, key:(keys&&keys[i])||''}; })
+    stops: stops.map(function(s, i){ return {name:s.name, address:s.address, complement:s.complement, serviceType:s.serviceType, city:s.city, deliveryDate:s.deliveryDate, reference:s.reference, notes:s.notes, timeFrom:s.timeFrom, timeTo:s.timeTo, key:(keys&&keys[i])||''}; })
   };
   hist.unshift(entry);
   saveClientHistory(hist);
@@ -921,9 +941,18 @@ function renderClientHistory() {
     var stopsHtml = entry.stops.map(function(s, i) {
       var type    = s.serviceType==='retirada'?'📦':s.serviceType==='troca'?'🔄':'🛵';
       var refStr  = s.reference ? ' · 🔍 ' + s.reference : '';
-      return '<div style="margin-top:6px">' +
+      var key = s.key || '';
+      if (key) registerClientOrder(key, s, entry.room);
+      var btns = key
+        ? '<div style="display:flex;gap:8px;margin-top:6px;">' +
+            '<button class="client-req-btn edit-btn" onclick="window.openEditModal(\'' + key + '\')">✏️ Editar</button>' +
+            '<button class="client-req-btn cancel-btn" onclick="window.requestCancel(\'' + key + '\')">❌ Cancelar</button>' +
+          '</div>'
+        : '';
+      return '<div style="margin-top:8px;' + (i>0?'border-top:1px solid var(--border);padding-top:8px;':'') + '">' +
         type + ' ' + (i+1) + '. <strong>' + s.name + '</strong> — ' + (s.city||'') +
         (s.deliveryDate?' · 📅 '+s.deliveryDate:'') + refStr +
+        btns +
         '</div>';
     }).join('');
     return '<div class="hist-item"><div class="hist-item-name">📅 ' + entry.date + ' às ' + entry.time + '</div><div class="hist-item-info">' + stopsHtml + '</div></div>';

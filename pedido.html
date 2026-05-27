@@ -859,10 +859,13 @@ window.submitPedido = function() {
 // ═══════════════════════════════════════════════════
 var _editKey = '';
 var _editIdx = -1;
+var _editName = '';
 
 window.openEditModal = function(key, idx) {
   _editKey = key; _editIdx = idx;
   var s = lastSubmittedStops[idx] || {};
+  _editName = s.name || '';
+  clientReqRoom = ROOM;
   document.getElementById('editAddress').value  = s.address  || '';
   document.getElementById('editComplement').value = s.complement || '';
   document.getElementById('editReference').value = s.reference || '';
@@ -871,6 +874,29 @@ window.openEditModal = function(key, idx) {
   document.getElementById('editTimeTo').value   = s.timeTo   || '';
   document.getElementById('editModal').style.display = 'flex';
 };
+// Editar a partir do histórico (cliente voltou depois de fechar a página)
+window.openEditFromHist = function(entryIdx, stopIdx) {
+  var hist = getClientHistory();
+  var entry = hist[entryIdx]; if (!entry) return;
+  var s = (entry.stops || [])[stopIdx]; if (!s || !s.key) { showToast('Esse pedido não pode mais ser editado.', 'error'); return; }
+  _editKey = s.key; _editIdx = -1;
+  _editName = s.name || '';
+  clientReqRoom = entry.room || ROOM;
+  document.getElementById('editAddress').value  = s.address || '';
+  document.getElementById('editComplement').value = '';
+  document.getElementById('editReference').value = s.reference || '';
+  document.getElementById('editNotes').value    = '';
+  document.getElementById('editTimeFrom').value = '';
+  document.getElementById('editTimeTo').value   = '';
+  document.getElementById('editModal').style.display = 'flex';
+};
+window.cancelFromHist = function(entryIdx, stopIdx) {
+  var hist = getClientHistory();
+  var entry = hist[entryIdx]; if (!entry) return;
+  var s = (entry.stops || [])[stopIdx]; if (!s || !s.key) { showToast('Esse pedido não pode mais ser cancelado.', 'error'); return; }
+  clientReqRoom = entry.room || ROOM;
+  window.requestCancel(s.key, s.name || '');
+};
 window.closeEditModal = function() {
   document.getElementById('editModal').style.display = 'none';
 };
@@ -878,7 +904,8 @@ window.submitEdit = function() {
   if (!_editKey || !db) return;
   var payload = {
     type: 'edit',
-    name: (lastSubmittedStops[_editIdx] || {}).name || '',
+    orderKey: _editKey,
+    name: _editName || (lastSubmittedStops[_editIdx] || {}).name || '',
     fields: {
       address:    document.getElementById('editAddress').value.trim(),
       complement: document.getElementById('editComplement').value.trim(),
@@ -889,7 +916,7 @@ window.submitEdit = function() {
     },
     ts: Date.now()
   };
-  db.ref('rooms/' + clientReqRoom + '/client_requests/' + _editKey).set(JSON.stringify(payload))
+  db.ref('rooms/' + clientReqRoom + '/client_requests').push(JSON.stringify(payload))
     .then(function() {
       showToast('✏️ Solicitação enviada ao motoboy!', 'success');
       window.closeEditModal();
@@ -899,8 +926,8 @@ window.submitEdit = function() {
 window.requestCancel = function(key, name) {
   if (!confirm('Tem certeza que deseja cancelar a entrega de ' + name + '?')) return;
   if (!db) return;
-  var payload = { type: 'cancel', name: name, ts: Date.now() };
-  db.ref('rooms/' + clientReqRoom + '/client_requests/' + key).set(JSON.stringify(payload))
+  var payload = { type: 'cancel', orderKey: key, name: name, ts: Date.now() };
+  db.ref('rooms/' + clientReqRoom + '/client_requests').push(JSON.stringify(payload))
     .then(function() {
       showToast('❌ Cancelamento enviado ao motoboy!', 'success');
       var item = document.getElementById('si_' + key);
@@ -1028,13 +1055,20 @@ function renderClientHistory() {
   if (count) count.textContent = hist.length ? '(' + hist.length + ')' : '';
   var list = document.getElementById('histList');
   if (!hist.length) { list.innerHTML = '<div class="hist-empty">Nenhum pedido ainda.</div>'; return; }
-  list.innerHTML = hist.map(function(entry) {
+  list.innerHTML = hist.map(function(entry, ei) {
     var stopsHtml = entry.stops.map(function(s, i) {
       var type    = getSvcLabel(s.serviceType).split(' ')[0];
       var refStr  = s.reference ? ' · 🔍 ' + s.reference : '';
+      var actions = s.key
+        ? '<div style="display:flex;gap:8px;margin-top:8px;">' +
+            '<button class="client-req-btn edit-btn" onclick="window.openEditFromHist(' + ei + ',' + i + ')">✏️ Editar</button>' +
+            '<button class="client-req-btn cancel-btn" onclick="window.cancelFromHist(' + ei + ',' + i + ')">❌ Cancelar</button>' +
+          '</div>'
+        : '';
       return '<div style="margin-top:6px">' +
         type + ' ' + (i+1) + '. <strong>' + s.name + '</strong> — ' + (s.city||'') +
         (s.deliveryDate?' · 📅 '+s.deliveryDate:'') + refStr +
+        actions +
         '</div>';
     }).join('');
     return '<div class="hist-item"><div class="hist-item-name">📅 ' + entry.date + ' às ' + entry.time + '</div><div class="hist-item-info">' + stopsHtml + '</div></div>';

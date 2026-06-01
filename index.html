@@ -3037,24 +3037,34 @@ async function genFaturaLoja(storeName, periodo, btnEl, opts={}){
     y+=28;
 
     // ── Tabela de entregas ──
+    const tipoLabel=s=>s.serviceType==='retirada'?'Coleta':s.serviceType==='troca'?'Troca':'Entrega';
     const tableRows=fatStops.map((s,i)=>[
       i+1,
       s._date,
       (s.name||'—').substring(0,22),
       (s.neighborhood||'').substring(0,28),
       cityName(resolveCityCode(s.city||s.cityId||'')),
-      fmtMoney(parseMoney(s.value)),
-      s.paid?'✓':'—'
+      tipoLabel(s),
+      fmtMoney(parseMoney(s.value))
     ]);
+    // Escala automática para caber tudo em uma única página
+    const footerH=prestPix?24:16;
+    const availH=(PH-14)-y-footerH-14;
+    let fontSize=7.5, cellPadding=2.5;
+    while((tableRows.length+1)*(fontSize*0.3528+cellPadding*2) > availH && fontSize>3.8){
+      fontSize-=0.2; cellPadding=Math.max(0.6,cellPadding-0.07);
+    }
     doc.autoTable({
       startY:y,
-      head:[['Nº','Data','Cliente','Bairro','Cidade','Valor','Pago']],
+      head:[['Nº','Data','Cliente','Bairro','Cidade','Tipo','Valor']],
       body:tableRows,
       theme:'plain',
-      styles:{font:'helvetica',fontSize:7.5,textColor:[200,200,200],cellPadding:2.5,fillColor:[14,14,20]},
-      headStyles:{fillColor:[30,30,36],textColor:[245,197,24],fontStyle:'bold',fontSize:7.5},
+      pageBreak:'avoid',
+      rowPageBreak:'avoid',
+      styles:{font:'helvetica',fontSize:fontSize,textColor:[200,200,200],cellPadding:cellPadding,fillColor:[14,14,20]},
+      headStyles:{fillColor:[30,30,36],textColor:[245,197,24],fontStyle:'bold',fontSize:fontSize},
       alternateRowStyles:{fillColor:[10,10,16]},
-      columnStyles:{0:{cellWidth:7,halign:'center'},1:{cellWidth:20},5:{cellWidth:18,halign:'right'},6:{cellWidth:10,halign:'center'}},
+      columnStyles:{0:{cellWidth:7,halign:'center'},1:{cellWidth:18},5:{cellWidth:16,halign:'center'},6:{cellWidth:18,halign:'right'}},
       margin:{left:14,right:14},
       didDrawPage:(data)=>{
         // Footer em cada página

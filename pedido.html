@@ -973,20 +973,64 @@ function renderClientHistory() {
     var stopsHtml = entry.stops.map(function(s, i) {
       var type    = s.serviceType==='retirada'?'📦':s.serviceType==='troca'?'🔄':'🛵';
       var refStr  = s.reference ? ' · 🔍 ' + s.reference : '';
-      var badge   = s.cancelled ? ' <span class="status-badge status-cancelled">❌ Cancelada</span>' : '';
-      var actions = (s.key && !s.cancelled)
+      var badge   = s.cancelled ? ' <span class="status-badge status-cancelled">❌ Cancelada</span>'
+                  : s.finalized ? ' <span class="status-badge status-entregue">✅ Entregue</span>' : '';
+      // Só pode atualizar/cancelar entregas que não foram finalizadas nem canceladas
+      var actions = (s.key && !s.cancelled && !s.finalized)
         ? '<div class="hist-actions">' +
             '<button class="client-req-btn edit-btn" onclick="window.histEdit(' + hi + ',' + i + ')">✏️ Atualizar</button>' +
             '<button class="client-req-btn cancel-btn" onclick="window.histCancel(' + hi + ',' + i + ')">❌ Cancelar</button>' +
           '</div>'
         : '';
-      return '<div style="margin-top:8px' + (s.cancelled?';opacity:.55':'') + '">' +
+      return '<div style="margin-top:8px' + ((s.cancelled||s.finalized)?';opacity:.6':'') + '">' +
         type + ' ' + (i+1) + '. <strong>' + s.name + '</strong> — ' + (s.city||'') +
-        (s.deliveryDate?' · 📅 '+s.deliveryDate:'') + refStr + badge +
-        '</div>' + actions;
+        (s.deliveryDate?' · 📅 '+s.deliveryDate:'') + refStr +
+        '<span id="hb_' + hi + '_' + i + '">' + badge + '</span>' +
+        '</div>' +
+        '<div id="ha_' + hi + '_' + i + '">' + actions + '</div>';
     }).join('');
     return '<div class="hist-item"><div class="hist-item-name">📅 ' + entry.date + ' às ' + entry.time + '</div><div class="hist-item-info">' + stopsHtml + '</div></div>';
   }).join('');
+  refreshHistStatuses();
+}
+
+// Lê o status atual da entrega no Firebase (rooms/<room>/tracking/<key>)
+// e bloqueia edição/cancelamento quando já foi finalizada ("entregue").
+function readDeliveryStatus(room, key, cb) {
+  if (!db || !key) { cb(null); return; }
+  db.ref('rooms/' + (room||ROOM) + '/tracking/' + key).once('value')
+    .then(function(snap) {
+      var st = '';
+      try { st = (JSON.parse(snap.val())||{}).status || ''; } catch(e) { st = ''; }
+      cb(st);
+    })
+    .catch(function() { cb(null); });
+}
+// Atualiza os selos de status e esconde os botões de entregas já finalizadas
+function refreshHistStatuses() {
+  if (!db) return;
+  var hist = getClientHistory();
+  var changed = false;
+  hist.forEach(function(entry, hi) {
+    entry.stops.forEach(function(s, i) {
+      if (!s.key || s.cancelled) return;
+      readDeliveryStatus(entry.room || ROOM, s.key, function(st) {
+        if (st === 'entregue' && !s.finalized) {
+          s.finalized = true; saveClientHistory(hist);
+        }
+        var badgeEl = document.getElementById('hb_' + hi + '_' + i);
+        var actEl   = document.getElementById('ha_' + hi + '_' + i);
+        if (st === 'entregue') {
+          if (badgeEl) badgeEl.innerHTML = ' <span class="status-badge status-entregue">✅ Entregue</span>';
+          if (actEl)   actEl.innerHTML = '';
+        } else if (st === 'acaminho' || st === 'a caminho') {
+          if (badgeEl) badgeEl.innerHTML = ' <span class="status-badge status-acaminho">🛵 A caminho</span>';
+        } else if (st === 'aceito') {
+          if (badgeEl) badgeEl.innerHTML = ' <span class="status-badge status-aceito">✅ Aceito</span>';
+        }
+      });
+    });
+  });
 }
 
 // ─── Atualizar / Cancelar a partir do histórico ───
@@ -995,23 +1039,37 @@ window.histEdit = function(hi, si) {
   var entry = hist[hi]; if (!entry) return;
   var s = entry.stops[si]; if (!s) return;
   if (!s.key) { showToast('Esta entrega não pode ser atualizada', 'error'); return; }
-  _editKey = s.key; _editIdx = -1; _editHist = {hi:hi, si:si};
-  _editRoom = entry.room || ROOM; _editName = s.name || '';
-  document.getElementById('editAddress').value    = s.address    || '';
-  document.getElementById('editComplement').value = s.complement || '';
-  document.getElementById('editReference').value  = s.reference  || '';
-  document.getElementById('editNotes').value      = s.notes      || '';
-  document.getElementById('editTimeFrom').value   = s.timeFrom   || '';
-  document.getElementById('editTimeTo').value     = s.timeTo     || '';
-  document.getElementById('editModal').style.display = 'flex';
+  readDeliveryStatus(entry.room || ROOM, s.key, function(st) {
+    if (st === 'entregue') {
+      s.finalized = true; saveClientHistory(hist); renderClientHistory();
+      showToast('✅ Entrega já finalizada — não pode ser alterada', 'error');
+      return;
+    }
+    _editKey = s.key; _editIdx = -1; _editHist = {hi:hi, si:si};
+    _editRoom = entry.room || ROOM; _editName = s.name || '';
+    document.getElementById('editAddress').value    = s.address    || '';
+    document.getElementById('editComplement').value = s.complement || '';
+    document.getElementById('editReference').value  = s.reference  || '';
+    document.getElementById('editNotes').value      = s.notes      || '';
+    document.getElementById('editTimeFrom').value   = s.timeFrom   || '';
+    document.getElementById('editTimeTo').value     = s.timeTo     || '';
+    document.getElementById('editModal').style.display = 'flex';
+  });
 };
 window.histCancel = function(hi, si) {
   var hist = getClientHistory();
   var entry = hist[hi]; if (!entry) return;
   var s = entry.stops[si]; if (!s) return;
   if (!s.key) { showToast('Esta entrega não pode ser cancelada', 'error'); return; }
-  sendCancelRequest(entry.room || ROOM, s.key, s.name, function() {
-    s.cancelled = true; saveClientHistory(hist); renderClientHistory();
+  readDeliveryStatus(entry.room || ROOM, s.key, function(st) {
+    if (st === 'entregue') {
+      s.finalized = true; saveClientHistory(hist); renderClientHistory();
+      showToast('✅ Entrega já finalizada — não pode ser cancelada', 'error');
+      return;
+    }
+    sendCancelRequest(entry.room || ROOM, s.key, s.name, function() {
+      s.cancelled = true; saveClientHistory(hist); renderClientHistory();
+    });
   });
 };
 

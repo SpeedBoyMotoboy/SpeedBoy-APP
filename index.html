@@ -452,9 +452,8 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
   <div id="quickFab" style="display:none;"></div>
   <div class="stops-list" id="stopsList"></div>
   <div class="route-bar">
-    <button class="btn-route" id="optimizeBtn" onclick="optimizeAndOpenRoute()" disabled style="width:100%;margin-bottom:8px;background:rgba(245,197,24,.12);border-color:var(--accent);color:var(--accent);font-size:15px;">⚡ Otimizar Rota · GPS → entregas → 🏠 Casa</button>
     <div style="display:flex;gap:8px;">
-      <button class="btn-route" id="routeBtn" onclick="openRoute()" disabled style="flex:1.2;">🗺️ Rota no Maps</button>
+      <button class="btn-route" id="optimizeBtn" onclick="optimizeAndOpenRoute()" disabled style="flex:1.2;background:rgba(245,197,24,.12);border-color:var(--accent);color:var(--accent);">⚡ Otimizar Rota</button>
       <button class="btn-route" onclick="goRepass()" style="flex:1;background:rgba(255,107,0,.12);border-color:var(--accent2);color:var(--accent2);">🏍️ Repassar</button>
     </div>
   </div>
@@ -731,13 +730,19 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
       <div class="meta-lbl">META DO DIA (R$)</div>
       <input class="meta-inp" id="metaInp" type="number" placeholder="0" oninput="updateMeta()" />
     </div>
-    <div class="meta-bar-wrap"><div class="meta-bar" id="metaBar" style="width:0%"></div></div>
+    <div class="meta-bar-wrap" style="display:flex;">
+      <div class="meta-bar" id="metaBarDone" style="width:0%;flex-shrink:0;"></div>
+      <div class="meta-bar" id="metaBarPend" style="width:0%;flex-shrink:0;border-radius:0;opacity:.28;"></div>
+    </div>
     <div id="metaPct" style="text-align:right;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;color:var(--accent);margin:-8px 0 12px;"></div>
     <div class="meta-row">
       <div class="meta-lbl">META SEMANAL (R$)</div>
       <input class="meta-inp" id="metaWeekInp" type="number" placeholder="0" oninput="updateMetaWeek()" />
     </div>
-    <div class="meta-bar-wrap"><div class="meta-bar" id="metaBarWeek" style="width:0%;background:var(--blue);"></div></div>
+    <div class="meta-bar-wrap" style="display:flex;">
+      <div class="meta-bar" id="metaBarWeekDone" style="width:0%;flex-shrink:0;background:var(--blue);"></div>
+      <div class="meta-bar" id="metaBarWeekPend" style="width:0%;flex-shrink:0;border-radius:0;background:var(--blue);opacity:.28;"></div>
+    </div>
     <div id="metaWeekPct" style="text-align:right;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;color:var(--blue);margin:-8px 0 12px;"></div>
     <div class="sum-grid" id="sumGrid"></div>
     <div class="sum-grid" id="sumGrid2" style="margin-top:-4px;margin-bottom:16px;"></div>
@@ -1088,7 +1093,6 @@ function renderHome(){
   const total = stops.length;
   badge.textContent = total+' parada(s)';
   badge.classList.toggle('full', false);
-  document.getElementById('routeBtn').disabled = total===0;
   const _ob=document.getElementById('optimizeBtn'); if(_ob) _ob.disabled=total===0;
   document.getElementById('sortBar').classList.toggle('visible', total>1);
   renderQuickButtons();
@@ -1344,7 +1348,11 @@ function updateHistStopValue(di,si,rawVal){
 }
 
 function togDone(i){
-  stops[i].done=!stops[i].done; saveStops(); renderHome();
+  stops[i].done=!stops[i].done;
+  // Registra a data em que foi finalizada — entra no fechamento por essa data
+  if(stops[i].done) stops[i]._doneDate=new Date().toLocaleDateString('pt-BR');
+  else delete stops[i]._doneDate;
+  saveStops(); renderHome();
   if(stops[i]._trackKey) updateTracking(stops[i]._trackKey, stops[i].done?'entregue':'aceito');
 }
 
@@ -2152,37 +2160,53 @@ function renderFinance(){
   const todayTotal=todayStops.reduce((a,s)=>a+parseMoney(s.value),0);
   const todayRec  =todayStops.filter(s=>s.paid).reduce((a,s)=>a+parseMoney(s.value),0);
   const todayDone =todayStops.filter(s=>s.done).length;
-  const wkTotal   =flatStops.filter(s=>tryDt(s)>=wkStart).reduce((a,s)=>a+parseMoney(s.value),0);
+  // Split finalizadas (done) vs pendentes — para as barras de meta
+  const todayDoneTotal=todayStops.filter(s=>s.done).reduce((a,s)=>a+parseMoney(s.value),0);
+  const todayPendTotal=todayTotal-todayDoneTotal;
+  const wkStops   =flatStops.filter(s=>tryDt(s)>=wkStart);
+  const wkTotal   =wkStops.reduce((a,s)=>a+parseMoney(s.value),0);
+  const wkDoneTotal=wkStops.filter(s=>s.done).reduce((a,s)=>a+parseMoney(s.value),0);
+  const wkPendTotal=wkTotal-wkDoneTotal;
   const mTotal    =flatStops.filter(s=>tryDt(s)>=m1).reduce((a,s)=>a+parseMoney(s.value),0);
   const r7Total   =flatStops.filter(s=>tryDt(s)>=r7).reduce((a,s)=>a+parseMoney(s.value),0);
   // Meta
   const meta=parseFloat(cfg.meta)||0;
   document.getElementById('metaInp').value=meta||'';
   const pctEl=document.getElementById('metaPct');
+  const metaBarDone=document.getElementById('metaBarDone');
+  const metaBarPend=document.getElementById('metaBarPend');
   if(meta>0){
-    const pct=Math.min(todayTotal/meta*100,100);
+    const doneW=Math.min(todayDoneTotal/meta*100,100);
+    const pendW=Math.max(0,Math.min((todayDoneTotal+todayPendTotal)/meta*100,100)-doneW);
     const pctRaw=(todayTotal/meta*100);
-    document.getElementById('metaBar').style.width=pct+'%';
-    document.getElementById('metaBar').style.background=pct>=100?'var(--green)':'var(--accent)';
-    pctEl.textContent='R$ '+todayTotal.toFixed(2).replace('.',',')+'  ·  '+pctRaw.toFixed(0)+'% da meta';
-    pctEl.style.color=pct>=100?'var(--green)':'var(--accent)';
+    metaBarDone.style.width=doneW+'%';
+    metaBarPend.style.width=pendW+'%';
+    metaBarDone.style.background=doneW>=100?'var(--green)':'var(--accent)';
+    pctEl.innerHTML='R$ '+todayDoneTotal.toFixed(2).replace('.',',')+' finalizado'+(todayPendTotal>0?' <span style="opacity:.65;font-weight:700;">+ R$ '+todayPendTotal.toFixed(2).replace('.',',')+' pendente</span>':'')+'  ·  '+pctRaw.toFixed(0)+'% da meta';
+    pctEl.style.color=doneW>=100?'var(--green)':'var(--accent)';
   } else {
-    document.getElementById('metaBar').style.width='0%';
+    metaBarDone.style.width='0%';
+    metaBarPend.style.width='0%';
     pctEl.textContent='';
   }
   // Meta Semanal
   const metaWeek=parseFloat(cfg.metaWeek)||0;
   document.getElementById('metaWeekInp').value=metaWeek||'';
   const pctWkEl=document.getElementById('metaWeekPct');
+  const metaBarWeekDone=document.getElementById('metaBarWeekDone');
+  const metaBarWeekPend=document.getElementById('metaBarWeekPend');
   if(metaWeek>0){
-    const pctWk=Math.min(wkTotal/metaWeek*100,100);
+    const doneWkW=Math.min(wkDoneTotal/metaWeek*100,100);
+    const pendWkW=Math.max(0,Math.min((wkDoneTotal+wkPendTotal)/metaWeek*100,100)-doneWkW);
     const pctWkRaw=(wkTotal/metaWeek*100);
-    document.getElementById('metaBarWeek').style.width=pctWk+'%';
-    document.getElementById('metaBarWeek').style.background=pctWk>=100?'var(--green)':'var(--blue)';
-    pctWkEl.textContent='R$ '+wkTotal.toFixed(2).replace('.',',')+'  ·  '+pctWkRaw.toFixed(0)+'% da meta semanal';
-    pctWkEl.style.color=pctWk>=100?'var(--green)':'var(--blue)';
+    metaBarWeekDone.style.width=doneWkW+'%';
+    metaBarWeekPend.style.width=pendWkW+'%';
+    metaBarWeekDone.style.background=doneWkW>=100?'var(--green)':'var(--blue)';
+    pctWkEl.innerHTML='R$ '+wkDoneTotal.toFixed(2).replace('.',',')+' finalizado'+(wkPendTotal>0?' <span style="opacity:.65;font-weight:700;">+ R$ '+wkPendTotal.toFixed(2).replace('.',',')+' pendente</span>':'')+'  ·  '+pctWkRaw.toFixed(0)+'% da meta semanal';
+    pctWkEl.style.color=doneWkW>=100?'var(--green)':'var(--blue)';
   } else {
-    document.getElementById('metaBarWeek').style.width='0%';
+    metaBarWeekDone.style.width='0%';
+    metaBarWeekPend.style.width='0%';
     pctWkEl.textContent='';
   }
   // Despesas e lucro
@@ -2473,13 +2497,13 @@ function getReportData(){
   else if(reportPeriod==='month') cutoff=new Date(now.getFullYear(),now.getMonth(),1);
   else{ cutoff=new Date(now); cutoff.setDate(now.getDate()-60); }
   const days=allDays.filter(d=>parseDate(d.date)>=cutoff);
-  const todayDtR=new Date(); todayDtR.setHours(0,0,0,0);
   let total=0,received=0,deliveries=0; const allStops=[]; const sm={};
   days.forEach(day=>day.stops.forEach(s=>{
-    // Excluir agendadas futuras não realizadas
-    if(!s.done&&s.deliveryDate){try{if(parseDate(s.deliveryDate)>todayDtR)return;}catch(e){}}
-    const v=parseMoney(s.value); total+=v; if(s.paid)received+=v; if(s.done)deliveries++;
-    const reportDate=day===days[0]?(s.deliveryDate||s._addedDate||day.date):day.date;
+    // Apenas entregas finalizadas entram no fechamento
+    if(!s.done)return;
+    const v=parseMoney(s.value); total+=v; if(s.paid)received+=v; deliveries++;
+    // Usa a data em que foi finalizada (_doneDate); cai para a lógica antiga se ausente
+    const reportDate=s._doneDate||(day===days[0]?(s.deliveryDate||s._addedDate||day.date):day.date);
     allStops.push({...s,_date:reportDate});
     const k=s.store||'Sem loja'; if(!sm[k])sm[k]={t:0,c:0,r:0}; sm[k].t+=v; sm[k].c++; if(s.paid)sm[k].r+=v;
   }));
@@ -2565,14 +2589,17 @@ function _renderDays(d){
   const WKDAY=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
   el.innerHTML='<div class="fsec-title">Histórico — '+days.length+' dia(s)</div>'+days.map(day=>{
     const allS=day.stops;
-    if(!allS.length)return'';
-    const total=allS.reduce((a,s)=>a+parseMoney(s.value),0);
-    const received=allS.filter(s=>s.paid).reduce((a,s)=>a+parseMoney(s.value),0);
+    // Apenas entregas finalizadas entram no fechamento
+    const doneS=allS.filter(s=>s.done);
+    if(!doneS.length)return'';
+    const total=doneS.reduce((a,s)=>a+parseMoney(s.value),0);
+    const received=doneS.filter(s=>s.paid).reduce((a,s)=>a+parseMoney(s.value),0);
     const allPaid=total>0&&received>=total;
     const wd=WKDAY[parseDate(day.date).getDay()]||'';
     const dayId='fd_'+day.date.replace(/\//g,'');
     const payBtn=day.isToday?'':`<button class="sc-btn ${allPaid?'paid':''}" style="font-size:12px;padding:5px 10px;" onclick="markDayReceived('${day.date}');event.stopPropagation();">${allPaid?'✓ Pago':'Pagar dia'}</button>`;
     const stops_html=allS.map((s,si)=>{
+      if(!s.done)return''; // pula pendentes, mantém o índice original (si) intacto
       const val=parseMoney(s.value);
       const prodVal=parseMoney(s.productValue);
       const payFn=day.isToday?`togPaid(${si})`:`togHistPaid('${day.date}',${si})`;
@@ -2603,7 +2630,7 @@ function _renderDays(d){
       <div class="fday-h" onclick="document.getElementById('${dayId}').classList.toggle('open')">
         <div class="fday-left">
           <div class="fday-date">${day.date} <span style="font-size:13px;font-weight:600;color:var(--muted);">${wd}</span></div>
-          <div class="fday-meta">${allS.length} entrega${allS.length!==1?'s':''}</div>
+          <div class="fday-meta">${doneS.length} entrega${doneS.length!==1?'s':''}</div>
         </div>
         <div class="fday-right">
           <div class="fday-val" style="color:${allPaid?'var(--green)':received>0?'var(--accent)':'inherit'}">${fmtMoney(received>0||allPaid?received:total)}</div>
@@ -3572,18 +3599,22 @@ function listenClientRequests(){
   });
 }
 function showEditRequest(key,req){
+  const si=stops.findIndex(s=>s._trackKey===key);
+  // Entregas já finalizadas não podem ser alteradas pelo cliente
+  if(si>=0&&stops[si].done){toast('⚠️ Entrega de '+(req.name||'?')+' já finalizada — edição ignorada','error');rmClientRequest(key);return;}
   const f=req.fields||{};
   const lines=Object.entries(f).filter(([,v])=>v).map(([k,v])=>`${k}: ${v}`).join('\n');
   const msg=`✏️ Cliente quer EDITAR a entrega de "${req.name||'?'}":\n\n${lines}\n\nAceitar alterações?`;
   if(!confirm(msg)){rmClientRequest(key);return;}
-  const si=stops.findIndex(s=>s._trackKey===key);
   if(si>=0){Object.assign(stops[si],req.fields||{});saveStops();renderHome();toast('✅ Entrega de '+req.name+' atualizada','success');}
   else toast('⚠️ Entrega não encontrada nos stops ativos','error');
   rmClientRequest(key);
 }
 function showCancelRequest(key,req){
-  if(!confirm(`❌ Cliente quer CANCELAR a entrega de "${req.name||'?'}".\n\nAceitar cancelamento?`)){rmClientRequest(key);return;}
   const si=stops.findIndex(s=>s._trackKey===key);
+  // Entregas já finalizadas não podem ser canceladas pelo cliente
+  if(si>=0&&stops[si].done){toast('⚠️ Entrega de '+(req.name||'?')+' já finalizada — cancelamento ignorado','error');rmClientRequest(key);return;}
+  if(!confirm(`❌ Cliente quer CANCELAR a entrega de "${req.name||'?'}".\n\nAceitar cancelamento?`)){rmClientRequest(key);return;}
   if(si>=0){stops.splice(si,1);saveStops();renderHome();toast('🗑️ Entrega de '+(req.name||'?')+' cancelada','success');}
   rmClientRequest(key);
 }

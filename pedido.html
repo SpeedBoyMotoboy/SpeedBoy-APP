@@ -373,6 +373,7 @@ function init() {
     var app = firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.database();
     console.log('Firebase OK — sala:', ROOM);
+    listenTracking();
   } catch(e) {
     console.error('Firebase init error:', e);
     showToast('Erro ao conectar. Tente novamente.', 'error');
@@ -751,8 +752,8 @@ window.submitPedido = function() {
         return '<div class="success-item" id="si_' + key + '">' +
           '<strong>' + typeIcon + ' ' + (i+1) + '. ' + s.name + '</strong>' + dateStr + '<br>' +
           '<span style="font-size:11px;color:var(--muted)">' + s.address + timeStr + valStr + '</span><br>' +
-          '<span class="status-badge status-pending">⏳ Aguardando confirmação</span>' +
-          (editBtn || cancelBtn ? '<div style="display:flex;gap:8px;margin-top:8px;">' + editBtn + cancelBtn + '</div>' : '') +
+          '<span class="status-badge status-pending" id="badge_' + key + '">⏳ Aguardando confirmação</span>' +
+          (editBtn || cancelBtn ? '<div style="display:flex;gap:8px;margin-top:8px;" id="act_' + key + '">' + editBtn + cancelBtn + '</div>' : '') +
           '</div>';
       }).join('');
 
@@ -773,6 +774,59 @@ window.submitPedido = function() {
 };
 
 // ═══════════════════════════════════════════════════
+//  STATUS EM TEMPO REAL — só dá pra editar/cancelar
+//  enquanto a entrega NÃO foi finalizada (entregue)
+// ═══════════════════════════════════════════════════
+var _trackStatus = {}; // key -> status do motoboy
+function statusInfo(st) {
+  switch (st) {
+    case 'aceito':   return { cls:'aceito',   txt:'✅ Aceito pelo motoboy', done:false };
+    case 'acaminho': return { cls:'acaminho', txt:'🛵 A caminho',           done:false };
+    case 'entregue': return { cls:'entregue', txt:'✅ Entregue',            done:true  };
+    case 'recusado': return { cls:'recusado', txt:'❌ Recusado',            done:true  };
+    default:         return { cls:'pending',  txt:'⏳ Aguardando confirmação', done:false };
+  }
+}
+function isFinalized(key) {
+  var st = _trackStatus[key];
+  return st === 'entregue' || st === 'recusado';
+}
+function listenTracking() {
+  if (!db || !ROOM) return;
+  db.ref('rooms/' + ROOM + '/tracking').on('value', function(snap) {
+    var data = snap.val() || {};
+    _trackStatus = {};
+    Object.keys(data).forEach(function(k) {
+      var raw = data[k], t;
+      try { t = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch(e) { t = {}; }
+      _trackStatus[k] = (t && t.status) || '';
+    });
+    applyTrackingToSuccess();
+    markFinalizedInHistory();
+  });
+}
+function applyTrackingToSuccess() {
+  Object.keys(_trackStatus).forEach(function(key) {
+    var info = statusInfo(_trackStatus[key]);
+    var badge = document.getElementById('badge_' + key);
+    if (badge) { badge.className = 'status-badge status-' + info.cls; badge.textContent = info.txt; }
+    if (info.done) { var act = document.getElementById('act_' + key); if (act) act.remove(); }
+  });
+}
+function markFinalizedInHistory() {
+  var hist = getClientHistory();
+  var changed = false;
+  hist.forEach(function(entry) {
+    (entry.stops || []).forEach(function(s) {
+      if (s.key && isFinalized(s.key) && !s.finalized) { s.finalized = true; changed = true; }
+    });
+  });
+  if (changed) saveClientHistory(hist);
+  var panel = document.getElementById('histPanel');
+  if (panel && panel.classList.contains('open')) renderClientHistory();
+}
+
+// ═══════════════════════════════════════════════════
 //  EDITAR / CANCELAR — requisições ao motoboy
 // ═══════════════════════════════════════════════════
 var _editKey = '';
@@ -782,6 +836,7 @@ var _editName = '';
 var _editHist = null; // {hi, si} quando a edição vem do histórico
 
 window.openEditModal = function(key, idx) {
+  if (isFinalized(key)) { showToast('Esta entrega já foi finalizada e não pode ser editada', 'error'); return; }
   _editKey = key; _editIdx = idx; _editHist = null;
   _editRoom = clientReqRoom || ROOM;
   var s = lastSubmittedStops[idx] || {};
@@ -840,6 +895,7 @@ function sendCancelRequest(room, key, name, onDone) {
     .catch(function(e) { showToast('Erro ao enviar: ' + e.message, 'error'); });
 }
 window.requestCancel = function(key, name) {
+  if (isFinalized(key)) { showToast('Esta entrega já foi finalizada e não pode ser cancelada', 'error'); return; }
   sendCancelRequest(clientReqRoom || ROOM, key, name, function() {
     var item = document.getElementById('si_' + key);
     if (item) item.style.opacity = '.4';
@@ -973,8 +1029,10 @@ function renderClientHistory() {
     var stopsHtml = entry.stops.map(function(s, i) {
       var type    = s.serviceType==='retirada'?'📦':s.serviceType==='troca'?'🔄':'🛵';
       var refStr  = s.reference ? ' · 🔍 ' + s.reference : '';
-      var badge   = s.cancelled ? ' <span class="status-badge status-cancelled">❌ Cancelada</span>' : '';
-      var actions = (s.key && !s.cancelled)
+      var finalized = s.finalized || (s.key && isFinalized(s.key));
+      var badge   = s.cancelled ? ' <span class="status-badge status-cancelled">❌ Cancelada</span>'
+                  : finalized   ? ' <span class="status-badge status-entregue">✅ Entregue</span>' : '';
+      var actions = (s.key && !s.cancelled && !finalized)
         ? '<div class="hist-actions">' +
             '<button class="client-req-btn edit-btn" onclick="window.histEdit(' + hi + ',' + i + ')">✏️ Atualizar</button>' +
             '<button class="client-req-btn cancel-btn" onclick="window.histCancel(' + hi + ',' + i + ')">❌ Cancelar</button>' +
@@ -995,6 +1053,7 @@ window.histEdit = function(hi, si) {
   var entry = hist[hi]; if (!entry) return;
   var s = entry.stops[si]; if (!s) return;
   if (!s.key) { showToast('Esta entrega não pode ser atualizada', 'error'); return; }
+  if (s.finalized || isFinalized(s.key)) { showToast('Esta entrega já foi finalizada e não pode ser editada', 'error'); return; }
   _editKey = s.key; _editIdx = -1; _editHist = {hi:hi, si:si};
   _editRoom = entry.room || ROOM; _editName = s.name || '';
   document.getElementById('editAddress').value    = s.address    || '';
@@ -1010,6 +1069,7 @@ window.histCancel = function(hi, si) {
   var entry = hist[hi]; if (!entry) return;
   var s = entry.stops[si]; if (!s) return;
   if (!s.key) { showToast('Esta entrega não pode ser cancelada', 'error'); return; }
+  if (s.finalized || isFinalized(s.key)) { showToast('Esta entrega já foi finalizada e não pode ser cancelada', 'error'); return; }
   sendCancelRequest(entry.room || ROOM, s.key, s.name, function() {
     s.cancelled = true; saveClientHistory(hist); renderClientHistory();
   });

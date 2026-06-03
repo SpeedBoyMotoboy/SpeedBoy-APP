@@ -1,4 +1,4 @@
-const CACHE = 'speedboy-v20260526';
+const CACHE = 'speedboy-v20260603';
 const CORE = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', e => {

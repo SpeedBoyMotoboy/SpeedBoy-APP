@@ -2767,57 +2767,6 @@ function drawTopStoresChart(sm, w, h){
   return canvas;
 }
 
-// Renderiza uma lista de entregas garantindo UMA única folha:
-// se não couber em 1 coluna, distribui automaticamente em 2 ou 3 colunas lado a lado,
-// ajustando a fonte para o maior tamanho legível possível.
-function renderEntregasOnePage(doc, opts){
-  const {rows, startY, PW, PH, bottomReserve, colsByK, marginX=14, gap=5, maxK=3, target=6.2, floorFont=3.8}=opts;
-  const usableW=PW-marginX*2;
-  const availH=PH-startY-bottomReserve;
-  const N=rows.length;
-  const rowH=(f,p)=>2*p+f*0.3528*1.15; // altura aprox. de linha em mm (lineHeight ~1.15)
-  const fit=(K)=>{
-    const rpc=Math.ceil(N/K);
-    for(let f=8.5;f>=floorFont;f-=0.1){
-      const p=Math.max(0.5,Math.min(2.4,f*0.3));
-      if((rpc+1)*rowH(f,p)<=availH) return {f:+f.toFixed(2),p:+p.toFixed(2),rpc};
-    }
-    return null;
-  };
-  let K=maxK, chosen=null;
-  for(let k=1;k<=maxK;k++){ const r=fit(k); if(r&&r.f>=target){K=k;chosen=r;break;} }
-  if(!chosen){ for(let k=maxK;k>=1;k--){ const r=fit(k); if(r){K=k;chosen=r;break;} } }
-  if(!chosen){ K=maxK; chosen={f:floorFont,p:0.5,rpc:Math.ceil(N/maxK)}; }
-  const {f,p,rpc}=chosen;
-  const colW=(usableW-gap*(K-1))/K;
-  const def=colsByK(K,colW);
-  let maxFinalY=startY;
-  for(let c=0;c<K;c++){
-    const slice=rows.slice(c*rpc,(c+1)*rpc);
-    if(!slice.length)break;
-    const left=marginX+c*(colW+gap);
-    doc.autoTable({
-      startY,
-      head:[def.head],
-      body:slice.map((s,ri)=>def.map(s,c*rpc+ri)),
-      theme:'plain', pageBreak:'avoid', rowPageBreak:'avoid',
-      margin:{left,right:PW-left-colW}, tableWidth:colW,
-      styles:{font:'helvetica',fontSize:f,cellPadding:p,textColor:[210,210,210],fillColor:[14,14,20],overflow:'ellipsize'},
-      headStyles:{fillColor:[30,30,36],textColor:[245,197,24],fontStyle:'bold',fontSize:f},
-      alternateRowStyles:{fillColor:[10,10,16]},
-      columnStyles:def.columnStyles,
-      didParseCell:(data)=>{
-        if(data.section==='body'){
-          const gi=c*rpc+data.row.index;
-          if(rows[gi]&&rows[gi]._cancelled){ data.cell.styles.textColor=[120,120,120]; data.cell.styles.fontStyle='italic'; }
-        }
-      }
-    });
-    if(doc.lastAutoTable.finalY>maxFinalY)maxFinalY=doc.lastAutoTable.finalY;
-  }
-  return maxFinalY;
-}
-
 async function genPDF(){
   const d=getReportData();
   if(!d.allStops.length){ toast('Sem dados','error'); return; }
@@ -2860,37 +2809,42 @@ async function genPDF(){
     });
     y+=24;
 
-    // ── TABELA DE TODAS AS ENTREGAS (1 a 3 colunas automáticas p/ caber em 1 folha) ──
+    // ── TABELA DE TODAS AS ENTREGAS (coluna única; flui para quantas páginas forem necessárias) ──
     const tipoLabel=s=>s.serviceType==='retirada'?'Retirada':s.serviceType==='troca'?'Troca':'Entrega';
-    const footerH=(prestPix||prestNome)?14:0;
-    const colsByK=(K,colW)=>{
-      if(K===1) return {
-        head:['Nº','Data','Cliente','Cidade','Loja','Tipo','Valor','Pago'],
-        map:(s,gi)=>[String(gi+1),s._date,(s.name||'—').substring(0,30),cityName(resolveCityCode(s.city||s.cityId))||'—',(s.store||'—').substring(0,18),s._cancelled?'CANC':tipoLabel(s),s._cancelled?'—':fmtMoney(parseMoney(s.value)),s._cancelled?'—':(s.paid?'✓':'—')],
-        columnStyles:{0:{cellWidth:7,halign:'center'},1:{cellWidth:17},5:{cellWidth:15,halign:'center'},6:{cellWidth:18,halign:'right'},7:{cellWidth:10,halign:'center'}}
-      };
-      if(K===2) return {
-        head:['Data','Cliente','Loja','Valor','✓'],
-        map:(s,gi)=>[s._date,(s.name||'—').substring(0,22),(s.store||'—').substring(0,12),s._cancelled?'—':fmtMoney(parseMoney(s.value)),s._cancelled?'C':(s.paid?'✓':'—')],
-        columnStyles:{0:{cellWidth:15},3:{cellWidth:16,halign:'right'},4:{cellWidth:6,halign:'center'}}
-      };
-      return {
-        head:['Data','Cliente','Valor','✓'],
-        map:(s,gi)=>[s._date,(s.name||'—').substring(0,16),s._cancelled?'—':fmtMoney(parseMoney(s.value)),s._cancelled?'C':(s.paid?'✓':'—')],
-        columnStyles:{0:{cellWidth:13},2:{cellWidth:14,halign:'right'},3:{cellWidth:6,halign:'center'}}
-      };
-    };
-    y=renderEntregasOnePage(doc,{rows:d.allStops,startY:y,PW,PH,bottomReserve:footerH+18,colsByK})+6;
+    doc.autoTable({
+      startY:y,
+      head:[['Nº','Data','Cliente','Loja','Tipo','Cidade','Valor']],
+      body:d.allStops.map((s,i)=>[
+        String(i+1),s._date,(s.name||'—').substring(0,26),
+        (s.store||'—').substring(0,16),
+        s._cancelled?'CANCELADA':tipoLabel(s),
+        cityName(resolveCityCode(s.city||s.cityId))||'—',
+        s._cancelled?'—':fmtMoney(parseMoney(s.value))
+      ]),
+      theme:'plain',
+      styles:{font:'helvetica',fontSize:8,cellPadding:1.8,textColor:[210,210,210],fillColor:[14,14,20]},
+      headStyles:{fillColor:[30,30,36],textColor:[245,197,24],fontStyle:'bold',fontSize:7.5},
+      alternateRowStyles:{fillColor:[10,10,16]},
+      columnStyles:{0:{cellWidth:9,halign:'center'},1:{cellWidth:19},3:{cellWidth:28},4:{cellWidth:18,halign:'center'},5:{cellWidth:24},6:{cellWidth:20,halign:'right'}},
+      margin:{top:14,left:14,right:14,bottom:14},
+      didParseCell:(data)=>{
+        if(data.section==='body'&&d.allStops[data.row.index]&&d.allStops[data.row.index]._cancelled){
+          data.cell.styles.textColor=[120,120,120];data.cell.styles.fontStyle='italic';
+        }
+      }
+    });
+    let endY=doc.lastAutoTable.finalY+8;
 
-    // ── RODAPÉ DE COBRANÇA (PIX / prestador) ──
-    if((prestPix||prestNome)&&y+footerH<PH-6){
-      doc.setFillColor(8,30,8);doc.roundedRect(14,y,PW-28,footerH,2,2,'F');
+    // ── RODAPÉ DE COBRANÇA (logo após a última entrega) ──
+    if(prestPix||prestNome){
+      if(endY+14>PH-12){ doc.addPage(); endY=18; }
+      doc.setFillColor(8,30,8);doc.roundedRect(14,endY,PW-28,14,2,2,'F');
       doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(0,230,118);
       const line=`A RECEBER: ${fmtMoney(d.pending)}`+(prestPix?'  ·  PIX: '+prestPix:'')+(prestNome?'  ·  '+prestNome:'');
-      doc.text(line,PW/2,y+9,{align:'center'});
+      doc.text(line,PW/2,endY+9,{align:'center'});
     }
 
-    // Rodapé fixo
+    // Rodapé fixo em todas as páginas
     const totalPages=doc.internal.getNumberOfPages();
     for(let i=1;i<=totalPages;i++){
       doc.setPage(i);
@@ -3009,8 +2963,8 @@ async function genFaturaLoja(storeName, periodo, btnEl, opts={}){
     doc.setFont('helvetica','bold');doc.setFontSize(17);doc.setTextColor(245,197,24);doc.text('SPEEDBOY',14,12);
     doc.setFontSize(10);doc.setTextColor(255,255,255);doc.text('FATURA — '+storeName.toUpperCase(),14,21);
     doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(170,170,170);
-    doc.text(fatNum+'  ·  '+periodoLabel,PW-14,10,{align:'right'});
-    doc.text(dateRange,PW-14,16,{align:'right'});
+    doc.text(fatNum,PW-14,10,{align:'right'});
+    doc.text(periodoLabel,PW-14,16,{align:'right'});
     doc.text('Emitido: '+emitDate,PW-14,22,{align:'right'});
     y=32;
 
@@ -3042,37 +2996,41 @@ async function genFaturaLoja(storeName, periodo, btnEl, opts={}){
     });
     y+=24;
 
-    // ── Tabela de entregas (1 a 3 colunas automáticas p/ caber em 1 folha) ──
+    // ── Tabela de entregas (coluna única; flui para quantas páginas forem necessárias) ──
     const tipoLabel=s=>s.serviceType==='retirada'?'Coleta':s.serviceType==='troca'?'Troca':'Entrega';
-    const colsByK=(K,colW)=>{
-      if(K===1) return {
-        head:['Nº','Data','Cliente','Bairro','Cidade','Tipo','Valor','Pago'],
-        map:(s,gi)=>[String(gi+1),s._date,(s.name||'—').substring(0,30),(s.neighborhood||'').substring(0,26),cityName(resolveCityCode(s.city||s.cityId||''))||'—',s._cancelled?'CANC':tipoLabel(s),s._cancelled?'—':fmtMoney(parseMoney(s.value)),s._cancelled?'—':(s.paid?'✓':'—')],
-        columnStyles:{0:{cellWidth:8,halign:'center'},1:{cellWidth:18},5:{cellWidth:16,halign:'center'},6:{cellWidth:20,halign:'right'},7:{cellWidth:10,halign:'center'}}
-      };
-      if(K===2) return {
-        head:['Data','Cliente','Tipo','Valor','✓'],
-        map:(s,gi)=>[s._date,(s.name||'—').substring(0,22),s._cancelled?'CANC':tipoLabel(s),s._cancelled?'—':fmtMoney(parseMoney(s.value)),s._cancelled?'—':(s.paid?'✓':'—')],
-        columnStyles:{0:{cellWidth:15},2:{cellWidth:14,halign:'center'},3:{cellWidth:16,halign:'right'},4:{cellWidth:6,halign:'center'}}
-      };
-      return {
-        head:['Data','Cliente','Valor','✓'],
-        map:(s,gi)=>[s._date,(s.name||'—').substring(0,18),s._cancelled?'—':fmtMoney(parseMoney(s.value)),s._cancelled?'—':(s.paid?'✓':'—')],
-        columnStyles:{0:{cellWidth:13},2:{cellWidth:14,halign:'right'},3:{cellWidth:6,halign:'center'}}
-      };
-    };
-    const footH=prestPix?22:14;
-    const lastY=renderEntregasOnePage(doc,{rows:fatStops,startY:y,PW,PH,bottomReserve:footH+20,colsByK})+8;
-
-    // ── Rodapé de cobrança ──
-    if(lastY+footH<PH-6){
-      doc.setFillColor(8,30,8);doc.roundedRect(14,lastY,PW-28,footH,3,3,'F');
-      doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(0,230,118);
-      doc.text('TOTAL A RECEBER: '+fmtMoney(fPending),PW/2,lastY+9,{align:'center'});
-      if(prestPix){
-        doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(160,160,160);
-        doc.text('PIX: '+prestPix+(prestNome?' — '+prestNome:''),PW/2,lastY+18,{align:'center'});
+    doc.autoTable({
+      startY:y,
+      head:[['Nº','Data','Cliente','Bairro','Tipo','Cidade','Valor']],
+      body:fatStops.map((s,i)=>[
+        String(i+1),s._date,(s.name||'—').substring(0,26),
+        (s.neighborhood||'').substring(0,22),
+        s._cancelled?'CANCELADA':tipoLabel(s),
+        cityName(resolveCityCode(s.city||s.cityId||''))||'—',
+        s._cancelled?'—':fmtMoney(parseMoney(s.value))
+      ]),
+      theme:'plain',
+      styles:{font:'helvetica',fontSize:8,cellPadding:1.8,textColor:[210,210,210],fillColor:[14,14,20]},
+      headStyles:{fillColor:[30,30,36],textColor:[245,197,24],fontStyle:'bold',fontSize:7.5},
+      alternateRowStyles:{fillColor:[10,10,16]},
+      columnStyles:{0:{cellWidth:9,halign:'center'},1:{cellWidth:19},3:{cellWidth:30},4:{cellWidth:18,halign:'center'},5:{cellWidth:24},6:{cellWidth:20,halign:'right'}},
+      margin:{top:14,left:14,right:14,bottom:14},
+      didParseCell:(data)=>{
+        if(data.section==='body'&&fatStops[data.row.index]&&fatStops[data.row.index]._cancelled){
+          data.cell.styles.textColor=[120,120,120];data.cell.styles.fontStyle='italic';
+        }
       }
+    });
+    let endY=doc.lastAutoTable.finalY+8;
+
+    // ── Rodapé de cobrança (logo após a última entrega) ──
+    const footBoxH=prestPix?22:14;
+    if(endY+footBoxH>PH-12){ doc.addPage(); endY=18; }
+    doc.setFillColor(8,30,8);doc.roundedRect(14,endY,PW-28,footBoxH,3,3,'F');
+    doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(0,230,118);
+    doc.text('TOTAL A RECEBER: '+fmtMoney(fPending),PW/2,endY+9,{align:'center'});
+    if(prestPix){
+      doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(160,160,160);
+      doc.text('PIX: '+prestPix+(prestNome?' — '+prestNome:''),PW/2,endY+18,{align:'center'});
     }
 
     // ── Rodapé fixo em todas as páginas ──

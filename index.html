@@ -2785,26 +2785,32 @@ async function genPDF(){
     const prestPix=cfg.prestPix||'';
     const emitDate=new Date().toLocaleString('pt-BR');
 
+    // ── TEMA CLARO ──
+    const BG=[244,245,247], INK=[38,42,48], MUTED=[120,126,134], AMBER=[214,150,0];
+    const CARD=[255,255,255], CARDLN=[206,211,217];
+    const ROW_A=[255,255,255], ROW_B=[203,210,220], GRID=[188,195,205];
+    doc.setFillColor(...BG);doc.rect(0,0,PW,PH,'F');
+
     // ── CABEÇALHO COMPACTO ──
-    doc.setFillColor(8,8,12);doc.rect(0,0,PW,20,'F');
-    doc.setFont('helvetica','bold');doc.setFontSize(18);doc.setTextColor(245,197,24);doc.text('SPEEDBOY',14,13);
-    doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(160,160,160);
+    doc.setFont('helvetica','bold');doc.setFontSize(19);doc.setTextColor(...AMBER);doc.text('SPEEDBOY',14,13);
+    doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
     doc.text(reportNum+'  ·  '+d.label+'  ·  '+d.range,PW-14,9,{align:'right'});
     doc.text('Emitido: '+emitDate,PW-14,15,{align:'right'});
-    let y=26;
+    doc.setDrawColor(...AMBER);doc.setLineWidth(0.8);doc.line(14,18,PW-14,18);doc.setLineWidth(0.2);
+    let y=24;
 
     // ── BOXES DE RESUMO ──
     const bw4=(PW-28-9)/4;
     const boxes=[
-      {lbl:'TOTAL',val:fmtMoney(d.total),c:[245,197,24]},
-      {lbl:'RECEBIDO',val:fmtMoney(d.received),c:[0,200,100]},
-      {lbl:'A RECEBER',val:fmtMoney(d.pending),c:[255,170,0]},
-      {lbl:'ENTREGAS',val:String(d.deliveries),c:[255,107,0]}
+      {lbl:'TOTAL',val:fmtMoney(d.total),c:[190,140,0]},
+      {lbl:'RECEBIDO',val:fmtMoney(d.received),c:[21,128,61]},
+      {lbl:'A RECEBER',val:fmtMoney(d.pending),c:[201,115,0]},
+      {lbl:'ENTREGAS',val:String(d.deliveries),c:[214,84,10]}
     ];
     boxes.forEach((b,i)=>{
       const x=14+i*(bw4+3);
-      doc.setFillColor(18,18,24);doc.roundedRect(x,y,bw4,18,3,3,'F');
-      doc.setFont('helvetica','bold');doc.setFontSize(6.5);doc.setTextColor(100,100,100);doc.text(b.lbl,x+bw4/2,y+6,{align:'center'});
+      doc.setFillColor(...CARD);doc.setDrawColor(...CARDLN);doc.setLineWidth(0.3);doc.roundedRect(x,y,bw4,18,2,2,'FD');
+      doc.setFont('helvetica','bold');doc.setFontSize(6.5);doc.setTextColor(...MUTED);doc.text(b.lbl,x+bw4/2,y+6,{align:'center'});
       doc.setFontSize(11);doc.setTextColor(...b.c);doc.text(b.val,x+bw4/2,y+14,{align:'center'});
     });
     y+=24;
@@ -2821,15 +2827,16 @@ async function genPDF(){
         cityName(resolveCityCode(s.city||s.cityId))||'—',
         s._cancelled?'—':fmtMoney(parseMoney(s.value))
       ]),
-      theme:'plain',
-      styles:{font:'helvetica',fontSize:8,cellPadding:1.8,textColor:[210,210,210],fillColor:[14,14,20]},
-      headStyles:{fillColor:[30,30,36],textColor:[245,197,24],fontStyle:'bold',fontSize:7.5},
-      alternateRowStyles:{fillColor:[10,10,16]},
-      columnStyles:{0:{cellWidth:9,halign:'center'},1:{cellWidth:19},3:{cellWidth:28},4:{cellWidth:18,halign:'center'},5:{cellWidth:24},6:{cellWidth:20,halign:'right'}},
+      theme:'grid',
+      styles:{font:'helvetica',fontSize:8,cellPadding:1.8,textColor:INK,fillColor:ROW_A,lineColor:GRID,lineWidth:0.1},
+      headStyles:{fillColor:[240,182,28],textColor:INK,fontStyle:'bold',fontSize:7.5,lineColor:GRID,lineWidth:0.1},
+      alternateRowStyles:{fillColor:ROW_B},
+      columnStyles:{0:{cellWidth:9,halign:'center'},1:{cellWidth:19},3:{cellWidth:26},4:{cellWidth:24,halign:'center'},5:{cellWidth:24},6:{cellWidth:20,halign:'right'}},
       margin:{top:14,left:14,right:14,bottom:14},
+      willDrawPage:(data)=>{ if(data.pageNumber>1){ doc.setFillColor(...BG);doc.rect(0,0,PW,PH,'F'); } },
       didParseCell:(data)=>{
         if(data.section==='body'&&d.allStops[data.row.index]&&d.allStops[data.row.index]._cancelled){
-          data.cell.styles.textColor=[120,120,120];data.cell.styles.fontStyle='italic';
+          data.cell.styles.textColor=[150,150,150];data.cell.styles.fontStyle='italic';
         }
       }
     });
@@ -2837,9 +2844,9 @@ async function genPDF(){
 
     // ── RODAPÉ DE COBRANÇA (logo após a última entrega) ──
     if(prestPix||prestNome){
-      if(endY+14>PH-12){ doc.addPage(); endY=18; }
-      doc.setFillColor(8,30,8);doc.roundedRect(14,endY,PW-28,14,2,2,'F');
-      doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(0,230,118);
+      if(endY+14>PH-12){ doc.addPage(); doc.setFillColor(...BG);doc.rect(0,0,PW,PH,'F'); endY=18; }
+      doc.setFillColor(223,244,229);doc.setDrawColor(150,200,170);doc.setLineWidth(0.3);doc.roundedRect(14,endY,PW-28,14,2,2,'FD');
+      doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(21,110,55);
       const line=`A RECEBER: ${fmtMoney(d.pending)}`+(prestPix?'  ·  PIX: '+prestPix:'')+(prestNome?'  ·  '+prestNome:'');
       doc.text(line,PW/2,endY+9,{align:'center'});
     }
@@ -2848,8 +2855,8 @@ async function genPDF(){
     const totalPages=doc.internal.getNumberOfPages();
     for(let i=1;i<=totalPages;i++){
       doc.setPage(i);
-      doc.setDrawColor(40,40,50);doc.line(14,PH-9,PW-14,PH-9);
-      doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(70,70,80);
+      doc.setDrawColor(...CARDLN);doc.setLineWidth(0.2);doc.line(14,PH-9,PW-14,PH-9);
+      doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
       doc.text(`SPEEDBOY · Relatório ${reportNum} · Gerado em ${emitDate}`,14,PH-4);
       doc.text(`${i}/${totalPages}`,PW-14,PH-4,{align:'right'});
     }
@@ -2957,40 +2964,45 @@ async function genFaturaLoja(storeName, periodo, btnEl, opts={}){
     const prestPix=cfg.prestPix||'';
     const emitDate=now.toLocaleString('pt-BR');
 
+    // ── TEMA CLARO ──
+    const BG=[244,245,247], INK=[38,42,48], MUTED=[120,126,134], AMBER=[214,150,0];
+    const CARD=[255,255,255], CARDLN=[206,211,217];
+    const ROW_A=[255,255,255], ROW_B=[203,210,220], GRID=[188,195,205];
+    doc.setFillColor(...BG);doc.rect(0,0,PW,PH,'F');
+
     // ── CABEÇALHO COMPACTO ──
     let y=0;
-    doc.setFillColor(8,8,12);doc.rect(0,0,PW,26,'F');
-    doc.setFont('helvetica','bold');doc.setFontSize(17);doc.setTextColor(245,197,24);doc.text('SPEEDBOY',14,12);
-    doc.setFontSize(10);doc.setTextColor(255,255,255);doc.text('FATURA — '+storeName.toUpperCase(),14,21);
-    doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(170,170,170);
-    doc.text(fatNum,PW-14,10,{align:'right'});
-    doc.text(periodoLabel,PW-14,16,{align:'right'});
-    doc.text('Emitido: '+emitDate,PW-14,22,{align:'right'});
-    y=32;
+    doc.setFont('helvetica','bold');doc.setFontSize(17);doc.setTextColor(...AMBER);doc.text('SPEEDBOY',14,12);
+    doc.setFontSize(10);doc.setTextColor(...INK);doc.text('FATURA — '+storeName.toUpperCase(),14,20);
+    doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
+    doc.text(fatNum,PW-14,9,{align:'right'});
+    doc.text(periodoLabel,PW-14,15,{align:'right'});
+    doc.text('Emitido: '+emitDate,PW-14,21,{align:'right'});
+    doc.setDrawColor(...AMBER);doc.setLineWidth(0.8);doc.line(14,25,PW-14,25);doc.setLineWidth(0.2);
+    y=31;
 
     // ── Prestador (linha fina) ──
     if(prestNome||prestPix){
-      doc.setFillColor(18,18,24);doc.roundedRect(14,y,PW-28,11,2,2,'F');
+      doc.setFillColor(...CARD);doc.setDrawColor(...CARDLN);doc.setLineWidth(0.3);doc.roundedRect(14,y,PW-28,11,2,2,'FD');
       doc.setFont('helvetica','bold');doc.setFontSize(8);
       let lx=20;
-      if(prestNome){doc.setTextColor(245,197,24);doc.text(prestNome,lx,y+7);lx+=doc.getTextWidth(prestNome)+10;}
-      if(prestPix){doc.setTextColor(130,130,130);doc.text('PIX: ',lx,y+7);doc.setTextColor(0,230,118);doc.text(prestPix,lx+doc.getTextWidth('PIX: '),y+7);}
+      if(prestNome){doc.setTextColor(...AMBER);doc.text(prestNome,lx,y+7);lx+=doc.getTextWidth(prestNome)+10;}
+      if(prestPix){doc.setTextColor(...MUTED);doc.text('PIX: ',lx,y+7);doc.setTextColor(21,128,61);doc.text(prestPix,lx+doc.getTextWidth('PIX: '),y+7);}
       y+=15;
     }
 
     // ── 4 Boxes de resumo ──
     const boxes=[
-      ['ENTREGAS',fValid.length+(fCancel>0?' (+'+fCancel+' canc.)':''),null],
-      ['TOTAL',fmtMoney(fTotal),null],
-      ['RECEBIDO',fmtMoney(fReceived),[0,200,100]],
-      ['A RECEBER',fmtMoney(fPending),fPending>0?[245,197,24]:[0,200,100]],
+      ['ENTREGAS',fValid.length+(fCancel>0?' (+'+fCancel+' canc.)':''),INK],
+      ['TOTAL',fmtMoney(fTotal),[190,140,0]],
+      ['RECEBIDO',fmtMoney(fReceived),[21,128,61]],
+      ['A RECEBER',fmtMoney(fPending),fPending>0?[201,115,0]:[21,128,61]],
     ];
     const bw=(PW-28-9)/4; let bx=14;
     boxes.forEach(([lbl,val,color])=>{
-      doc.setFillColor(18,18,24);doc.roundedRect(bx,y,bw,18,3,3,'F');
-      doc.setFont('helvetica','normal');doc.setFontSize(6.5);doc.setTextColor(120,120,120);doc.text(lbl,bx+bw/2,y+6,{align:'center'});
-      doc.setFont('helvetica','bold');doc.setFontSize(9);
-      if(color)doc.setTextColor(...color); else doc.setTextColor(220,220,220);
+      doc.setFillColor(...CARD);doc.setDrawColor(...CARDLN);doc.setLineWidth(0.3);doc.roundedRect(bx,y,bw,18,2,2,'FD');
+      doc.setFont('helvetica','normal');doc.setFontSize(6.5);doc.setTextColor(...MUTED);doc.text(lbl,bx+bw/2,y+6,{align:'center'});
+      doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(...color);
       doc.text(val,bx+bw/2,y+14,{align:'center'});
       bx+=bw+3;
     });
@@ -3008,15 +3020,16 @@ async function genFaturaLoja(storeName, periodo, btnEl, opts={}){
         cityName(resolveCityCode(s.city||s.cityId||''))||'—',
         s._cancelled?'—':fmtMoney(parseMoney(s.value))
       ]),
-      theme:'plain',
-      styles:{font:'helvetica',fontSize:8,cellPadding:1.8,textColor:[210,210,210],fillColor:[14,14,20]},
-      headStyles:{fillColor:[30,30,36],textColor:[245,197,24],fontStyle:'bold',fontSize:7.5},
-      alternateRowStyles:{fillColor:[10,10,16]},
-      columnStyles:{0:{cellWidth:9,halign:'center'},1:{cellWidth:19},3:{cellWidth:30},4:{cellWidth:18,halign:'center'},5:{cellWidth:24},6:{cellWidth:20,halign:'right'}},
+      theme:'grid',
+      styles:{font:'helvetica',fontSize:8,cellPadding:1.8,textColor:INK,fillColor:ROW_A,lineColor:GRID,lineWidth:0.1},
+      headStyles:{fillColor:[240,182,28],textColor:INK,fontStyle:'bold',fontSize:7.5,lineColor:GRID,lineWidth:0.1},
+      alternateRowStyles:{fillColor:ROW_B},
+      columnStyles:{0:{cellWidth:9,halign:'center'},1:{cellWidth:19},3:{cellWidth:28},4:{cellWidth:24,halign:'center'},5:{cellWidth:24},6:{cellWidth:20,halign:'right'}},
       margin:{top:14,left:14,right:14,bottom:14},
+      willDrawPage:(data)=>{ if(data.pageNumber>1){ doc.setFillColor(...BG);doc.rect(0,0,PW,PH,'F'); } },
       didParseCell:(data)=>{
         if(data.section==='body'&&fatStops[data.row.index]&&fatStops[data.row.index]._cancelled){
-          data.cell.styles.textColor=[120,120,120];data.cell.styles.fontStyle='italic';
+          data.cell.styles.textColor=[150,150,150];data.cell.styles.fontStyle='italic';
         }
       }
     });
@@ -3024,12 +3037,12 @@ async function genFaturaLoja(storeName, periodo, btnEl, opts={}){
 
     // ── Rodapé de cobrança (logo após a última entrega) ──
     const footBoxH=prestPix?22:14;
-    if(endY+footBoxH>PH-12){ doc.addPage(); endY=18; }
-    doc.setFillColor(8,30,8);doc.roundedRect(14,endY,PW-28,footBoxH,3,3,'F');
-    doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(0,230,118);
+    if(endY+footBoxH>PH-12){ doc.addPage(); doc.setFillColor(...BG);doc.rect(0,0,PW,PH,'F'); endY=18; }
+    doc.setFillColor(223,244,229);doc.setDrawColor(150,200,170);doc.setLineWidth(0.3);doc.roundedRect(14,endY,PW-28,footBoxH,3,3,'FD');
+    doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(21,110,55);
     doc.text('TOTAL A RECEBER: '+fmtMoney(fPending),PW/2,endY+9,{align:'center'});
     if(prestPix){
-      doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(160,160,160);
+      doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(...MUTED);
       doc.text('PIX: '+prestPix+(prestNome?' — '+prestNome:''),PW/2,endY+18,{align:'center'});
     }
 
@@ -3037,7 +3050,7 @@ async function genFaturaLoja(storeName, periodo, btnEl, opts={}){
     const totalPages=doc.internal.getNumberOfPages();
     for(let i=1;i<=totalPages;i++){
       doc.setPage(i);
-      doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(80,80,80);
+      doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
       doc.text('SPEEDBOY · Fatura '+fatNum+' · Gerado em '+emitDate,14,PH-5);
       doc.text(i+'/'+totalPages,PW-14,PH-5,{align:'right'});
     }

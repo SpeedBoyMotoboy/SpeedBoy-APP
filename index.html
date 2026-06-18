@@ -3791,7 +3791,24 @@ document.addEventListener('visibilitychange', () => {
 });
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
+  // updateViaCache:'none' garante que o sw.js nunca venha do cache HTTP,
+  // então uma versão nova é sempre detectada.
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
+    reg.update();
+    // Checa atualização sempre que o app volta ao foco
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reg.update();
+    });
+  }).catch(() => {});
+  // Quando um novo service worker assume o controle, recarrega a página
+  // automaticamente para o app instalado pegar a versão nova sem precisar
+  // limpar cache na mão. O guard evita loop de reload.
+  let swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (swRefreshing) return;
+    swRefreshing = true;
+    window.location.reload();
+  });
 }
 
 function sendNotify(title, body, tag) {

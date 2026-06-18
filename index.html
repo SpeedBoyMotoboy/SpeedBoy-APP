@@ -876,13 +876,6 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
       <div id="fbJoinRow" class="fb-join-row"><input class="finput" id="cfgRoom" placeholder="SB-XXXX" style="letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;" /><button class="btn-join" onclick="joinRoom()">Entrar</button></div>
       <div class="fb-status"><div class="sync-dot" id="cfgSyncDot"></div><span id="cfgSyncLbl">Firebase não configurado</span></div>
     </div>
-    <div class="cfg-section">
-      <div class="cfg-title">💸 Dados para recebimento (PIX)</div>
-      <div class="info-box">Exibidos nas faturas PDF enviadas às lojas.</div>
-      <div class="field"><div class="flabel">Seu nome / empresa</div><input class="finput" id="cfgPrestNome" placeholder="Ex: João Motoboy" maxlength="50" /></div>
-      <div class="field"><div class="flabel">Chave PIX</div><input class="finput" id="cfgPrestPix" placeholder="CPF, e-mail, telefone ou chave aleatória" maxlength="80" /></div>
-      <div class="field"><div class="flabel">Telefone (opcional)</div><input class="finput" id="cfgPrestTel" placeholder="(XX) XXXXX-XXXX" type="tel" oninput="maskPhone(this)" maxlength="15" /></div>
-    </div>
     <button class="btn-cfg-save" onclick="saveConfig()">💾 Salvar configurações</button>
     <div style="margin-top:20px;padding-top:18px;border-top:1px solid var(--border);">
       <div class="cfg-title">💾 Backup</div>
@@ -3258,9 +3251,6 @@ function loadConfig(){
   localStorage.setItem('sb_room_code',room);
   document.getElementById('roomCode').textContent=room;
   document.getElementById('cfgRoom').value=room;
-  document.getElementById('cfgPrestNome').value=cfg.prestNome||'';
-  document.getElementById('cfgPrestPix').value=cfg.prestPix||'';
-  document.getElementById('cfgPrestTel').value=cfg.prestTel||'';
   renderStores();
   renderQuickStoresConfig();
   renderLinks();
@@ -3268,9 +3258,6 @@ function loadConfig(){
 function saveConfig(){
   cfg.origin=document.getElementById('cfgOrigin').value.trim();
   cfg.wppMsg=document.getElementById('cfgWpp').value.trim();
-  cfg.prestNome=document.getElementById('cfgPrestNome').value.trim();
-  cfg.prestPix=document.getElementById('cfgPrestPix').value.trim();
-  cfg.prestTel=document.getElementById('cfgPrestTel').value.trim();
   saveCfg();
   if(!EMBEDDED_FB_CONFIG){
     const fbStr=document.getElementById('cfgFb').value.trim();
@@ -3791,7 +3778,24 @@ document.addEventListener('visibilitychange', () => {
 });
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
+  // updateViaCache:'none' garante que o sw.js nunca venha do cache HTTP,
+  // então uma versão nova é sempre detectada.
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
+    reg.update();
+    // Checa atualização sempre que o app volta ao foco
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reg.update();
+    });
+  }).catch(() => {});
+  // Quando um novo service worker assume o controle, recarrega a página
+  // automaticamente para o app instalado pegar a versão nova sem precisar
+  // limpar cache na mão. O guard evita loop de reload.
+  let swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (swRefreshing) return;
+    swRefreshing = true;
+    window.location.reload();
+  });
 }
 
 function sendNotify(title, body, tag) {

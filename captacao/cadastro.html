@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPEEDBOY — Cadastro de Parceiro</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+:root{--bg:#070709;--card:#13131a;--card2:#1a1a24;--border:#252535;--accent:#f5c518;--accent2:#ff6b00;--green:#00a854;--red:#ff4560;--text:#f0f0f0;--muted:#666;--radius:16px;}
+body.light{--bg:#f5f5f0;--card:#ffffff;--card2:#f0f0eb;--border:#ddddd5;--accent:#c9920a;--accent2:#e05500;--green:#1a7a3f;--red:#cc2233;--text:#1a1a1a;--muted:#888;}
+html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;}
+body{max-width:480px;margin:0 auto;padding-bottom:40px;}
+.hero{position:relative;overflow:hidden;padding:28px 20px 22px;background:linear-gradient(160deg,#0d0d14 0%,#1a1220 60%,#0d0d14 100%);border-bottom:1px solid var(--border);text-align:center;}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(245,197,24,.12) 0%,transparent 65%);pointer-events:none;}
+.hero-logo{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:36px;letter-spacing:-2px;color:var(--accent);position:relative;}
+.hero-logo span{color:var(--text);}
+.hero-tag{font-size:13px;color:var(--muted);margin-top:4px;}
+.theme-toggle{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:6px 12px;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;}
+.wrap{padding:22px 16px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;}
+.intro{font-size:14px;line-height:1.6;color:var(--muted);margin-bottom:18px;}
+.intro strong{color:var(--text);}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+.field input{width:100%;padding:14px;border-radius:12px;border:1.5px solid var(--border);background:var(--card2);color:var(--text);font-family:'Barlow',sans-serif;font-size:15px;}
+.field input:focus{outline:none;border-color:var(--accent);}
+.btn{width:100%;padding:16px;border-radius:12px;border:none;font-family:'Barlow',sans-serif;font-weight:700;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:transform .1s;}
+.btn:active{transform:scale(.97);}
+.btn-primary{background:var(--accent);color:#000;}
+.btn:disabled{opacity:.5;}
+.loading-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:55vh;gap:16px;}
+.spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.state-wrap{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;padding:40px 24px;text-align:center;}
+.state-wrap.show{display:flex;}
+.state-icon{font-size:64px;margin-bottom:16px;}
+.state-title{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;margin-bottom:10px;}
+.state-title.ok{color:var(--green);}
+.state-title.err{color:var(--red);}
+.state-msg{font-size:14px;color:var(--muted);line-height:1.6;max-width:290px;}
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--card2);border:1px solid var(--border);color:var(--text);padding:10px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:600;opacity:0;transition:all .25s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.error{border-color:var(--red);color:var(--red);}
+</style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+<div class="hero">
+  <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Claro</button>
+  <div class="hero-logo">SPEED<span>BOY</span></div>
+  <div class="hero-tag">Cadastro de motoboy parceiro</div>
+</div>
+
+<div id="loadingWrap" class="loading-wrap">
+  <div class="spinner"></div>
+  <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--accent);">Validando convite...</div>
+</div>
+
+<div id="formWrap" class="wrap" style="display:none;">
+  <div class="card">
+    <div class="intro">
+      Você foi convidado pra ser <strong>motoboy parceiro da SpeedBoy</strong>.
+      Preencha seus dados abaixo. O cadastro passa por uma <strong>aprovação do Luan</strong> antes de ficar ativo.
+    </div>
+    <div class="field">
+      <label>Nome completo</label>
+      <input type="text" id="nome" placeholder="Seu nome" autocomplete="name">
+    </div>
+    <div class="field">
+      <label>WhatsApp (com DDD)</label>
+      <input type="tel" id="telefone" placeholder="27 99999-9999" autocomplete="tel" inputmode="tel">
+    </div>
+    <button class="btn btn-primary" id="submitBtn" onclick="enviar()">Enviar cadastro</button>
+  </div>
+</div>
+
+<div id="successWrap" class="state-wrap">
+  <div class="state-icon">✅</div>
+  <div class="state-title ok">Cadastro enviado!</div>
+  <div class="state-msg">Seus dados chegaram pro Luan. Assim que ele aprovar, você começa a receber demandas pelo app. 🏍️</div>
+</div>
+
+<div id="errorWrap" class="state-wrap">
+  <div class="state-icon">⚠️</div>
+  <div class="state-title err" id="errTitle">Convite inválido</div>
+  <div class="state-msg" id="errMsg">Peça um novo link de convite pro Luan.</div>
+</div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════
+//  CONFIGURAÇÃO FIREBASE — copiada (arquivos antigos não são tocados)
+// ═══════════════════════════════════════════════════
+var FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyDL8c28T9Q-IAK9JihzEXtT-OPiYOx24Jg",
+  authDomain:        "speedboy-3c1c6.firebaseapp.com",
+  projectId:         "speedboy-3c1c6",
+  storageBucket:     "speedboy-3c1c6.firebasestorage.app",
+  messagingSenderId: "702743802978",
+  appId:             "1:702743802978:web:7b99217bebcc89f9bc8d3b",
+  databaseURL:       "https://speedboy-3c1c6-default-rtdb.firebaseio.com"
+};
+
+var params    = new URLSearchParams(window.location.search);
+var ROOM      = (params.get('room') || '').toUpperCase();
+var CONVITE   = params.get('convite') || '';
+var db        = null;
+
+function toast(msg, type){
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(window._tt);
+  window._tt = setTimeout(function(){ t.className = 'toast'; }, 2600);
+}
+
+function toggleTheme(){
+  var isLight = document.body.classList.toggle('light');
+  document.getElementById('themeBtn').textContent = isLight ? '🌙 Escuro' : '☀️ Claro';
+  localStorage.setItem('sb_cap_theme', isLight ? 'light' : 'dark');
+}
+
+function capRef(sub){ return db.ref('rooms/' + ROOM + '/captacao/' + sub); }
+
+function showError(title, msg){
+  document.getElementById('loadingWrap').style.display = 'none';
+  document.getElementById('formWrap').style.display = 'none';
+  if (title) document.getElementById('errTitle').textContent = title;
+  if (msg)   document.getElementById('errMsg').textContent = msg;
+  document.getElementById('errorWrap').classList.add('show');
+}
+
+function init(){
+  if (localStorage.getItem('sb_cap_theme') === 'light'){
+    document.body.classList.add('light');
+    document.getElementById('themeBtn').textContent = '🌙 Escuro';
+  }
+  if (!ROOM || !CONVITE){
+    showError('Link inválido', 'Este link de convite está incompleto. Peça um novo pro Luan.');
+    return;
+  }
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+  } catch(e){
+    console.error(e);
+    showError('Erro de conexão', 'Não deu pra conectar. Tente de novo em instantes.');
+    return;
+  }
+  // Valida o convite (existe e ainda não foi usado)
+  capRef('convites/' + CONVITE).once('value').then(function(snap){
+    var c = snap.val();
+    if (!c){
+      showError('Convite inválido', 'Esse convite não existe. Peça um novo link pro Luan.');
+      return;
+    }
+    if (c.usado){
+      showError('Convite já usado', 'Esse convite já foi utilizado. Peça um novo link pro Luan.');
+      return;
+    }
+    document.getElementById('loadingWrap').style.display = 'none';
+    document.getElementById('formWrap').style.display = 'block';
+  }).catch(function(err){
+    console.error(err);
+    showError('Erro de conexão', 'Não deu pra validar o convite. Tente de novo.');
+  });
+}
+
+var enviando = false;
+function enviar(){
+  if (enviando) return;
+  var nome = document.getElementById('nome').value.trim();
+  var tel  = document.getElementById('telefone').value.trim();
+  if (nome.length < 3){ toast('Digite seu nome completo', 'error'); return; }
+  var digits = tel.replace(/\D/g, '');
+  if (digits.length < 10){ toast('Digite um WhatsApp válido com DDD', 'error'); return; }
+
+  enviando = true;
+  var btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+
+  // Revalida o convite antes de gravar (evita reuso)
+  var conviteRef = capRef('convites/' + CONVITE);
+  conviteRef.once('value').then(function(snap){
+    var c = snap.val();
+    if (!c || c.usado){
+      showError('Convite indisponível', 'Esse convite não está mais válido. Peça um novo pro Luan.');
+      return null;
+    }
+    var reg = {
+      nome: nome,
+      telefone: digits,
+      status: 'convidado',
+      convite_id: CONVITE,
+      criado_em: Date.now()
+    };
+    var novo = capRef('motoboys_parceiros').push();
+    return novo.set(reg).then(function(){
+      return conviteRef.update({ usado: true, usado_em: Date.now(), motoboy_id: novo.key });
+    });
+  }).then(function(res){
+    if (res === null) return;
+    document.getElementById('formWrap').style.display = 'none';
+    document.getElementById('successWrap').classList.add('show');
+  }).catch(function(err){
+    console.error(err);
+    enviando = false;
+    btn.disabled = false; btn.textContent = 'Enviar cadastro';
+    toast('Falha ao enviar. Tente de novo.', 'error');
+  });
+}
+
+window.enviar = enviar;
+window.toggleTheme = toggleTheme;
+
+init();
+</script>
+</body>
+</html>

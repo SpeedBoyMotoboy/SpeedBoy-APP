@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPEEDBOY — Captação (Painel)</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+:root{--bg:#070709;--card:#13131a;--card2:#1a1a24;--border:#252535;--accent:#f5c518;--accent2:#ff6b00;--green:#00a854;--red:#ff4560;--blue:#3b82f6;--text:#f0f0f0;--muted:#666;--radius:16px;}
+body.light{--bg:#f5f5f0;--card:#ffffff;--card2:#f0f0eb;--border:#ddddd5;--accent:#c9920a;--accent2:#e05500;--green:#1a7a3f;--red:#cc2233;--text:#1a1a1a;--muted:#888;}
+html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;}
+body{max-width:480px;margin:0 auto;padding-bottom:40px;}
+.hero{position:relative;overflow:hidden;padding:28px 20px 22px;background:linear-gradient(160deg,#0d0d14 0%,#1a1220 60%,#0d0d14 100%);border-bottom:1px solid var(--border);text-align:center;}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(245,197,24,.12) 0%,transparent 65%);pointer-events:none;}
+.hero-logo{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:36px;letter-spacing:-2px;color:var(--accent);position:relative;}
+.hero-logo span{color:var(--text);}
+.hero-tag{font-size:13px;color:var(--muted);margin-top:4px;}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(245,197,24,.1);border:1px solid rgba(245,197,24,.3);border-radius:20px;padding:6px 14px;margin-top:10px;font-size:13px;font-weight:600;color:var(--accent);}
+.theme-toggle{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:6px 12px;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;}
+.section{padding:0 16px;margin-top:20px;}
+.section-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin:0 0 10px 4px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
+.btn{width:100%;padding:15px;border-radius:12px;border:none;font-family:'Barlow',sans-serif;font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:transform .1s;}
+.btn:active{transform:scale(.97);}
+.btn-primary{background:var(--accent);color:#000;}
+.btn-green{background:var(--green);color:#fff;}
+.btn-red{background:transparent;border:1.5px solid var(--red);color:var(--red);}
+.btn-ghost{background:var(--card2);border:1px solid var(--border);color:var(--text);}
+.invite-box{margin-top:14px;display:none;}
+.invite-box.show{display:block;}
+.invite-link{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:12px;color:var(--muted);word-break:break-all;margin-bottom:10px;}
+.invite-actions{display:flex;gap:8px;}
+.invite-actions .btn{font-size:13px;padding:12px;}
+.tabs{display:flex;gap:6px;margin-bottom:12px;}
+.tab{flex:1;padding:9px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-family:'Barlow',sans-serif;font-weight:700;font-size:12px;cursor:pointer;text-align:center;}
+.tab.active{background:var(--accent);color:#000;border-color:var(--accent);}
+.tab .cnt{opacity:.7;font-weight:600;}
+.moto-card{background:var(--card);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;}
+.moto-card.approved{border-color:rgba(0,168,84,.4);}
+.moto-card.rejected{opacity:.55;}
+.moto-name{font-weight:600;font-size:15px;}
+.moto-phone{font-size:13px;color:var(--muted);margin-top:2px;}
+.moto-meta{font-size:11px;color:var(--muted);margin-top:6px;}
+.moto-actions{display:flex;gap:8px;margin-top:12px;}
+.moto-actions .btn{font-size:13px;padding:11px;}
+.pill{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:3px 9px;border-radius:20px;margin-top:6px;}
+.pill.aprovado{background:rgba(0,168,84,.15);color:var(--green);}
+.pill.recusado{background:rgba(255,69,96,.15);color:var(--red);}
+.empty{text-align:center;color:var(--muted);font-size:13px;padding:26px 10px;}
+.loading-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50vh;gap:16px;}
+.spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error-wrap{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;padding:40px 24px;text-align:center;}
+.error-wrap.show{display:flex;}
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--card2);border:1px solid var(--border);color:var(--text);padding:10px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:600;opacity:0;transition:all .25s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.success{border-color:var(--green);color:var(--green);}
+.toast.error{border-color:var(--red);color:var(--red);}
+</style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+<div class="hero">
+  <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Claro</button>
+  <div class="hero-logo">SPEED<span>BOY</span></div>
+  <div class="hero-tag">Captação de parceiros</div>
+  <div class="hero-badge">🛠️ Painel do Luan · Sala <span id="roomSpan">—</span></div>
+</div>
+
+<div id="loadingWrap" class="loading-wrap">
+  <div class="spinner"></div>
+  <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--accent);">Carregando...</div>
+</div>
+
+<div id="mainWrap" style="display:none;">
+
+  <div class="section">
+    <div class="section-title">Convidar motoboy</div>
+    <div class="card">
+      <button class="btn btn-primary" onclick="gerarConvite()">➕ Gerar link de convite</button>
+      <div class="invite-box" id="inviteBox">
+        <div class="invite-link" id="inviteLink"></div>
+        <div class="invite-actions">
+          <button class="btn btn-green" onclick="shareWhats()">📲 WhatsApp</button>
+          <button class="btn btn-ghost" onclick="copyLink()">📋 Copiar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Motoboys</div>
+    <div class="tabs">
+      <div class="tab active" data-tab="convidado" onclick="setTab('convidado')">Pendentes <span class="cnt" id="cntConvidado">0</span></div>
+      <div class="tab" data-tab="aprovado" onclick="setTab('aprovado')">Aprovados <span class="cnt" id="cntAprovado">0</span></div>
+      <div class="tab" data-tab="recusado" onclick="setTab('recusado')">Recusados <span class="cnt" id="cntRecusado">0</span></div>
+    </div>
+    <div id="motoList"></div>
+  </div>
+
+</div>
+
+<div id="errorWrap" class="error-wrap">
+  <div style="font-size:64px;margin-bottom:16px">⚠️</div>
+  <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;color:var(--red);margin-bottom:10px;">Sala não informada</div>
+  <div style="font-size:13px;color:var(--muted);line-height:1.6;max-width:280px;">Abra este painel com o parâmetro <code>?room=SUASALA</code> na URL.</div>
+</div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════
+//  CONFIGURAÇÃO FIREBASE — copiada (arquivos antigos não são tocados)
+// ═══════════════════════════════════════════════════
+var FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyDL8c28T9Q-IAK9JihzEXtT-OPiYOx24Jg",
+  authDomain:        "speedboy-3c1c6.firebaseapp.com",
+  projectId:         "speedboy-3c1c6",
+  storageBucket:     "speedboy-3c1c6.firebasestorage.app",
+  messagingSenderId: "702743802978",
+  appId:             "1:702743802978:web:7b99217bebcc89f9bc8d3b",
+  databaseURL:       "https://speedboy-3c1c6-default-rtdb.firebaseio.com"
+};
+
+var params = new URLSearchParams(window.location.search);
+var ROOM   = (params.get('room') || '').toUpperCase();
+var db     = null;
+var motoboys = {};      // id -> registro
+var currentTab = 'convidado';
+var lastInviteUrl = '';
+
+function toast(msg, type){
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(window._tt);
+  window._tt = setTimeout(function(){ t.className = 'toast'; }, 2600);
+}
+
+function toggleTheme(){
+  var isLight = document.body.classList.toggle('light');
+  document.getElementById('themeBtn').textContent = isLight ? '🌙 Escuro' : '☀️ Claro';
+  localStorage.setItem('sb_cap_theme', isLight ? 'light' : 'dark');
+}
+
+// ── Caminho base do módulo de captação (nó NOVO, isolado) ──
+function capRef(sub){ return db.ref('rooms/' + ROOM + '/captacao/' + sub); }
+
+function init(){
+  if (localStorage.getItem('sb_cap_theme') === 'light'){
+    document.body.classList.add('light');
+    document.getElementById('themeBtn').textContent = '🌙 Escuro';
+  }
+  if (!ROOM){
+    document.getElementById('loadingWrap').style.display = 'none';
+    document.getElementById('errorWrap').classList.add('show');
+    return;
+  }
+  document.getElementById('roomSpan').textContent = ROOM;
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+  } catch(e){
+    console.error(e);
+    toast('Erro ao conectar', 'error');
+    return;
+  }
+  // Escuta a lista de motoboys parceiros em tempo real
+  capRef('motoboys_parceiros').on('value', function(snap){
+    motoboys = snap.val() || {};
+    document.getElementById('loadingWrap').style.display = 'none';
+    document.getElementById('mainWrap').style.display = 'block';
+    render();
+  }, function(err){
+    console.error(err);
+    toast('Erro ao ler dados', 'error');
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  CONVITE
+// ═══════════════════════════════════════════════════
+function gerarConvite(){
+  var ref = capRef('convites').push();
+  var conviteId = ref.key;
+  ref.set({ criado_em: Date.now(), usado: false }, function(err){
+    if (err){ toast('Falha ao gerar convite', 'error'); return; }
+    var base = window.location.href.split('/admin.html')[0];
+    lastInviteUrl = base + '/cadastro.html?room=' + encodeURIComponent(ROOM) + '&convite=' + conviteId;
+    document.getElementById('inviteLink').textContent = lastInviteUrl;
+    document.getElementById('inviteBox').classList.add('show');
+    toast('Convite gerado!', 'success');
+  });
+}
+
+function shareWhats(){
+  if (!lastInviteUrl) return;
+  var msg = 'Fala! Você foi convidado pra ser motoboy parceiro da SpeedBoy. ' +
+            'Faça seu cadastro por aqui (é rápido): ' + lastInviteUrl;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+}
+
+function copyLink(){
+  if (!lastInviteUrl) return;
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(lastInviteUrl).then(function(){ toast('Link copiado!', 'success'); });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = lastInviteUrl; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast('Link copiado!', 'success'); } catch(e){}
+    document.body.removeChild(ta);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  LISTA + APROVAÇÃO
+// ═══════════════════════════════════════════════════
+function setTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(function(el){
+    el.classList.toggle('active', el.getAttribute('data-tab') === tab);
+  });
+  render();
+}
+
+function fmtDate(ts){
+  if (!ts) return '';
+  var d = new Date(ts);
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+}
+
+function esc(s){ return String(s || '').replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+function render(){
+  var ids = Object.keys(motoboys);
+  var counts = { convidado:0, aprovado:0, recusado:0 };
+  ids.forEach(function(id){ var s = motoboys[id].status; if (counts[s] !== undefined) counts[s]++; });
+  document.getElementById('cntConvidado').textContent = counts.convidado;
+  document.getElementById('cntAprovado').textContent  = counts.aprovado;
+  document.getElementById('cntRecusado').textContent  = counts.recusado;
+
+  var list = ids
+    .filter(function(id){ return motoboys[id].status === currentTab; })
+    .sort(function(a,b){ return (motoboys[b].criado_em||0) - (motoboys[a].criado_em||0); });
+
+  var wrap = document.getElementById('motoList');
+  if (!list.length){
+    var msg = currentTab === 'convidado' ? 'Nenhum cadastro aguardando aprovação.'
+            : currentTab === 'aprovado'  ? 'Nenhum motoboy aprovado ainda.'
+            : 'Nenhum motoboy recusado.';
+    wrap.innerHTML = '<div class="empty">' + msg + '</div>';
+    return;
+  }
+
+  wrap.innerHTML = list.map(function(id){
+    var m = motoboys[id];
+    var phone = esc(m.telefone);
+    var waLink = 'https://wa.me/' + String(m.telefone||'').replace(/\D/g,'');
+    var cls = m.status === 'aprovado' ? ' approved' : m.status === 'recusado' ? ' rejected' : '';
+    var html = '<div class="moto-card' + cls + '">';
+    html += '<div class="moto-name">' + esc(m.nome) + '</div>';
+    html += '<div class="moto-phone">📱 <a href="' + waLink + '" target="_blank" style="color:inherit;text-decoration:none;">' + phone + '</a></div>';
+    html += '<div class="moto-meta">Cadastrado em ' + fmtDate(m.criado_em) + '</div>';
+    if (m.status === 'convidado'){
+      html += '<div class="moto-actions">';
+      html += '<button class="btn btn-green" onclick="aprovar(\'' + id + '\')">✓ Aprovar</button>';
+      html += '<button class="btn btn-red" onclick="recusar(\'' + id + '\')">✕ Recusar</button>';
+      html += '</div>';
+    } else if (m.status === 'aprovado'){
+      html += '<span class="pill aprovado">Aprovado' + (m.aprovado_em ? ' · ' + fmtDate(m.aprovado_em) : '') + '</span>';
+    } else if (m.status === 'recusado'){
+      html += '<span class="pill recusado">Recusado</span> ';
+      html += '<button class="btn btn-ghost" style="margin-top:10px;" onclick="aprovar(\'' + id + '\')">Reativar / Aprovar</button>';
+    }
+    html += '</div>';
+    return html;
+  }).join('');
+}
+
+function aprovar(id){
+  capRef('motoboys_parceiros/' + id).update({ status:'aprovado', aprovado_em: Date.now() }, function(err){
+    if (err){ toast('Falha ao aprovar', 'error'); return; }
+    toast('Motoboy aprovado!', 'success');
+  });
+}
+
+function recusar(id){
+  if (!confirm('Recusar este cadastro?')) return;
+  capRef('motoboys_parceiros/' + id).update({ status:'recusado', recusado_em: Date.now() }, function(err){
+    if (err){ toast('Falha ao recusar', 'error'); return; }
+    toast('Cadastro recusado', 'success');
+  });
+}
+
+window.gerarConvite = gerarConvite;
+window.shareWhats = shareWhats;
+window.copyLink = copyLink;
+window.setTab = setTab;
+window.aprovar = aprovar;
+window.recusar = recusar;
+window.toggleTheme = toggleTheme;
+
+init();
+</script>
+</body>
+</html>

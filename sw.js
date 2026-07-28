@@ -1,5 +1,5 @@
-const CACHE = 'speedboy-v20260618c';
-const CORE = ['./index.html', './manifest.json'];
+const CACHE = 'speedboy-v20260728a';
+const CORE = ['./index.html', './manifest.json', './fatura-padrao.js', './fatura.html'];
 
 self.addEventListener('install', e => {
   self.skipWaiting();

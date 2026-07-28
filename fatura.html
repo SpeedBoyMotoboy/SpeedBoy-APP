@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Fatura · SPEEDBOY</title>
+<meta name="theme-color" content="#111418" />
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script src="fatura-padrao.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800;900&family=Barlow:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --dark:#111418; --grey:#6B7280; --lgrey:#E5E7EB; --bg:#F7F8FA; --accent:#FF6B00;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--dark);font-family:'Barlow',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:1000px;margin:0 auto;padding:14px 14px 120px;}
+
+.state{text-align:center;padding:70px 22px;color:var(--grey);font-size:15px;line-height:1.7;}
+.state b{display:block;font-family:'Barlow Condensed',sans-serif;font-size:24px;color:var(--dark);margin-bottom:8px;}
+
+/* ── cabeçalho (mesmo desenho do PDF) ── */
+.fp-head{background:var(--dark);border-left:4px solid var(--accent);border-radius:6px;padding:14px 16px;display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:flex-start;}
+.fp-nome{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;color:#fff;line-height:1;}
+.fp-sub{font-size:11px;color:#9CA3AF;margin-top:5px;}
+.fp-head-r{text-align:right;}
+.fp-titulo{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:18px;color:#fff;line-height:1.1;}
+@media(max-width:560px){.fp-head-r{text-align:left;}}
+
+/* ── KPIs ── */
+.fp-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px;}
+@media(max-width:560px){.fp-kpis{grid-template-columns:1fr 1fr;}}
+.fp-kpi{background:var(--bg);border:1px solid var(--lgrey);border-radius:4px;padding:9px 10px;}
+.fp-kpi-l{font-size:9px;font-weight:800;letter-spacing:.6px;color:var(--grey);}
+.fp-kpi-v{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:21px;margin-top:3px;}
+
+/* ── blocos de resumo ── */
+.fp-blocos{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;}
+@media(max-width:660px){.fp-blocos{grid-template-columns:1fr;}}
+.fp-bloco{background:#fff;border:1px solid var(--lgrey);border-radius:4px;overflow:hidden;}
+.fp-bloco-h{background:var(--dark);color:#fff;font-size:10px;font-weight:800;letter-spacing:.5px;padding:6px 9px;display:flex;justify-content:space-between;}
+.fp-bloco-l{display:flex;justify-content:space-between;padding:5px 9px;font-size:12.5px;border-top:1px solid #F1F2F4;}
+.fp-bloco-cols{display:inline-grid;grid-template-columns:38px 92px 38px;text-align:right;gap:0;}
+.fp-bloco-cols i{font-style:normal;color:var(--grey);}
+.fp-bloco-cols b{font-weight:700;}
+.fp-bloco-h .fp-bloco-cols i{color:#fff;}
+
+/* ── tabela ── */
+.fp-tab-wrap{margin-top:10px;overflow-x:auto;background:#fff;border:1px solid var(--lgrey);border-radius:4px;}
+.fp-tab{width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap;}
+.fp-tab th{background:var(--dark);color:#fff;font-size:10px;letter-spacing:.5px;text-align:left;padding:7px 9px;font-weight:800;position:sticky;top:0;}
+.fp-tab td{padding:6px 9px;border-top:1px solid #F1F2F4;}
+.fp-tab tbody tr:nth-child(odd){background:var(--bg);}
+.fp-tab td:nth-child(4),.fp-tab td:nth-child(5){color:var(--grey);}
+.fp-tab .v{text-align:right;font-weight:700;}
+.fp-tab tr.canc td{color:#9CA3AF;font-style:italic;text-decoration:line-through;}
+.fp-tab .sub{display:none;}
+/* No celular, bairro/cidade/tipo viram uma segunda linha do cliente
+   para que a coluna VALOR continue visível sem rolagem lateral. */
+@media(max-width:620px){
+  .fp-tab{white-space:normal;font-size:12px;}
+  .fp-tab th,.fp-tab td{padding:6px 7px;}
+  .fp-tab th:nth-child(4),.fp-tab td:nth-child(4),
+  .fp-tab th:nth-child(5),.fp-tab td:nth-child(5),
+  .fp-tab th:nth-child(6),.fp-tab td:nth-child(6){display:none;}
+  .fp-tab .sub{display:block;font-style:normal;font-size:10.5px;color:var(--grey);margin-top:1px;}
+  .fp-tab td:nth-child(2),.fp-tab th:nth-child(2){font-size:11px;color:var(--grey);white-space:nowrap;}
+  .fp-tab .v{white-space:nowrap;}
+}
+
+/* ── total ── */
+.fp-total{margin-top:10px;background:var(--dark);border-left:4px solid var(--accent);border-radius:6px;padding:13px 16px;display:flex;justify-content:space-between;align-items:center;}
+.fp-total span{color:#fff;font-weight:800;font-size:13px;letter-spacing:.5px;}
+.fp-total b{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;}
+
+/* ── barra de ações fixa ── */
+.bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--lgrey);padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;justify-content:center;box-shadow:0 -4px 20px rgba(0,0,0,.06);}
+.bar .inner{width:100%;max-width:1000px;display:grid;grid-template-columns:2fr 1fr;gap:8px;}
+button{font-family:'Barlow',sans-serif;cursor:pointer;border-radius:10px;font-weight:800;font-size:15px;padding:13px 10px;border:1px solid var(--lgrey);}
+.b-pdf{background:var(--accent);color:#fff;border:none;}
+.b-pdf:disabled{opacity:.6;cursor:default;}
+.b-wpp{background:#fff;color:#111418;}
+.aviso{font-size:11.5px;color:var(--grey);text-align:center;margin-top:14px;line-height:1.7;}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div id="estado" class="state"><b>Carregando fatura...</b>Só um instante.</div>
+  <div id="fatura"></div>
+  <div id="aviso" class="aviso" style="display:none;">
+    Confira os itens acima. Encontrou alguma divergência? Fale com a gente pelo WhatsApp antes do pagamento.
+  </div>
+</div>
+
+<div class="bar" id="bar" style="display:none;">
+  <div class="inner">
+    <button class="b-pdf" id="btnPdf" onclick="baixarPDF()">📄 Baixar PDF da fatura</button>
+    <button class="b-wpp" id="btnWpp" onclick="falarWpp()">💬 Falar</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+var FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyDL8c28T9Q-IAK9JihzEXtT-OPiYOx24Jg",
+  authDomain:        "speedboy-3c1c6.firebaseapp.com",
+  databaseURL:       "https://speedboy-3c1c6-default-rtdb.firebaseio.com",
+  projectId:         "speedboy-3c1c6",
+  storageBucket:     "speedboy-3c1c6.firebasestorage.app",
+  messagingSenderId: "702743802978",
+  appId:             "1:702743802978:web:7b99217bebcc89f9bc8d3b"
+};
+
+var params = new URLSearchParams(location.search);
+var ROOM   = (params.get('room') || '').toUpperCase();
+var FAT_ID = params.get('id') || '';
+var DADOS  = null;
+
+function erro(titulo, msg){
+  document.getElementById('estado').innerHTML = '<b>' + titulo + '</b>' + msg;
+  document.getElementById('estado').style.display = '';
+  document.getElementById('fatura').innerHTML = '';
+  document.getElementById('bar').style.display = 'none';
+  document.getElementById('aviso').style.display = 'none';
+}
+
+function iniciar(){
+  if(!ROOM || !FAT_ID){
+    erro('Link incompleto', 'Peça um novo link da fatura ao SPEEDBOY.');
+    return;
+  }
+  var db;
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+  }catch(e){
+    erro('Falha na conexão', 'Não foi possível conectar. Tente novamente em instantes.');
+    return;
+  }
+  db.ref('rooms/' + ROOM + '/faturas/' + FAT_ID).once('value').then(function(snap){
+    var raw = snap.val();
+    if(!raw){
+      erro('Fatura não encontrada', 'Este link pode ter expirado. Peça um novo ao SPEEDBOY.');
+      return;
+    }
+    try{ DADOS = typeof raw === 'string' ? JSON.parse(raw) : raw; }
+    catch(e){ erro('Fatura inválida', 'Não foi possível ler os dados. Peça um novo link.'); return; }
+    mostrar();
+  }).catch(function(){
+    erro('Falha ao carregar', 'Verifique sua internet e recarregue a página.');
+  });
+}
+
+function mostrar(){
+  DADOS = SBFatura.preview(DADOS, document.getElementById('fatura'));
+  document.getElementById('estado').style.display = 'none';
+  document.getElementById('bar').style.display = '';
+  document.getElementById('aviso').style.display = '';
+  document.title = (DADOS.fatura.titulo || 'Fatura') + ' · ' + DADOS.emissor.nome;
+}
+
+function baixarPDF(){
+  var btn = document.getElementById('btnPdf');
+  var orig = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '⏳ Gerando PDF...';
+  SBFatura.baixar(DADOS).then(function(){
+    btn.innerHTML = '✅ PDF baixado';
+    setTimeout(function(){ btn.innerHTML = orig; btn.disabled = false; }, 2500);
+  }).catch(function(e){
+    console.error(e);
+    btn.innerHTML = '❌ Erro — tentar de novo';
+    btn.disabled = false;
+    setTimeout(function(){ btn.innerHTML = orig; }, 3000);
+  });
+}
+
+function falarWpp(){
+  var tel = (DADOS && DADOS.emissor.telefone || '').replace(/\D/g, '');
+  var msg = 'Olá! Sobre a fatura ' + (DADOS && DADOS.fatura.numero || '') + ':';
+  var url = tel ? 'https://wa.me/55' + tel + '?text=' + encodeURIComponent(msg)
+                : 'https://wa.me/?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+}
+
+iniciar();
+</script>
+</body>
+</html>

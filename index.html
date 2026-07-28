@@ -275,6 +275,7 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 .sc-btn:active{opacity:.7;}
 .sc-btn.green{border-color:rgba(0,230,118,.4);color:var(--green);}
 .sc-btn.wpp{border-color:rgba(37,211,102,.4);color:#25d366;}
+.sc-btn.blue{border-color:rgba(59,130,246,.45);color:var(--blue);}
 .sc-btn.paid{background:rgba(0,230,118,.1);border-color:var(--green);color:var(--green);}
 .rstat-row-3{grid-template-columns:1fr 1fr 1fr!important;}
 .btn-pdf{width:100%;background:linear-gradient(135deg,#c0392b,#e74c3c);color:#fff;border:none;border-radius:var(--radius);font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:19px;padding:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 16px rgba(255,61,61,.3);margin-bottom:8px;transition:transform .1s;}
@@ -862,6 +863,15 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
       <button class="btn-store-add" onclick="addQuickStore()" style="width:100%;margin-top:6px;">⚡ Adicionar loja rápida</button>
     </div>
     <div class="cfg-section">
+      <div class="cfg-title">🧾 Dados da fatura (emissor)</div>
+      <div class="info-box">Aparecem no cabeçalho de todas as faturas e no fechamento do período.</div>
+      <div class="field" style="margin-bottom:8px;"><div class="flabel">Nome</div><input class="finput" id="cfgEmiNome" placeholder="SPEEDBOY" maxlength="40" /></div>
+      <div class="field" style="margin-bottom:8px;"><div class="flabel">Subtítulo</div><input class="finput" id="cfgEmiSub" placeholder="Motoboy Express" maxlength="40" /></div>
+      <div class="field" style="margin-bottom:8px;"><div class="flabel">CNPJ</div><input class="finput" id="cfgEmiCnpj" placeholder="00.000.000/0001-00" maxlength="20" /></div>
+      <div class="field" style="margin-bottom:8px;"><div class="flabel">Telefone</div><input class="finput" id="cfgEmiTel" placeholder="(27) 90000-0000" maxlength="20" /></div>
+      <div class="field"><div class="flabel">E-mail</div><input class="finput" id="cfgEmiEmail" type="email" placeholder="contato@exemplo.com" maxlength="60" /></div>
+    </div>
+    <div class="cfg-section">
       <div class="cfg-title">🔥 Firebase (sincronização)</div>
       <div id="fbEmbeddedNotice" style="display:none;background:rgba(0,200,100,.08);border:1px solid var(--green);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--green);margin-bottom:10px;">🔒 Firebase configurado internamente</div>
       <div id="fbConfigSection">
@@ -898,6 +908,9 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
   <button class="nav-btn"        id="nav-report"  onclick="goNav('reportScreen','nav-report')"><span class="icon">📊</span>Fechamento</button>
   <button class="nav-btn"        id="nav-cfg"     onclick="goNav('configScreen','nav-cfg')"><span class="icon">⚙️</span>Config</button>
 </nav>
+
+<!-- Padrão único de fatura (schema speedboy.fatura/v1) — compartilhado com fatura.html -->
+<script src="fatura-padrao.js"></script>
 
 <script>
 'use strict';
@@ -2567,6 +2580,9 @@ function _renderStores(d){
         <button class="sc-btn" id="fatM_${nid}" onclick="genFaturaLoja('${ne}','mes',this)">📄 Mês</button>
         <button class="sc-btn" onclick="abrirFaturaPersonalizada('${ne}')">📅 Período</button>
       </div>
+      <div class="sc-row1" style="grid-template-columns:1fr;">
+        <button class="sc-btn blue" onclick="abrirFaturaPersonalizada('${ne}','link')">🔗 Enviar fatura p/ o cliente conferir</button>
+      </div>
       <div class="sc-row2">
         <button class="sc-btn wpp" onclick="cobrancaWppLoja('${ne}')">💬 Cobrar WPP</button>
         <button class="sc-btn ${allPaid?'paid':'green'}" onclick="markStoreReceived('${ne}')">${allPaid?'✓ Recebido':'Marcar pago'}</button>
@@ -2760,112 +2776,46 @@ function drawTopStoresChart(sm, w, h){
   return canvas;
 }
 
+// Fechamento do período — mesmo padrão visual das faturas,
+// trocando os resumos para POR LOJA / POR CIDADE.
 async function genPDF(){
   const d=getReportData();
   if(!d.allStops.length){ toast('Sem dados','error'); return; }
   const btn=document.getElementById('btnPdf'); btn.innerHTML='⏳ Gerando...'; btn.disabled=true;
   try{
-    if(!window.jsPDF){
-      await loadJS('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-      await loadJS('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
-    }
-    const {jsPDF}=window.jspdf;
-    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const PW=doc.internal.pageSize.getWidth();
-    const PH=doc.internal.pageSize.getHeight();
+    const now=new Date();
     const reportNum=genReportNumber();
-    const prestNome=cfg.prestNome||'';
-    const prestPix=cfg.prestPix||'';
-    const emitDate=new Date().toLocaleString('pt-BR');
+    const stopsOrd=d.allStops.slice().sort((a,b)=>{try{return parseDate(a._date)-parseDate(b._date);}catch(e){return 0;}});
+    const primeira=stopsOrd.length?isoFromBR(stopsOrd[0]._date):isoFromDate(d.cutoff);
+    const ultima=stopsOrd.length?isoFromBR(stopsOrd[stopsOrd.length-1]._date):isoFromDate(now);
 
-    // ── CABEÇALHO COMPACTO ──
-    doc.setFillColor(8,8,12);doc.rect(0,0,PW,20,'F');
-    doc.setFont('helvetica','bold');doc.setFontSize(18);doc.setTextColor(245,197,24);doc.text('SPEEDBOY',14,13);
-    doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(160,160,160);
-    doc.text(reportNum+'  ·  '+d.label+'  ·  '+d.range,PW-14,9,{align:'right'});
-    doc.text('Emitido: '+emitDate,PW-14,15,{align:'right'});
-    let y=26;
-
-    // ── BOXES DE RESUMO ──
-    const bw4=(PW-28-9)/4;
-    const boxes=[
-      {lbl:'TOTAL',val:fmtMoney(d.total),c:[245,197,24]},
-      {lbl:'RECEBIDO',val:fmtMoney(d.received),c:[0,200,100]},
-      {lbl:'A RECEBER',val:fmtMoney(d.pending),c:[255,170,0]},
-      {lbl:'ENTREGAS',val:String(d.deliveries),c:[255,107,0]}
-    ];
-    boxes.forEach((b,i)=>{
-      const x=14+i*(bw4+3);
-      doc.setFillColor(18,18,24);doc.roundedRect(x,y,bw4,18,3,3,'F');
-      doc.setFont('helvetica','bold');doc.setFontSize(6.5);doc.setTextColor(100,100,100);doc.text(b.lbl,x+bw4/2,y+6,{align:'center'});
-      doc.setFontSize(11);doc.setTextColor(...b.c);doc.text(b.val,x+bw4/2,y+14,{align:'center'});
+    const dados=SBFatura.normalizar({
+      schema:'speedboy.fatura/v1',
+      emissor:faturaEmissor(),
+      fatura:{
+        numero:reportNum,
+        cliente:'',
+        titulo:'FECHAMENTO · '+d.label.toUpperCase(),
+        periodo:{inicio:primeira,fim:ultima},
+        emissao:now.toISOString(),
+        moeda:'BRL'
+      },
+      pagamento:{recebido:d.received},
+      config:{siglas_cidade:siglasCidadeApp()},
+      resumos:[{titulo:'POR LOJA',chave:'loja'},{titulo:'POR CIDADE',chave:'cidade'}],
+      itens:stopsOrd.map(itemFatura)
     });
-    y+=24;
 
-    // ── TABELA ÚNICA DE TODAS AS ENTREGAS (escala automática p/ caber em 1 folha) ──
-    const tipoLabel=s=>s._cancelled?'CANCELADA':(s.serviceType==='retirada'?'Retirada':s.serviceType==='troca'?'Troca':'Entrega');
-    const cancelledFlags=d.allStops.map(s=>!!s._cancelled);
-    const tableRows=d.allStops.map((s,i)=>[
-      String(i+1),s._date,(s.name||'—').substring(0,24),
-      cityName(resolveCityCode(s.city||s.cityId))||'—',
-      (s.store||'—').substring(0,18),
-      tipoLabel(s),
-      s._cancelled?'—':fmtMoney(parseMoney(s.value)),
-      s._cancelled?'—':(s.paid?'✓':'—')
-    ]);
-    const footerH=(prestPix||prestNome)?14:0;
-    const availH=(PH-12)-y-footerH;
-    let fontSize=7.5, cellPadding=2;
-    while((tableRows.length+1)*(fontSize*0.3528+cellPadding*2) > availH && fontSize>3.6){
-      fontSize-=0.2; cellPadding=Math.max(0.5,cellPadding-0.06);
-    }
-    doc.autoTable({
-      startY:y,
-      head:[['Nº','Data','Cliente','Cidade','Loja','Tipo','Valor','Pago']],
-      body:tableRows,
-      theme:'plain',
-      pageBreak:'avoid',
-      rowPageBreak:'avoid',
-      styles:{font:'helvetica',fontSize:fontSize,textColor:[210,210,210],cellPadding:cellPadding,fillColor:[14,14,20]},
-      headStyles:{fillColor:[30,30,36],textColor:[245,197,24],fontStyle:'bold',fontSize:fontSize},
-      alternateRowStyles:{fillColor:[10,10,16]},
-      columnStyles:{0:{cellWidth:7,halign:'center'},1:{cellWidth:17},5:{halign:'center'},6:{halign:'right',cellWidth:18},7:{cellWidth:10,halign:'center'}},
-      margin:{left:14,right:14},
-      didParseCell:(data)=>{
-        if(data.section==='body'&&cancelledFlags[data.row.index]){
-          data.cell.styles.textColor=[120,120,120];
-          data.cell.styles.fontStyle='italic';
-        }
-      }
-    });
-    y=doc.lastAutoTable.finalY+6;
-
-    // ── RODAPÉ DE COBRANÇA (PIX / prestador) ──
-    if((prestPix||prestNome)&&y+footerH<PH-10){
-      doc.setFillColor(8,30,8);doc.roundedRect(14,y,PW-28,footerH,2,2,'F');
-      doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(0,230,118);
-      const line=`A RECEBER: ${fmtMoney(d.pending)}`+(prestPix?'  ·  PIX: '+prestPix:'')+(prestNome?'  ·  '+prestNome:'');
-      doc.text(line,PW/2,y+9,{align:'center'});
-    }
-
-    // Rodapé fixo
-    const totalPages=doc.internal.getNumberOfPages();
-    for(let i=1;i<=totalPages;i++){
-      doc.setPage(i);
-      doc.setDrawColor(40,40,50);doc.line(14,PH-9,PW-14,PH-9);
-      doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(70,70,80);
-      doc.text(`SPEEDBOY · Relatório ${reportNum} · Gerado em ${emitDate}`,14,PH-4);
-      doc.text(`${i}/${totalPages}`,PW-14,PH-4,{align:'right'});
-    }
-
-    const today=new Date().toLocaleDateString('pt-BR').replace(/\//g,'-');
-    doc.save(`speedboy_${reportNum}_${today}.pdf`);
+    const today=now.toLocaleDateString('pt-BR').replace(/\//g,'-');
+    await SBFatura.baixar(dados,`speedboy_${reportNum}_${today}.pdf`);
     toast('✅ PDF '+reportNum+' gerado!','success');
   }catch(e){console.error(e);toast('Erro: '+e.message,'error');}
-  finally{btn.innerHTML='📄 Baixar PDF';btn.disabled=false;}
+  finally{btn.innerHTML='📄 Baixar PDF do período';btn.disabled=false;}
 }
 
-function abrirFaturaPersonalizada(storeName){
+function abrirFaturaPersonalizada(storeName, modo){
+  modo=modo||'pdf';
+  const linkMode=modo==='link';
   const hoje=new Date();
   const fmtISO=d=>d.toISOString().slice(0,10);
   const ini=new Date(hoje); ini.setDate(hoje.getDate()-30);
@@ -2873,13 +2823,13 @@ function abrirFaturaPersonalizada(storeName){
   ov.id='_fatModal';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
   ov.innerHTML=`<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;width:100%;max-width:340px;">
-    <div style="font-weight:800;font-size:16px;margin-bottom:4px;">📅 Período personalizado</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">Loja: <strong>${storeName}</strong></div>
+    <div style="font-weight:800;font-size:16px;margin-bottom:4px;">${linkMode?'🔗 Fatura para o cliente':'📅 Período personalizado'}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">Loja: <strong>${storeName}</strong>${linkMode?'<br>O cliente abre o link, confere item a item e baixa o PDF.':''}</div>
     <div class="field" style="margin-bottom:10px;"><div class="flabel">Data inicial</div><input type="date" id="_fatIni" class="finput" value="${fmtISO(ini)}" /></div>
     <div class="field" style="margin-bottom:18px;"><div class="flabel">Data final</div><input type="date" id="_fatFim" class="finput" value="${fmtISO(hoje)}" /></div>
     <div style="display:flex;gap:8px;">
       <button onclick="document.getElementById('_fatModal').remove()" style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-weight:700;font-size:14px;cursor:pointer;">Cancelar</button>
-      <button id="_fatOkBtn" style="flex:2;padding:11px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-weight:800;font-size:14px;cursor:pointer;">📄 Gerar PDF</button>
+      <button id="_fatOkBtn" style="flex:2;padding:11px;border-radius:10px;border:none;background:${linkMode?'var(--blue)':'var(--accent)'};color:#fff;font-weight:800;font-size:14px;cursor:pointer;">${linkMode?'🔗 Gerar link':'📄 Gerar PDF'}</button>
     </div>
   </div>`;
   document.body.appendChild(ov);
@@ -2889,172 +2839,193 @@ function abrirFaturaPersonalizada(storeName){
     if(!di||!df){toast('Selecione as duas datas','error');return;}
     if(di>df){toast('Data inicial deve ser antes da final','error');return;}
     ov.remove();
-    genFaturaLoja(storeName,'custom',null,{dataInicio:di,dataFim:df});
+    if(linkMode) gerarLinkFatura(storeName,'custom',{dataInicio:di,dataFim:df});
+    else genFaturaLoja(storeName,'custom',null,{dataInicio:di,dataFim:df});
   };
 }
 
 // ═══════════════════════════════════════════════════════
-//  FATURA POR LOJA
+//  FATURA — PADRÃO ÚNICO (schema speedboy.fatura/v1)
+//  Layout renderizado por fatura-padrao.js (SBFatura),
+//  o mesmo usado na página de conferência do cliente.
 // ═══════════════════════════════════════════════════════
+
+const MESES_FAT=['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
+
+// Dados do emissor que aparecem no cabeçalho de toda fatura
+function faturaEmissor(){
+  const p=SBFatura.EMISSOR_PADRAO;
+  return {
+    nome:      cfg.emiNome  || p.nome,
+    subtitulo: cfg.emiSub   || p.subtitulo,
+    cnpj:      cfg.emiCnpj  || p.cnpj,
+    telefone:  cfg.emiTel   || p.telefone,
+    email:     cfg.emiEmail || p.email
+  };
+}
+
+// DD/MM/YYYY → YYYY-MM-DD
+function isoFromBR(br){
+  const p=String(br||'').split('/');
+  if(p.length!==3)return '';
+  return p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
+}
+function isoFromDate(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+// serviceType interno → rótulo do padrão
+function tipoFatura(s){
+  if(s._cancelled||s.cancelled)return 'Cancelada';
+  return s.serviceType==='retirada'?'Coleta':s.serviceType==='troca'?'Troca':'Entrega';
+}
+
+// Converte uma parada do app em item do padrão
+function itemFatura(s,i){
+  const cancelado=!!(s._cancelled||s.cancelled);
+  return {
+    n:i+1,
+    data:isoFromBR(s._date),
+    cliente:s.name||'—',
+    bairro:s.neighborhood||'',
+    cidade:cityName(resolveCityCode(s.city||s.cityId||''))||'—',
+    tipo:tipoFatura(s),
+    loja:s.store||'Sem loja',
+    valor:cancelado?0:parseMoney(s.value),
+    cancelado:cancelado
+  };
+}
+
+// Siglas de cidade a partir do CITY_MAP do app (Serra → SRR, etc.)
+function siglasCidadeApp(){
+  const m={};
+  Object.keys(CITY_MAP).forEach(code=>{ m[CITY_MAP[code]]=code==='VIA'?'VNA':code; });
+  return m;
+}
+
+// ── Monta o objeto speedboy.fatura/v1 de uma loja ──
+function coletarFaturaLoja(storeName, periodo, opts={}){
+  const now=new Date();
+  let cutoff, endDateLimit=null, iniISO, fimISO, periodoLabel;
+  if(periodo==='semana'){
+    cutoff=new Date(now); cutoff.setDate(now.getDate()-7); cutoff.setHours(0,0,0,0);
+    periodoLabel='ÚLTIMOS 7 DIAS';
+  } else if(periodo==='custom'&&opts.dataInicio&&opts.dataFim){
+    cutoff=new Date(opts.dataInicio+'T00:00:00');
+    endDateLimit=new Date(opts.dataFim+'T23:59:59');
+    const fmt=d=>d.split('-').reverse().join('/');
+    periodoLabel=fmt(opts.dataInicio)+' A '+fmt(opts.dataFim);
+  } else {
+    cutoff=new Date(now.getFullYear(),now.getMonth(),1);
+    periodoLabel=MESES_FAT[now.getMonth()]+'/'+now.getFullYear();
+  }
+  iniISO=opts.dataInicio||isoFromDate(cutoff);
+  fimISO=opts.dataFim||isoFromDate(endDateLimit||now);
+
+  const todayStr=now.toLocaleDateString('pt-BR');
+  const allDays=[{date:todayStr,stops},...history];
+  const seen={};
+  const fatStops=[];
+  allDays.forEach(day=>{
+    day.stops.forEach(s=>{
+      if((s.store||'')!==storeName)return;
+      const dDate=day===allDays[0]?(s.deliveryDate||s._addedDate||day.date):day.date;
+      try{
+        const dt=parseDate(dDate);
+        if(dt<cutoff)return;
+        if(endDateLimit&&dt>endDateLimit)return;
+      }catch(e){return;}
+      const dk=s._trackKey?('tk_'+s._trackKey):('c_'+(s.name||'')+'|'+(s.address||'')+'|'+(s.value||'')+'|'+dDate);
+      if(seen[dk])return; seen[dk]=true;
+      fatStops.push({...s,_date:dDate});
+    });
+  });
+
+  if(!fatStops.length){ toast('Nenhuma entrega de '+storeName+' no período','error'); return null; }
+  fatStops.sort((a,b)=>{try{return parseDate(a._date)-parseDate(b._date);}catch(e){return 0;}});
+
+  const recebido=fatStops.filter(s=>s.paid&&!s.cancelled).reduce((a,s)=>a+parseMoney(s.value),0);
+  const numero='FAT-'+storeName.replace(/\s/g,'').substring(0,6).toUpperCase()+'-'+now.getFullYear()+String(now.getMonth()+1).padStart(2,'0');
+
+  return SBFatura.normalizar({
+    schema:'speedboy.fatura/v1',
+    emissor:faturaEmissor(),
+    fatura:{
+      numero:numero,
+      cliente:storeName,
+      titulo:'FATURA '+storeName.toUpperCase()+' · '+periodoLabel,
+      periodo:{inicio:iniISO,fim:fimISO},
+      emissao:new Date().toISOString(),
+      moeda:'BRL'
+    },
+    pagamento:{recebido:recebido},
+    config:{siglas_cidade:siglasCidadeApp()},
+    resumos:[{titulo:'POR CIDADE',chave:'cidade'},{titulo:'POR TIPO DE SERVIÇO',chave:'tipo'}],
+    itens:fatStops.map(itemFatura)
+  });
+}
+
 async function genFaturaLoja(storeName, periodo, btnEl, opts={}){
-  if(btnEl){btnEl.disabled=true;const orig=btnEl.innerHTML;btnEl.innerHTML='⏳';setTimeout(()=>{btnEl.innerHTML=orig;btnEl.disabled=false;},8000);}
+  const orig=btnEl?btnEl.innerHTML:'';
+  if(btnEl){btnEl.disabled=true;btnEl.innerHTML='⏳';}
   try{
-    if(!window.jsPDF){
-      await loadJS('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-      await loadJS('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
-    }
-    const {jsPDF}=window.jspdf;
-    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const PW=doc.internal.pageSize.getWidth();
-    const PH=doc.internal.pageSize.getHeight();
-
-    // ── Período ──
-    const now=new Date();
-    let cutoff, endDateLimit=null, periodoLabel;
-    if(periodo==='semana'){
-      cutoff=new Date(now); cutoff.setDate(now.getDate()-7); cutoff.setHours(0,0,0,0);
-      periodoLabel='Últimos 7 dias';
-    } else if(periodo==='custom'&&opts.dataInicio&&opts.dataFim){
-      cutoff=new Date(opts.dataInicio+'T00:00:00');
-      endDateLimit=new Date(opts.dataFim+'T23:59:59');
-      const fmt=d=>d.split('-').reverse().join('/');
-      periodoLabel=fmt(opts.dataInicio)+' a '+fmt(opts.dataFim);
-    } else {
-      cutoff=new Date(now.getFullYear(),now.getMonth(),1);
-      periodoLabel='Mês Atual ('+now.toLocaleString('pt-BR',{month:'long',year:'numeric'})+')';
-    }
-    const todayStr=now.toLocaleDateString('pt-BR');
-
-    // ── Coletar paradas ──
-    const allDays=[{date:todayStr,stops},...history];
-    const seen={};
-    const fatStops=[];
-    allDays.forEach(day=>{
-      day.stops.forEach(s=>{
-        if((s.store||'')!==storeName)return;
-        const dDate=day===allDays[0]?(s.deliveryDate||s._addedDate||day.date):day.date;
-        try{
-          const dt=parseDate(dDate);
-          if(dt<cutoff)return;
-          if(endDateLimit&&dt>endDateLimit)return;
-        }catch(e){return;}
-        const dk=s._trackKey?('tk_'+s._trackKey):('c_'+(s.name||'')+'|'+(s.address||'')+'|'+(s.value||'')+'|'+dDate);
-        if(seen[dk])return; seen[dk]=true;
-        fatStops.push({...s,_date:dDate});
-      });
-    });
-
-    if(!fatStops.length){ toast('Nenhuma entrega de '+storeName+' no período','error'); if(btnEl){btnEl.disabled=false;} return; }
-
-    fatStops.sort((a,b)=>{try{return parseDate(a._date)-parseDate(b._date);}catch(e){return 0;}});
-    const fTotal=fatStops.reduce((a,s)=>a+parseMoney(s.value),0);
-    const fReceived=fatStops.filter(s=>s.paid).reduce((a,s)=>a+parseMoney(s.value),0);
-    const fPending=fTotal-fReceived;
-    const dateRange=fatStops.length?fatStops[0]._date+' — '+fatStops[fatStops.length-1]._date:'';
-
-    const fatNum='FAT-'+storeName.replace(/\s/g,'').substring(0,6).toUpperCase()+'-'+now.getFullYear()+String(now.getMonth()+1).padStart(2,'0');
-    const prestNome=cfg.prestNome||'';
-    const prestPix=cfg.prestPix||'';
-    const emitDate=now.toLocaleString('pt-BR');
-
-    // ── CABEÇALHO ──
-    let y=0;
-    doc.setFillColor(8,8,12);doc.rect(0,0,PW,40,'F');
-    doc.setFont('helvetica','bold');doc.setFontSize(22);doc.setTextColor(245,197,24);doc.text('SPEEDBOY',14,18);
-    doc.setFontSize(11);doc.setTextColor(255,255,255);doc.text('FATURA — '+storeName.toUpperCase(),14,28);
-    doc.setFontSize(8);doc.setTextColor(160,160,160);doc.text(periodoLabel,14,36);
-    doc.setFontSize(8);doc.setTextColor(245,197,24);doc.text(fatNum,PW-14,14,{align:'right'});
-    doc.setTextColor(130,130,130);doc.text(dateRange,PW-14,21,{align:'right'});
-    doc.text('Emitido: '+emitDate,PW-14,28,{align:'right'});
-    y=46;
-
-    // ── Prestador info ──
-    if(prestNome||prestPix){
-      doc.setFillColor(18,18,24);doc.roundedRect(14,y,PW-28,18,3,3,'F');
-      doc.setFont('helvetica','bold');doc.setFontSize(8);
-      let lx=20;
-      if(prestNome){doc.setTextColor(245,197,24);doc.text(prestNome,lx,y+8);lx+=doc.getTextWidth(prestNome)+10;}
-      if(prestPix){doc.setTextColor(130,130,130);doc.text('PIX: ',lx,y+8);doc.setTextColor(0,230,118);doc.text(prestPix,lx+doc.getTextWidth('PIX: '),y+8);}
-      y+=24;
-    }
-
-    // ── 4 Boxes de resumo ──
-    const boxes=[
-      ['ENTREGAS',fatStops.length+'','',null],
-      ['TOTAL',fmtMoney(fTotal),'',null],
-      ['RECEBIDO',fmtMoney(fReceived),'',[0,200,100]],
-      ['A RECEBER',fmtMoney(fPending),'',fPending>0?[245,197,24]:[0,200,100]],
-    ];
-    const bw=(PW-28-9)/4; let bx=14;
-    boxes.forEach(([lbl,val,,color])=>{
-      doc.setFillColor(18,18,24);doc.roundedRect(bx,y,bw,22,3,3,'F');
-      doc.setFont('helvetica','normal');doc.setFontSize(6.5);doc.setTextColor(120,120,120);doc.text(lbl,bx+bw/2,y+7,{align:'center'});
-      doc.setFont('helvetica','bold');doc.setFontSize(9);
-      if(color)doc.setTextColor(...color); else doc.setTextColor(220,220,220);
-      doc.text(val,bx+bw/2,y+16,{align:'center'});
-      bx+=bw+3;
-    });
-    y+=28;
-
-    // ── Tabela de entregas ──
-    const tipoLabel=s=>s.serviceType==='retirada'?'Coleta':s.serviceType==='troca'?'Troca':'Entrega';
-    const tableRows=fatStops.map((s,i)=>[
-      i+1,
-      s._date,
-      (s.name||'—').substring(0,22),
-      (s.neighborhood||'').substring(0,28),
-      cityName(resolveCityCode(s.city||s.cityId||'')),
-      tipoLabel(s),
-      fmtMoney(parseMoney(s.value))
-    ]);
-    // Escala automática para caber tudo em uma única página
-    const footerH=prestPix?24:16;
-    const availH=(PH-14)-y-footerH-14;
-    let fontSize=7.5, cellPadding=2.5;
-    while((tableRows.length+1)*(fontSize*0.3528+cellPadding*2) > availH && fontSize>3.8){
-      fontSize-=0.2; cellPadding=Math.max(0.6,cellPadding-0.07);
-    }
-    doc.autoTable({
-      startY:y,
-      head:[['Nº','Data','Cliente','Bairro','Cidade','Tipo','Valor']],
-      body:tableRows,
-      theme:'plain',
-      pageBreak:'avoid',
-      rowPageBreak:'avoid',
-      styles:{font:'helvetica',fontSize:fontSize,textColor:[200,200,200],cellPadding:cellPadding,fillColor:[14,14,20]},
-      headStyles:{fillColor:[30,30,36],textColor:[245,197,24],fontStyle:'bold',fontSize:fontSize},
-      alternateRowStyles:{fillColor:[10,10,16]},
-      columnStyles:{0:{cellWidth:7,halign:'center'},1:{cellWidth:18},5:{cellWidth:16,halign:'center'},6:{cellWidth:18,halign:'right'}},
-      margin:{left:14,right:14},
-      didDrawPage:(data)=>{
-        // Footer em cada página
-        const pg=doc.internal.getCurrentPageInfo().pageNumber;
-        const tp=doc.internal.getNumberOfPages();
-        doc.setFillColor(14,14,20);doc.rect(0,PH-12,PW,12,'F');
-        doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(80,80,80);
-        doc.text('SPEEDBOY · Fatura '+fatNum+' · Gerado em '+emitDate,14,PH-5);
-        doc.text(pg+'/'+tp,PW-14,PH-5,{align:'right'});
-      }
-    });
-
-    // ── Rodapé de cobrança ──
-    const lastY=doc.lastAutoTable.finalY+8;
-    const footH=prestPix?24:16;
-    if(lastY+footH<PH-20){
-      doc.setFillColor(8,30,8);doc.roundedRect(14,lastY,PW-28,footH,3,3,'F');
-      doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(0,230,118);
-      doc.text('TOTAL A RECEBER: '+fmtMoney(fPending),PW/2,lastY+9,{align:'center'});
-      if(prestPix){
-        doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(160,160,160);
-        doc.text('PIX: '+prestPix+(prestNome?' — '+prestNome:''),PW/2,lastY+18,{align:'center'});
-      }
-    }
-
-    const fileDate=todayStr.replace(/\//g,'-');
-    doc.save(`fatura_${storeName.replace(/\s/g,'_')}_${periodo}_${fileDate}.pdf`);
+    const dados=coletarFaturaLoja(storeName,periodo,opts);
+    if(!dados)return;
+    const fileDate=new Date().toLocaleDateString('pt-BR').replace(/\//g,'-');
+    await SBFatura.baixar(dados,`fatura_${storeName.replace(/\s/g,'_')}_${periodo}_${fileDate}.pdf`);
     toast('✅ Fatura '+storeName+' gerada!','success');
   }catch(e){console.error(e);toast('Erro: '+e.message,'error');}
-  finally{if(btnEl){btnEl.disabled=false;}}
+  finally{if(btnEl){btnEl.disabled=false;btnEl.innerHTML=orig;}}
+}
+
+// ═══════════════════════════════════════════════════════
+//  LINK DE CONFERÊNCIA PARA O CLIENTE
+//  Publica a fatura (mesmo padrão) e devolve um link em que
+//  a loja confere item a item e baixa o PDF por conta própria.
+// ═══════════════════════════════════════════════════════
+async function gerarLinkFatura(storeName, periodo, opts={}){
+  const dados=coletarFaturaLoja(storeName,periodo,opts);
+  if(!dados)return;
+  const room=localStorage.getItem('sb_room_code')||'';
+  if(!fbDb||!room){toast('Configure o Firebase primeiro nas ⚙️ Configurações','error');return;}
+  toast('⏳ Publicando fatura...','');
+  try{
+    const id='FT-'+Date.now().toString(36).toUpperCase();
+    const {ref:r,set:s}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
+    await s(r(fbDb,'rooms/'+room+'/faturas/'+id),JSON.stringify(dados));
+    const base=window.location.href.replace(/\/[^/?#]*(\?.*)?$/,'/fatura.html');
+    const link=base+'?room='+encodeURIComponent(room)+'&id='+encodeURIComponent(id);
+    mostrarLinkFatura(dados,link);
+    toast('✅ Link da fatura gerado!','success');
+  }catch(e){console.error(e);toast('Erro ao publicar: '+e.message,'error');}
+}
+
+function mostrarLinkFatura(dados,link){
+  const t=dados.totais;
+  const ov=document.createElement('div');
+  ov.id='_fatLinkModal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML=`<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;width:100%;max-width:360px;">
+    <div style="font-weight:800;font-size:16px;margin-bottom:4px;">🔗 Fatura publicada</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6;">${dados.fatura.cliente} · ${t.servicos} serviço(s) · <strong style="color:var(--accent)">${fmtMoney(t.a_receber)}</strong> a receber</div>
+    <div class="link-url" id="_fatLinkUrl">${link}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+      <button class="btn-copy-link" id="_fatCopy">📋 Copiar</button>
+      <button class="btn-wpp-link"  id="_fatWpp">💬 WhatsApp</button>
+    </div>
+    <button id="_fatClose" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-weight:700;font-size:14px;cursor:pointer;">Fechar</button>
+  </div>`;
+  document.body.appendChild(ov);
+  document.getElementById('_fatClose').onclick=()=>ov.remove();
+  document.getElementById('_fatCopy').onclick=()=>{
+    navigator.clipboard?.writeText(link).then(()=>toast('📋 Link copiado!','success')).catch(()=>toast(link,''));
+  };
+  document.getElementById('_fatWpp').onclick=()=>{
+    const msg=`🧾 *${dados.fatura.titulo}*\n\n📦 ${t.servicos} serviço(s)\n💰 Total: *${fmtMoney(t.total)}*\n⏳ A receber: *${fmtMoney(t.a_receber)}*\n\n🔗 Confira item a item e baixe o PDF:\n${link}\n\n📲 ${dados.emissor.nome}`;
+    const stored=localStorage.getItem('sb_wpp_loja_'+dados.fatura.cliente)||'';
+    const digits=stored.replace(/\D/g,'');
+    window.open((digits?`https://wa.me/55${digits}?text=`:'https://wa.me/?text=')+encodeURIComponent(msg),'_blank');
+  };
 }
 
 function cobrancaWppLoja(storeName){
@@ -3172,7 +3143,6 @@ function shareRepassWpp(){
   const url=phone?`https://wa.me/55${phone}?text=${encodeURIComponent(msg)}`:`https://wa.me/?text=${encodeURIComponent(msg)}`;
   window.open(url,'_blank');
 }
-function loadJS(src){ return new Promise((res,rej)=>{ if(document.querySelector(`script[src="${src}"]`)){res();return;} const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
 
 // ═══════════════════════════════════════════════════════
 //  LINKS GENERATOR
@@ -3239,6 +3209,12 @@ function delLink(i){ const links=getLinks(); if(!confirm('Remover link da loja '
 function loadConfig(){
   document.getElementById('cfgOrigin').value=cfg.origin||'';
   document.getElementById('cfgWpp').value=cfg.wppMsg||'';
+  const em=faturaEmissor();
+  document.getElementById('cfgEmiNome').value=em.nome;
+  document.getElementById('cfgEmiSub').value=em.subtitulo;
+  document.getElementById('cfgEmiCnpj').value=em.cnpj;
+  document.getElementById('cfgEmiTel').value=em.telefone;
+  document.getElementById('cfgEmiEmail').value=em.email;
   // Se config embutida: esconde apenas o formulário de configuração do Firebase
   if(EMBEDDED_FB_CONFIG){
     document.getElementById('fbEmbeddedNotice').style.display='';
@@ -3258,6 +3234,11 @@ function loadConfig(){
 function saveConfig(){
   cfg.origin=document.getElementById('cfgOrigin').value.trim();
   cfg.wppMsg=document.getElementById('cfgWpp').value.trim();
+  cfg.emiNome =document.getElementById('cfgEmiNome').value.trim();
+  cfg.emiSub  =document.getElementById('cfgEmiSub').value.trim();
+  cfg.emiCnpj =document.getElementById('cfgEmiCnpj').value.trim();
+  cfg.emiTel  =document.getElementById('cfgEmiTel').value.trim();
+  cfg.emiEmail=document.getElementById('cfgEmiEmail').value.trim();
   saveCfg();
   if(!EMBEDDED_FB_CONFIG){
     const fbStr=document.getElementById('cfgFb').value.trim();

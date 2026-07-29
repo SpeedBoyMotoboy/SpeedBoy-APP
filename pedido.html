@@ -185,7 +185,7 @@ body.light .theme-toggle{background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.15)
 <div class="loading" id="loading"><div class="spinner"></div><div class="loading-text">Enviando para o Luan...</div></div>
 
 <div class="hero">
-  <button class="theme-toggle" id="themeBtn" onclick="window.toggleTheme()">☀️ Claro</button>
+  <button type="button" class="theme-toggle" id="themeBtn" onclick="window.toggleTheme()">☀️ Claro</button>
   <div class="hero-logo">SPEED<span>BOY</span></div>
   <div class="hero-tag">Sua entrega nossa prioridade</div>
   <div class="hero-badge" id="heroBadge">🏪 <span id="storeSpan"></span></div>
@@ -195,12 +195,12 @@ body.light .theme-toggle{background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.15)
   <div class="form-wrap">
     <div class="sec-divider">ENTREGAS</div>
     <div class="stops-wrap" id="stopsWrap"></div>
-    <button class="btn-add-stop" id="btnAdd" onclick="window.addStop()">
+    <button type="button" class="btn-add-stop" id="btnAdd" onclick="window.addStop()">
       <span style="font-size:20px">＋</span> Adicionar outro endereço
     </button>
   </div>
   <div class="form-wrap" style="padding-top:0;">
-  <button class="hist-toggle" onclick="window.toggleHistory()">
+  <button type="button" class="hist-toggle" onclick="window.toggleHistory()">
     📋 Meu histórico de pedidos <span id="histCount"></span>
     <span id="histArrow">▼</span>
   </button>
@@ -208,21 +208,21 @@ body.light .theme-toggle{background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.15)
     <div class="hist-tools" id="histTools" style="display:none;">
       <div class="hist-tools-label">📥 Baixar entregas (CSV)</div>
       <div class="hist-tools-btns">
-        <button class="hist-dl-btn" onclick="window.downloadWeek()">📆 Esta semana</button>
-        <button class="hist-dl-btn" onclick="window.downloadMonth()">🗓️ Este mês</button>
+        <button type="button" class="hist-dl-btn" onclick="window.downloadWeek()">📆 Esta semana</button>
+        <button type="button" class="hist-dl-btn" onclick="window.downloadMonth()">🗓️ Este mês</button>
       </div>
       <div class="hist-period">
         <input type="date" id="histFrom" class="hist-date" aria-label="Data inicial">
         <span>até</span>
         <input type="date" id="histTo" class="hist-date" aria-label="Data final">
-        <button class="hist-dl-btn" style="flex:0 0 auto;" onclick="window.downloadPeriod()">Baixar período</button>
+        <button type="button" class="hist-dl-btn" style="flex:0 0 auto;" onclick="window.downloadPeriod()">Baixar período</button>
       </div>
     </div>
     <div id="histList"><div class="hist-empty">Nenhum pedido ainda.</div></div>
   </div>
 </div>
 <div class="submit-wrap">
-    <button class="btn-submit" id="btnSubmit" onclick="window.submitPedido()">
+    <button type="button" class="btn-submit" id="btnSubmit" onclick="window.submitPedido()">
       🛵 Enviar para o Luan
     </button>
     <div class="submit-note">O Luan receberá as entregas automaticamente</div>
@@ -235,8 +235,8 @@ body.light .theme-toggle{background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.15)
   <div class="success-sub">O Luan já recebeu! Ele vai confirmar as entregas em instantes.</div>
   <div class="success-list" id="successList"></div>
   <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
-    <button class="btn-novo" onclick="window.resetForm()">+ Novo pedido</button>
-    <button class="btn-whatsapp" id="btnWhatsApp" onclick="window.sendWhatsApp()" style="display:none;">💬 Avisar no WhatsApp</button>
+    <button type="button" class="btn-novo" onclick="window.resetForm()">+ Novo pedido</button>
+    <button type="button" class="btn-whatsapp" id="btnWhatsApp" onclick="window.sendWhatsApp()" style="display:none;">💬 Avisar no WhatsApp</button>
   </div>
 </div>
 
@@ -414,7 +414,7 @@ window.addStop = function() {
         '<div class="stop-num">' + num + '</div>' +
         'ENTREGA ' + num +
       '</div>' +
-      (num > 1 ? '<button class="btn-rm" onclick="window.removeStop(\'' + id + '\')">✕</button>' : '') +
+      (num > 1 ? '<button type="button" class="btn-rm" onclick="window.removeStop(\'' + id + '\')">✕</button>' : '') +
     '</div>' +
     '<div class="stop-card-body">' +
       '<div class="field-group">' +
@@ -753,8 +753,8 @@ function enviarPedido(newStops) {
         var typeIcon = s.serviceType === 'retirada' ? '📦 Retirada' : s.serviceType === 'troca' ? '🔄 Troca' : '🛵 Entrega';
         var dateStr  = s.deliveryDate ? ' · 📅 ' + s.deliveryDate : '';
         var key = lastSubmittedKeys[i] || '';
-        var editBtn = key ? '<button class="client-req-btn edit-btn" onclick="window.openEditModal(\'' + key + '\',' + i + ')">✏️ Editar entrega</button>' : '';
-        var cancelBtn = key ? '<button class="client-req-btn cancel-btn" onclick="window.requestCancel(\'' + key + '\',\'' + s.name.replace(/'/g,"\\'") + '\')">❌ Cancelar</button>' : '';
+        var editBtn = key ? '<button type="button" class="client-req-btn edit-btn" onclick="window.openEditModal(\'' + key + '\',' + i + ')">✏️ Editar entrega</button>' : '';
+        var cancelBtn = key ? '<button type="button" class="client-req-btn cancel-btn" onclick="window.requestCancel(\'' + key + '\',\'' + s.name.replace(/'/g,"\\'") + '\')">❌ Cancelar</button>' : '';
         return '<div class="success-item" id="si_' + key + '">' +
           '<strong>' + typeIcon + ' ' + (i+1) + '. ' + s.name + '</strong>' + dateStr + '<br>' +
           '<span style="font-size:11px;color:var(--muted)">' + s.address + timeStr + valStr + '</span><br>' +
@@ -1040,8 +1040,8 @@ function renderClientHistory() {
                   : finalized   ? ' <span class="status-badge status-entregue">✅ Entregue</span>' : '';
       var actions = (s.key && !s.cancelled && !finalized)
         ? '<div class="hist-actions">' +
-            '<button class="client-req-btn edit-btn" onclick="window.histEdit(' + hi + ',' + i + ')">✏️ Atualizar</button>' +
-            '<button class="client-req-btn cancel-btn" onclick="window.histCancel(' + hi + ',' + i + ')">❌ Cancelar</button>' +
+            '<button type="button" class="client-req-btn edit-btn" onclick="window.histEdit(' + hi + ',' + i + ')">✏️ Atualizar</button>' +
+            '<button type="button" class="client-req-btn cancel-btn" onclick="window.histCancel(' + hi + ',' + i + ')">❌ Cancelar</button>' +
           '</div>'
         : '';
       return '<div style="margin-top:8px' + (s.cancelled?';opacity:.55':'') + '">' +
@@ -1186,8 +1186,8 @@ window.addEventListener('load', init);
       </div>
     </div>
     <div class="modal-actions">
-      <button class="modal-btn cancel" onclick="window.closeEditModal()">Cancelar</button>
-      <button class="modal-btn confirm" onclick="window.submitEdit()">Enviar solicitação</button>
+      <button type="button" class="modal-btn cancel" onclick="window.closeEditModal()">Cancelar</button>
+      <button type="button" class="modal-btn confirm" onclick="window.submitEdit()">Enviar solicitação</button>
     </div>
   </div>
 </div>

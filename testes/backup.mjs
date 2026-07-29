@@ -30,7 +30,7 @@ function criarLS(cota = Infinity) {
 function carregar(ls) {
   const erros = [];
   const fn = new Function('localStorage', 'sbLogError',
-    bloco + '\nreturn {sbRead,sbAutoBackup,sbListBackups,sbMigrate,sbBackupKeys,SB_BACKUP_DAYS};');
+    bloco + '\nreturn {sbRead,sbAutoBackup,sbListBackups,sbMigrate,sbBackupKeys,SB_BACKUP_DAYS,SB_SCHEMA_VERSION};');
   return { api: fn(ls, (origem) => erros.push(origem)), erros };
 }
 
@@ -95,10 +95,20 @@ function carregar(ls) {
 {
   const ls = criarLS();
   const { api } = carregar(ls);
+  const esperada = String(api.SB_SCHEMA_VERSION);   // lido do código, não fixado aqui
   api.sbMigrate();
-  ok(ls.getItem('sb_schema_version') === '1', 'sbMigrate grava a versao do schema');
+  ok(ls.getItem('sb_schema_version') === esperada, `sbMigrate grava a versao do schema (v${esperada})`);
   api.sbMigrate();
-  ok(ls.getItem('sb_schema_version') === '1', 'rodar de novo e idempotente');
+  ok(ls.getItem('sb_schema_version') === esperada, 'rodar de novo e idempotente');
+
+  // Uma instalacao vinda de uma versao anterior sobe sem perder nada
+  const antiga = criarLS();
+  antiga.setItem('sb_schema_version', '1');
+  antiga.setItem('sb_stops', JSON.stringify([{ name: 'Ana' }]));
+  const { api: api2 } = carregar(antiga);
+  api2.sbMigrate();
+  ok(antiga.getItem('sb_schema_version') === esperada, 'instalacao antiga migra para a versao atual');
+  ok(api2.sbRead('sb_stops', [])[0].name === 'Ana', 'a migracao nao mexe nas paradas existentes');
 }
 
 fim();

@@ -58,7 +58,7 @@ body{max-width:480px;margin:0 auto;padding-bottom:30px;}
 <body>
 <div class="toast" id="toast"></div>
 <div class="hero">
-  <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Claro</button>
+  <button type="button" class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Claro</button>
   <div class="hero-logo">SPEED<span>BOY</span></div>
   <div class="hero-tag">Entregas para você</div>
   <div class="hero-motoboy">🏍️ <span id="motoName">Motoboy</span></div>
@@ -147,9 +147,9 @@ function renderStops(){
         (s.productValue>0?'<div><strong>COBRAR </strong>R$ '+s.productValue.toFixed(2).replace('.',',')+' '+(s.productPaid?'✅ pago':'💰 a cobrar')+'</div>':'')+
       '</div>'+
       '<div class="stop-actions" onclick="event.stopPropagation()">'+
-        '<button class="btn-act" onclick="openMaps('+i+')" style="background:#4285f4;color:#fff;">🗺️ Navegar</button>'+
-        (s.phone?'<button class="btn-act" onclick="openWpp('+i+')" style="background:#25d366;color:#fff;">💬 WhatsApp</button>':'')+
-        '<button class="btn-act" onclick="toggleDone('+i+')" style="background:'+(s.done?'var(--card2);color:var(--muted);border:1px solid var(--border)':'var(--green);color:#000')+';">'+(s.done?'↩️ Reabrir':'✅ Entregue')+'</button>'+
+        '<button type="button" class="btn-act" onclick="openMaps('+i+')" style="background:#4285f4;color:#fff;">🗺️ Navegar</button>'+
+        (s.phone?'<button type="button" class="btn-act" onclick="openWpp('+i+')" style="background:#25d366;color:#fff;">💬 WhatsApp</button>':'')+
+        '<button type="button" class="btn-act" onclick="toggleDone('+i+')" style="background:'+(s.done?'var(--card2);color:var(--muted);border:1px solid var(--border)':'var(--green);color:#000')+';">'+(s.done?'↩️ Reabrir':'✅ Entregue')+'</button>'+
       '</div>'+
     '</div>';
   }).join('');

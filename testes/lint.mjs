@@ -126,6 +126,38 @@ for (const arq of PAGINAS) {
   ok(src.includes("addEventListener('online'"), 'o app reage à volta do sinal');
 }
 
+// ── 5c. A navegação não pode voltar a fechar o app ────────────
+{
+  const src = lerApp('index.html');
+  ok(/window\.addEventListener\('popstate'/.test(src),
+    'existe listener de popstate (sem ele o voltar fecha o app)');
+  ok(/window\.history\.pushState/.test(src), 'a navegação empilha no histórico');
+
+  /* O app declara `let history` (o histórico de entregas), que SOMBREIA o
+     window.history dentro deste script. Sem qualificar, pushState/back
+     caem no array e a navegação quebra inteira, em silêncio. */
+  const semComent = src
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .split('\n').map(l => l.replace(/(^|\s)\/\/.*$/, '')).join('\n');
+  const naoQualificados = semComent.match(/(?<!window\.)\bhistory\.(pushState|replaceState|back|go|state)\b/g) || [];
+  ok(naoQualificados.length === 0,
+    'toda API de histórico é chamada como window.history (o app tem um `let history` que a sombreia)' +
+    (naoQualificados.length ? ` — ${[...new Set(naoQualificados)].join(', ')}` : ''));
+
+  // Modais precisam passar pelo histórico, senão voltar sai da tela
+  // em vez de fechar o modal que está na frente.
+  const MODAIS = ['wppModal', 'quickPanel', 'qsModal', 'expenseModal', 'notifyHelpModal'];
+  const direto = MODAIS.filter(id =>
+    new RegExp(`getElementById\\('${id}'\\)\\.classList\\.(add|remove)\\('hidden'\\)`).test(src));
+  ok(direto.length === 0,
+    'todos os modais abrem/fecham via abrirModal/fecharModal' +
+    (direto.length ? ` — ainda diretos: ${direto.join(', ')}` : ''));
+
+  // Barra inferior sob a faixa do iPhone / gesto do Android
+  ok(/\.bottom-nav\{[^}]*safe-area-inset-bottom/.test(src),
+    'a barra inferior respeita a área segura do aparelho');
+}
+
 // ── 6. Dados vivos nunca podem ser cacheados ──────────────────
 {
   const sw = fs.readFileSync(path.join(RAIZ, 'sw.js'), 'utf8');

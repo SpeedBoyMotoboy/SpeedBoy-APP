@@ -46,13 +46,16 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 .sync-label{font-size:10px;font-weight:600;color:var(--muted);}
 
 /* BOTTOM NAV */
-.bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--card);border-top:1px solid var(--border);display:flex;z-index:100;}
-.nav-btn{flex:1;padding:14px 8px 12px;background:none;border:none;color:var(--muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:'Barlow',sans-serif;font-size:11px;font-weight:700;letter-spacing:.3px;transition:color .15s;min-height:60px;}
+/* env(safe-area-inset-bottom): sem isto a barra fica embaixo da faixa do
+   iPhone e do gesto do Android, e o último item vira quase intocável. */
+.bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--card);border-top:1px solid var(--border);display:flex;z-index:100;padding-bottom:env(safe-area-inset-bottom);}
+.nav-btn{flex:1;padding:14px 8px 12px;background:none;border:none;color:var(--muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-family:'Barlow',sans-serif;font-size:11px;font-weight:700;letter-spacing:.3px;transition:color .15s;min-height:60px;}
+.nav-btn:active{background:rgba(127,127,127,.12);}
 .nav-btn.active{color:var(--accent);}
 .nav-btn .icon{font-size:20px;line-height:1;}
 
 /* SCREENS */
-.screen{display:none;flex:1;flex-direction:column;overflow-y:auto;padding-bottom:70px;}
+.screen{display:none;flex:1;flex-direction:column;overflow-y:auto;padding-bottom:calc(70px + env(safe-area-inset-bottom));}
 .screen.active{display:flex;animation:fadeIn .18s ease;}
 @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 
@@ -1299,9 +1302,95 @@ function toast(msg,type=''){
 }
 
 // ═══════════════════════════════════════════════════════
-//  NAVIGATION
+//  NAVEGAÇÃO
+//
+//  Antes a navegação era só mostrar/esconder <div class="screen">, sem
+//  passar pelo histórico do navegador. O resultado: o botão voltar do
+//  Android FECHAVA o app, de qualquer tela, inclusive com um modal aberto.
+//  Agora cada tela e cada modal viram uma entrada de histórico.
 // ═══════════════════════════════════════════════════════
-function goNav(screenId, navId) {
+
+// Apelidos de URL, para dar link direto e para o voltar ficar legível
+const TELAS = {
+  homeScreen:    { slug: 'entregas',   nav: 'nav-home'    },
+  financeScreen: { slug: 'ganhos',     nav: 'nav-finance' },
+  reportScreen:  { slug: 'fechamento', nav: 'nav-report'  },
+  configScreen:  { slug: 'config',     nav: 'nav-cfg'     },
+  addScreen:     { slug: 'nova',       nav: null          },
+  linkgenScreen: { slug: 'links',      nav: null          },
+  repassScreen:  { slug: 'repasse',    nav: null          }
+};
+const TELA_POR_SLUG = Object.fromEntries(
+  Object.entries(TELAS).map(([id, v]) => [v.slug, id])
+);
+
+let _telaAtual     = 'homeScreen';
+let _modalAberto   = null;
+let _scrollPorTela = {};      // cada tela lembra onde o dedo tinha parado
+let _voltando      = false;   // aplicando estado vindo do popstate: não empilhar
+
+function _guardarScroll(){
+  const el = document.getElementById(_telaAtual);
+  if (el) _scrollPorTela[_telaAtual] = el.scrollTop || 0;
+}
+
+function _empilhar(){
+  if (_voltando) return;
+  const slug = (TELAS[_telaAtual] || {}).slug || 'entregas';
+  const estado = { tela: _telaAtual, modal: _modalAberto };
+  window.history.pushState(estado, '', '#' + slug + (_modalAberto ? '/' + _modalAberto : ''));
+}
+
+// ── Modais participam do histórico: voltar fecha o modal ──
+function _mostrarModal(id, mostrar){
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('hidden', !mostrar);
+}
+
+function abrirModal(id){
+  if (_modalAberto === id) return;
+  _modalAberto = id;
+  _mostrarModal(id, true);
+  _empilhar();
+}
+
+function fecharModal(id){
+  if (_modalAberto !== id) { _mostrarModal(id, false); return; }
+  // Deixa o popstate fechar, para não deixar entrada órfã no histórico
+  if (!_voltando && window.history.state && window.history.state.modal === id) { window.history.back(); return; }
+  _modalAberto = null;
+  _mostrarModal(id, false);
+}
+
+window.addEventListener('popstate', ev => {
+  const st = ev.state || { tela: 'homeScreen', modal: null };
+  _voltando = true;
+  try {
+    if (_modalAberto && _modalAberto !== st.modal) {
+      const antigo = _modalAberto;
+      _modalAberto = null;
+      _mostrarModal(antigo, false);
+    }
+    if (st.modal && st.modal !== _modalAberto) {
+      _modalAberto = st.modal;
+      _mostrarModal(st.modal, true);
+    }
+    if (st.tela && st.tela !== _telaAtual) {
+      goNav(st.tela, (TELAS[st.tela] || {}).nav, true);
+    }
+  } finally { _voltando = false; }
+});
+
+function goNav(screenId, navId, viaHistorico) {
+  if (!document.getElementById(screenId)) return;
+  _guardarScroll();
+  // Trocar de tela com modal aberto deixaria o modal por cima da tela nova
+  if (_modalAberto && !viaHistorico) { const m = _modalAberto; _modalAberto = null; _mostrarModal(m, false); }
+  const anterior = _telaAtual;
+  _telaAtual = screenId;
+  if (!viaHistorico && anterior !== screenId) _empilhar();
+  navId = navId || (TELAS[screenId] || {}).nav;
+
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(screenId).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
@@ -1323,6 +1412,26 @@ function goNav(screenId, navId) {
   if(screenId==='linkgenScreen') renderLinks();
   if(screenId==='repassScreen')  renderRepassList();
   if(screenId==='configScreen')  loadConfig();
+
+  /* Voltando: devolve o dedo onde ele estava. Indo para uma tela nova:
+     começa do topo. Depois do render, senão a altura ainda não existe. */
+  const alvo = document.getElementById(screenId);
+  if (alvo) {
+    const y = viaHistorico ? (_scrollPorTela[screenId] || 0) : 0;
+    requestAnimationFrame(() => { alvo.scrollTop = y; });
+  }
+  window.scrollTo(0,0);
+}
+
+/* Link direto: abrir speedboy #ganhos cai direto em Ganhos.
+   Também é o que faz o app voltar para a tela certa depois de atualizar. */
+function navPelaURL(){
+  const bruto = (location.hash || '').replace(/^#/, '');
+  const [slug, modal] = bruto.split('/');
+  const tela = TELA_POR_SLUG[slug] || 'homeScreen';
+  _telaAtual = tela;
+  goNav(tela, (TELAS[tela] || {}).nav, true);
+  window.history.replaceState({ tela, modal: null }, '', '#' + (TELAS[tela] || {}).slug);
 }
 
 function goForm(idx) {
@@ -1857,14 +1966,14 @@ function openQsModal(idx){
   document.getElementById('qsListView').style.display='';
   document.getElementById('qsAddrView').style.display='none';
   _renderQsAddrList();
-  document.getElementById('qsModal').classList.remove('hidden');
+  abrirModal('qsModal');
 }
 function onQsNameChange(sel){
   const c=document.getElementById('qsNameCustom');
   if(sel.value==='__custom__'){c.style.display='';c.focus();}
   else{c.style.display='none';c.value='';}
 }
-function closeQsModal(){document.getElementById('qsModal').classList.add('hidden');}
+function closeQsModal(){fecharModal('qsModal');}
 document.getElementById('qsModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeQsModal();});
 
 function _renderQsAddrList(){
@@ -1995,9 +2104,9 @@ function openQuickPanel(){
   if(!qs.length){toast('Configure lojas rápidas em ⚙️ Configurações','');return;}
   _qCounts={};
   _renderQuickPanelBody();
-  document.getElementById('quickPanel').classList.remove('hidden');
+  abrirModal('quickPanel');
 }
-function closeQuickPanel(){document.getElementById('quickPanel').classList.add('hidden');}
+function closeQuickPanel(){fecharModal('quickPanel');}
 document.getElementById('quickPanel').addEventListener('click',e=>{if(e.target===e.currentTarget)closeQuickPanel();});
 function _renderQuickPanelBody(){
   const qs=getQuickStores();
@@ -2332,8 +2441,8 @@ const QM={
   ausente:   'Olá, {nome}. Estive no endereço indicado, porém não encontrei ninguém disponível para o recebimento. Podemos combinar um novo horário? Fico à disposição.',
   entregue:  'Olá, {nome}. O seu {tipo} da {loja}foi concluído com sucesso. Agradecemos a preferência! Caso precise novamente, estarei à disposição.'
 };
-function openWpp(i){ wppStop=stops[i]; document.getElementById('wppName').textContent='💬 '+wppStop.name; document.getElementById('wppPhone').textContent=fmtPhone(wppStop.phone); document.getElementById('wppCustom').value=''; document.getElementById('wppModal').classList.remove('hidden'); }
-function closeWpp(){ document.getElementById('wppModal').classList.add('hidden'); wppStop=null; }
+function openWpp(i){ wppStop=stops[i]; document.getElementById('wppName').textContent='💬 '+wppStop.name; document.getElementById('wppPhone').textContent=fmtPhone(wppStop.phone); document.getElementById('wppCustom').value=''; abrirModal('wppModal'); }
+function closeWpp(){ fecharModal('wppModal'); wppStop=null; }
 document.getElementById('wppModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeWpp();});
 function primeiroSegundoNome(full){
   const prep=new Set(['de','da','do','das','dos','e','di','del']);
@@ -2552,9 +2661,9 @@ function openExpenseModal(){
   setExpType('fuel');
   document.getElementById('expAmount').value='';
   document.getElementById('expNotes').value='';
-  document.getElementById('expenseModal').classList.remove('hidden');
+  abrirModal('expenseModal');
 }
-function closeExpenseModal(){document.getElementById('expenseModal').classList.add('hidden');}
+function closeExpenseModal(){fecharModal('expenseModal');}
 document.getElementById('expenseModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeExpenseModal();});
 
 function setExpType(t){
@@ -4179,11 +4288,11 @@ function openNotifyHelp() {
       + '<p class="notify-help-note">Depois de permitir, recarregue a página. O aviso some sozinho quando a permissão for concedida.</p>';
     testBtn.classList.add('hidden');
   }
-  document.getElementById('notifyHelpModal').classList.remove('hidden');
+  abrirModal('notifyHelpModal');
 }
 
 function closeNotifyHelp() {
-  document.getElementById('notifyHelpModal').classList.add('hidden');
+  fecharModal('notifyHelpModal');
 }
 
 function testNotify() {
@@ -4329,6 +4438,7 @@ async function initFirebase(){
 checkNewDay();
 updateStoreSelect();
 renderHome();
+navPelaURL();          // respeita #ganhos, #fechamento etc. e firma o estado inicial
 initFirebase();
 checkNotifyPermission();
 // Restaura tema

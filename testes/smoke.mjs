@@ -243,6 +243,90 @@ await secao('offline.html se sustenta sozinha', async () => {
   await ctx.close();
 });
 
+// ── 7b. Navegação pelo histórico ─────────────────────────────
+// O botão voltar do Android FECHAVA o app, de qualquer tela.
+await secao('Navegação pelo histórico', async () => {
+  const { page, ctx } = await abrir('/index.html');
+  const telaVisivel = () => page.evaluate(() => {
+    const a = document.querySelector('.screen.active');
+    return a ? a.id : null;
+  });
+
+  ok(await telaVisivel() === 'homeScreen', 'começa na tela de entregas');
+  ok((page.url().split('#')[1] || '') === 'entregas', 'a URL reflete a tela inicial');
+
+  // Ir para Ganhos e voltar
+  await page.click('#nav-finance');
+  ok(await telaVisivel() === 'financeScreen', 'a aba Ganhos abre');
+  ok(page.url().includes('#ganhos'), 'a URL acompanha a navegação');
+
+  await page.goBack();
+  await page.waitForTimeout(250);
+  ok(await telaVisivel() === 'homeScreen', 'VOLTAR retorna para as entregas em vez de fechar o app');
+
+  // Duas telas de profundidade
+  await page.click('#nav-report');
+  await page.click('#nav-cfg');
+  await page.waitForTimeout(200);
+  ok(await telaVisivel() === 'configScreen', 'chega em Configurações');
+  await page.goBack();
+  await page.waitForTimeout(200);
+  ok(await telaVisivel() === 'reportScreen', 'voltar desce um nível (Fechamento)');
+  await page.goBack();
+  await page.waitForTimeout(200);
+  ok(await telaVisivel() === 'homeScreen', 'voltar de novo chega nas entregas');
+
+  // Voltar fecha modal aberto
+  const modalAberto = async () => page.evaluate(() =>
+    !document.getElementById('expenseModal').classList.contains('hidden'));
+  await page.evaluate(() => { goNav('financeScreen', 'nav-finance'); openExpenseModal(); });
+  await page.waitForTimeout(200);
+  ok(await modalAberto(), 'o modal de despesa abre');
+  await page.goBack();
+  await page.waitForTimeout(250);
+  ok(!(await modalAberto()), 'VOLTAR fecha o modal');
+  ok(await telaVisivel() === 'financeScreen', 'e mantém a tela onde estava');
+
+  // Fechar pelo X não pode deixar entrada órfã: um voltar já sai da tela
+  await page.evaluate(() => { openExpenseModal(); });
+  await page.waitForTimeout(150);
+  await page.evaluate(() => closeExpenseModal());
+  await page.waitForTimeout(250);
+  ok(!(await modalAberto()), 'fechar pelo X fecha o modal');
+  await page.goBack();
+  await page.waitForTimeout(250);
+  ok(await telaVisivel() === 'homeScreen',
+    'depois de fechar pelo X, um voltar sai da tela (sem entrada órfã no histórico)');
+
+  await ctx.close();
+});
+
+// ── 7c. Link direto e memória de rolagem ─────────────────────
+await secao('Link direto e rolagem', async () => {
+  const { page, ctx } = await abrir('/index.html#fechamento');
+  ok(await page.evaluate(() => document.querySelector('.screen.active').id) === 'reportScreen',
+    'abrir com #fechamento cai direto no Fechamento');
+  await ctx.close();
+
+  const b = await abrir('/index.html');
+  // Enche a lista para haver rolagem de verdade
+  const rolou = await b.page.evaluate(async () => {
+    stops = Array.from({ length: 40 }, (_, i) => ({ name: 'Cliente ' + i, value: '10', city: 'SER' }));
+    renderHome();
+    const tela = document.getElementById('homeScreen');
+    tela.scrollTop = 400;
+    return tela.scrollTop;
+  });
+  ok(rolou > 0, 'a lista rola');
+  await b.page.click('#nav-cfg');
+  await b.page.waitForTimeout(200);
+  await b.page.goBack();
+  await b.page.waitForTimeout(400);
+  const voltou = await b.page.evaluate(() => document.getElementById('homeScreen').scrollTop);
+  ok(Math.abs(voltou - rolou) < 40, `voltar devolve a rolagem onde estava (${rolou} → ${voltou})`);
+  await b.ctx.close();
+});
+
 // ── 8. Faixa de atualização e controles de versão ────────────
 await secao('Faixa de atualização e controles de versão', async () => {
   const { page, ctx } = await abrir('/index.html');

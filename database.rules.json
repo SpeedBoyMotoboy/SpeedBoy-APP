@@ -1,0 +1,45 @@
+{
+  "_comentario": [
+    "SpeedBoy — regras do Realtime Database.",
+    "Publique em: console.firebase.google.com > Realtime Database > Regras.",
+    "NÃO publique antes de habilitar Authentication > Sign-in method > Anônimo,",
+    "senão o app e as páginas públicas perdem acesso ao banco.",
+    "Leia ROLLOUT-SEGURANCA.md antes de aplicar.",
+    "Todos os dados são gravados como string JSON pelo app, por isso a validação",
+    "usa newData.isString() com um teto de tamanho para evitar entulho no banco."
+  ],
+
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "rooms": {
+      "$room": {
+        ".read":  "auth != null && $room.matches(/^SB-[A-Z0-9]{4}$/)",
+        ".write": "auth != null && $room.matches(/^SB-[A-Z0-9]{4}$/)",
+
+        "stops":    { ".validate": "newData.isString() && newData.val().length <= 1048576" },
+        "history":  { ".validate": "newData.isString() && newData.val().length <= 4194304" },
+        "location": { ".validate": "newData.isString() && newData.val().length <= 1024" },
+
+        "pending": {
+          "$item": { ".validate": "newData.isString() && newData.val().length <= 16384" }
+        },
+        "client_requests": {
+          "$item": { ".validate": "newData.isString() && newData.val().length <= 16384" }
+        },
+        "tracking": {
+          "$item": { ".validate": "newData.isString() && newData.val().length <= 8192" }
+        },
+        "repass": {
+          "$item": { ".validate": "newData.isString() && newData.val().length <= 262144" }
+        },
+        "faturas": {
+          "$item": { ".validate": "newData.isString() && newData.val().length <= 524288" }
+        },
+
+        "$desconhecido": { ".validate": false }
+      }
+    }
+  }
+}

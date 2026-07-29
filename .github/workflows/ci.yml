@@ -1,0 +1,51 @@
+# Antes deste arquivo não havia CI, lint nem execução de teste no projeto.
+# Roda em toda alteração dos arquivos do app.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  rapidos:
+    name: Testes rápidos e guarda de regressão
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Sem dependência nenhuma: rodam em segundos.
+      - name: Escape de HTML e de string JS
+        run: node testes/escape.mjs
+
+      - name: Persistência, backup e migração
+        run: node testes/backup.mjs
+
+      - name: Guarda de regressão
+        run: node testes/lint.mjs
+
+      # Se os arquivos do app mudaram, a versão do service worker precisa
+      # ter mudado junto — senão o celular instalado fica na versão velha.
+      - name: Versão do service worker em dia
+        run: node scripts/bump-versao.mjs --check
+
+  navegador:
+    name: Smoke em navegador
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar Playwright
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+      - name: Baixar Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Abrir o app num navegador de verdade
+        run: node testes/smoke.mjs

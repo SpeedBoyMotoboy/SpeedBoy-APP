@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Sem conexão · SpeedBoy</title>
+<meta name="theme-color" content="#0a0a0a">
+<!-- Sem fonte externa, sem script de terceiro, sem imagem remota: se a página
+     de offline depender da rede para renderizar, ela não serve para nada. -->
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  min-height:100vh;background:#0a0a0a;color:#f0f0f0;
+  font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:32px 24px;gap:14px;
+}
+.logo{font-weight:900;font-size:34px;letter-spacing:-1.5px;color:#f5c518;}
+.logo span{color:#f0f0f0;}
+.icone{font-size:56px;line-height:1;}
+h1{font-size:22px;font-weight:800;}
+p{font-size:15px;line-height:1.6;color:#aaa;max-width:300px;}
+button{
+  margin-top:8px;background:#f5c518;color:#000;border:none;border-radius:14px;
+  padding:15px 30px;font-size:16px;font-weight:800;font-family:inherit;
+  cursor:pointer;min-height:48px;
+}
+button:active{transform:scale(.97);}
+.nota{font-size:13px;color:#777;max-width:300px;margin-top:6px;}
+</style>
+</head>
+<body>
+  <div class="logo">SPEED<span>BOY</span></div>
+  <div class="icone" role="img" aria-label="Sem conexão">📡</div>
+  <h1>Sem conexão</h1>
+  <p>Não deu para carregar esta página agora. Suas entregas continuam salvas no aparelho.</p>
+  <button type="button" onclick="location.reload()">Tentar de novo</button>
+  <p class="nota">Se o app já estava aberto antes, feche e abra de novo — ele funciona offline com os dados que você já tem.</p>
+</body>
+</html>

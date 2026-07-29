@@ -335,6 +335,14 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 .notify-status{font-size:11px;font-weight:700;color:var(--red);border:1px solid rgba(255,61,61,.5);border-radius:20px;padding:3px 10px;white-space:nowrap;font-family:'Barlow Condensed',sans-serif;}
 .notify-status.hidden{display:none;}
 .btn-allow-notify{background:var(--accent);color:#000;border:none;border-radius:7px;padding:6px 12px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;}
+
+/* FAIXA DE ATUALIZAÇÃO — mesma linguagem da .notify-bar, mas fora das
+   telas, logo abaixo do cabeçalho, para aparecer em qualquer aba. */
+.update-bar{background:rgba(0,230,118,.1);border:1px solid rgba(0,230,118,.35);border-radius:10px;padding:10px 14px;margin:8px 14px 0;display:flex;align-items:center;gap:10px;}
+.update-bar.hidden{display:none;}
+.update-bar-text{font-size:12px;color:var(--text);flex:1;line-height:1.4;}
+.btn-update{background:var(--green);color:#000;border:none;border-radius:7px;padding:8px 14px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap;min-height:36px;}
+.btn-update:disabled{opacity:.6;cursor:default;}
 .notify-steps{list-style:none;padding:0;margin:4px 0 0;counter-reset:step;}
 .notify-steps li{position:relative;padding:9px 0 9px 34px;font-size:13px;color:var(--text);line-height:1.45;border-bottom:1px solid var(--border);}
 .notify-steps li:last-child{border-bottom:none;}
@@ -422,6 +430,13 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
     <button type="button" onclick="toggleTheme()" id="themeToggleBtn" style="background:none;border:none;font-size:18px;cursor:pointer;padding:2px 4px;" title="Alternar tema">☀️</button>
     <div id="badgeCount" class="badge-count">0</div>
   </div>
+</div>
+
+<!-- Fica fora das telas: uma versão nova pode ser detectada com o app em
+     qualquer aba, e o aviso não pode depender de ele estar na inicial. -->
+<div class="update-bar hidden" id="updateBar" role="status">
+  <div class="update-bar-text">⬆️ Nova versão disponível</div>
+  <button type="button" class="btn-update" id="updateBtn" onclick="aplicarAtualizacao()">Atualizar</button>
 </div>
 
 <!-- ══ HOME ══ -->
@@ -899,6 +914,10 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
       <div class="cfg-title" style="color:var(--red);">⚠️ Zona de perigo</div>
       <button type="button" class="danger-btn" onclick="clearDay()">🗑️ Limpar paradas do dia</button>
       <button type="button" class="danger-btn gray" onclick="clearHist()">🗑️ Apagar todo o histórico</button>
+    </div>
+    <div style="margin-top:22px;padding-top:16px;border-top:1px solid var(--border);text-align:center;">
+      <div id="appVersao" style="font-size:11px;color:var(--muted);letter-spacing:.5px;">versão —</div>
+      <button type="button" onclick="forcarAtualizacao()" style="margin-top:8px;background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;padding:8px 12px;min-height:36px;">Forçar atualização do app</button>
     </div>
   </div>
 </div>
@@ -2772,7 +2791,7 @@ function _renderDays(d){
         </div>
         ${wppNum?`<a href="https://wa.me/55${wppNum}" target="_blank" style="font-size:13px;color:#25d366;font-weight:700;text-decoration:none;">📞 ${fmtPhone(s.phone)}</a>`:(s.phone?`<div style="font-size:13px;color:var(--muted);">📞 ${s.phone}</div>`:'')}
         ${fullAddr?`<div style="font-size:13px;color:var(--muted);">📍 ${fullAddr}</div>`:''}
-        ${s.address&&!addr?`<div style="font-size:13px;color:var(--muted);">📍 ${s.address}</div>`:''}
+        ${s.address&&!addr?`<div style="font-size:13px;color:var(--muted);">📍 ${esc(s.address)}</div>`:''}
         ${(s.reference||s.notes)?`<div style="font-size:12px;color:var(--muted);opacity:.8;">💬 ${esc([s.reference,s.notes].filter(Boolean).join(' · '))}</div>`:''}
       </div>`;
     }).join('');
@@ -2842,7 +2861,7 @@ function _renderSearch(q){
       ${s.store?`<div style="font-size:12px;color:#ff6b00;font-weight:700;margin-bottom:4px;">${esc(s.store)}</div>`:''}
       ${wppLink?`<div style="margin-bottom:4px;">${wppLink}</div>`:''}
       ${addr?`<div style="font-size:13px;color:var(--muted);">${addr}${city?' · '+city:''}</div>`:''}
-      ${s.address&&!addr?`<div style="font-size:13px;color:var(--muted);">${s.address}</div>`:''}
+      ${s.address&&!addr?`<div style="font-size:13px;color:var(--muted);">${esc(s.address)}</div>`:''}
       ${s.notes||s.reference?`<div style="font-size:12px;color:var(--muted);opacity:.75;margin-top:2px;">${esc([s.reference,s.notes].filter(Boolean).join(' · '))}</div>`:''}
       ${val>0?`<div style="margin-top:6px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;color:${s.paid?'var(--green)':'var(--accent)'};">${fmtMoney(val)} ${s.paid?'· Recebida':'· A receber'}</div>`:''}
     </div>`;
@@ -3212,8 +3231,8 @@ function renderRepassList(){
         <input type="checkbox" class="repass-chk" data-idx="${i}" onchange="updateRepassBtn()" style="width:20px;height:20px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;" />
         <div style="flex:1;min-width:0;">
           <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(s.name||'Sem nome')}</div>
-          <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.address||''}</div>
-          <div style="font-size:10px;color:var(--accent);margin-top:2px;">${s.store?'🏪 '+s.store:''} ${s.city?'· '+cityName(resolveCityCode(s.city)):''}</div>
+          <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(s.address||'')}</div>
+          <div style="font-size:10px;color:var(--accent);margin-top:2px;">${s.store?'🏪 '+esc(s.store):''} ${s.city?'· '+esc(cityName(resolveCityCode(s.city))):''}</div>
         </div>
         <div style="flex-shrink:0;width:80px;">
           <div style="font-size:9px;color:var(--muted);font-weight:700;margin-bottom:3px;">PAGAR R$</div>
@@ -3366,6 +3385,7 @@ function loadConfig(){
   renderQuickStoresConfig();
   renderLinks();
   renderAutoBackups();
+  mostrarVersaoApp();
 }
 function saveConfig(){
   cfg.origin=document.getElementById('cfgOrigin').value.trim();
@@ -3946,23 +3966,92 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') checkNotifyPermission();
 });
 
+// ═══════════════════════════════════════════════════════
+//  ATUALIZAÇÃO DO APP
+//  Antes, um service worker novo assumia sozinho e a página recarregava
+//  no ato — inclusive no meio do preenchimento de uma parada, perdendo o
+//  que estava digitado. Agora o SW novo espera, aparece a faixa, e a
+//  troca só acontece quando o usuário toca em "Atualizar".
+// ═══════════════════════════════════════════════════════
+let swEsperando   = null;    // registration.waiting, quando houver
+let swAtualizando = false;   // trava contra reload em loop
+
+function mostrarFaixaUpdate(worker) {
+  swEsperando = worker;
+  const bar = document.getElementById('updateBar');
+  if (bar) bar.classList.remove('hidden');
+}
+
+function aplicarAtualizacao() {
+  if (!swEsperando) { window.location.reload(); return; }
+  const btn = document.getElementById('updateBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Atualizando...'; }
+  swAtualizando = true;
+  swEsperando.postMessage({ type: 'SKIP_WAITING' });
+  // Rede de segurança: se o controllerchange não vier, recarrega assim mesmo
+  setTimeout(() => { if (swAtualizando) window.location.reload(); }, 3000);
+}
+
+// Saída de emergência: descarta service worker e caches e recarrega limpo.
+async function forcarAtualizacao() {
+  if (!confirm('Forçar atualização?\n\nO app recarrega buscando tudo de novo do servidor. Suas entregas e histórico NÃO são afetados.')) return;
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    if (window.caches) {
+      const nomes = await caches.keys();
+      await Promise.all(nomes.map(n => caches.delete(n)));
+    }
+  } catch (e) { sbLogError('forçar atualização', e); }
+  window.location.reload();
+}
+
+function mostrarVersaoApp() {
+  const el = document.getElementById('appVersao');
+  if (!el) return;
+  el.textContent = 'versão —';
+  if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
+  const canal = new MessageChannel();
+  canal.port1.onmessage = ev => {
+    if (ev.data && ev.data.versao) el.textContent = 'versão ' + ev.data.versao;
+  };
+  try {
+    navigator.serviceWorker.controller.postMessage({ type: 'QUAL_VERSAO' }, [canal.port2]);
+  } catch (e) {}
+}
+
 if ('serviceWorker' in navigator) {
   // updateViaCache:'none' garante que o sw.js nunca venha do cache HTTP,
   // então uma versão nova é sempre detectada.
   navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
+    // Já havia uma versão nova esperando de uma visita anterior
+    if (reg.waiting && navigator.serviceWorker.controller) mostrarFaixaUpdate(reg.waiting);
+
+    reg.addEventListener('updatefound', () => {
+      const novo = reg.installing;
+      if (!novo) return;
+      novo.addEventListener('statechange', () => {
+        // 'installed' com controller presente = atualização, não primeira instalação
+        if (novo.state === 'installed' && navigator.serviceWorker.controller) {
+          mostrarFaixaUpdate(novo);
+        }
+      });
+    });
+
     reg.update();
-    // Checa atualização sempre que o app volta ao foco
+    // Checa atualização sempre que o app volta ao foco. Agora isso só
+    // pode fazer a faixa aparecer — nunca recarregar por conta própria.
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') reg.update();
     });
   }).catch(() => {});
-  // Quando um novo service worker assume o controle, recarrega a página
-  // automaticamente para o app instalado pegar a versão nova sem precisar
-  // limpar cache na mão. O guard evita loop de reload.
-  let swRefreshing = false;
+
+  // Só recarrega quando a troca foi pedida pelo usuário.
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (swRefreshing) return;
-    swRefreshing = true;
+    if (!swAtualizando) return;
+    swAtualizando = false;
     window.location.reload();
   });
 }

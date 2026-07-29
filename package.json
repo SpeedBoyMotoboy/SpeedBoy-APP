@@ -1,0 +1,16 @@
+{
+  "name": "speedboy-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ferramentas de desenvolvimento do SpeedBoy. O APP NÃO usa build: index.html, pedido.html, motoboy.html, fatura.html e os .js soltos são servidos crus pelo GitHub Pages. Este arquivo existe só para fixar a versão do Playwright no CI e dar atalhos aos scripts — nada aqui vai ao ar.",
+  "scripts": {
+    "teste": "node testes/escape.mjs && node testes/backup.mjs && node testes/lint.mjs",
+    "teste:navegador": "node testes/smoke.mjs",
+    "versao": "node scripts/bump-versao.mjs",
+    "versao:check": "node scripts/bump-versao.mjs --check"
+  },
+  "devDependencies": {
+    "playwright": "1.49.1"
+  }
+}

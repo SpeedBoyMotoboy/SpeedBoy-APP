@@ -94,6 +94,38 @@ for (const arq of PAGINAS) {
     'index.html: reload por controllerchange só com atualização pedida pelo usuário');
 }
 
+// ── 5b. A sincronização não pode voltar a perder dados ────────
+{
+  const src = lerApp('index.html');
+
+  // `if(fbPushing)return` descartava a escrita: duas alteracoes rapidas e a
+  // segunda nunca chegava ao Firebase. Tem de reagendar, nao descartar.
+  const corpoPush = src.slice(src.indexOf('function fbPush(){'), src.indexOf('window.addEventListener(\'online\''));
+  ok(!/if\s*\(\s*!?fbDb[^)]*\|\|\s*fbPushing\s*\)\s*return/.test(corpoPush),
+    'fbPush não descarta escrita concorrente (usa fbSujo para reenviar)');
+  ok(corpoPush.includes('fbSujo'), 'fbPush reagenda o envio pendente');
+
+  // `stops = remote` destruia alteracao local ainda nao enviada.
+  // Comentarios saem antes: varios deles citam o padrao antigo para explicar
+  // por que ele foi trocado, e nao podem contar como reincidencia.
+  const semComentarios = src
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .split('\n').map(l => l.replace(/(^|\s)\/\/.*$/, '')).join('\n');
+  ok(!/\bstops\s*=\s*remote\b/.test(semComentarios),
+    'o listener não sobrescreve o estado local (usa mergeStops)');
+  ok(src.includes('mergeStops(stops, remote'), 'o listener funde local e remoto');
+
+  // Exclusao precisa viajar, senao a parada ressuscita no outro aparelho.
+  ok(src.includes("'/tombs'"), 'exclusões são publicadas em /tombs');
+  ok(/function registrarExclusoes\(/.test(src), 'exclusões são detectadas por diferença no saveStops');
+
+  // Status honesto: sem isto o ponto ficava verde com alteracao pendente.
+  for (const estado of ['offline', 'pending']) {
+    ok(src.includes(`.sync-dot.${estado}{`), `existe estilo para o estado "${estado}" do ponto de sincronização`);
+  }
+  ok(src.includes("addEventListener('online'"), 'o app reage à volta do sinal');
+}
+
 // ── 6. Dados vivos nunca podem ser cacheados ──────────────────
 {
   const sw = fs.readFileSync(path.join(RAIZ, 'sw.js'), 'utf8');

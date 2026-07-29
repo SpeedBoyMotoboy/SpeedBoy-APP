@@ -38,6 +38,8 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 .sync-dot.synced{background:var(--green);}
 .sync-dot.syncing{background:var(--accent);animation:pulse .8s infinite;}
 .sync-dot.error{background:var(--red);}
+.sync-dot.offline{background:var(--muted);}
+.sync-dot.pending{background:var(--accent2);}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 #syncRow{display:none;align-items:center;gap:5px;}
 #syncRow.visible{display:flex;}
@@ -975,7 +977,7 @@ const EMBEDDED_ROOM      = '';     // sala preenchida automaticamente via localS
 // ═══════════════════════════════════════════════════════
 //  PERSISTÊNCIA SEGURA, MIGRAÇÃO E BACKUP AUTOMÁTICO
 // ═══════════════════════════════════════════════════════
-var SB_SCHEMA_VERSION = 1;
+var SB_SCHEMA_VERSION = 2;
 var SB_BACKUP_DAYS    = 7;
 
 // Leitura tolerante: um localStorage corrompido derrubava o script inteiro
@@ -1046,6 +1048,8 @@ function sbMigrate(){
   var atual = parseInt(localStorage.getItem('sb_schema_version') || '0', 10) || 0;
   if(atual === SB_SCHEMA_VERSION) return;
   // v0 → v1: formato já compatível, nenhuma transformação necessária.
+  // v1 → v2: paradas ganham _id e _upd. O carimbo acontece logo depois de
+  //          carregar o estado (carimbarStops), então aqui não há trabalho.
   localStorage.setItem('sb_schema_version', String(SB_SCHEMA_VERSION));
 }
 
@@ -1090,13 +1094,143 @@ let fbUid       = null;   // uid anônimo — gancho para conta real no futuro
 let fbMods      = {};
 let fbRoomPath  = null;
 let fbPushing   = false;
+let fbSujo      = false;   // mudou algo enquanto uma escrita estava em voo
 let fbListener  = null;
 let pendingData = {};
 
 // ═══════════════════════════════════════════════════════
 //  UTILS
 // ═══════════════════════════════════════════════════════
-function saveStops()   { localStorage.setItem('sb_stops',   JSON.stringify(stops)); fbPush(); }
+// ═══════════════════════════════════════════════════════
+//  IDENTIDADE E MERGE DAS PARADAS
+//
+//  Antes, sincronizar era "quem escreveu por último venceu": o push
+//  gravava o array inteiro e o listener fazia `stops = remote`. Se ele
+//  adicionasse uma parada enquanto a esposa adicionava outra, uma das
+//  duas sumia. Agora cada parada tem identidade (_id) e carimbo da última
+//  alteração (_upd), e o merge decide item a item.
+// ═══════════════════════════════════════════════════════
+
+// Hash curto (FNV-1a) só para detectar "esta parada mudou?"
+function hashCurto(str){
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(36);
+}
+
+function novoId(){
+  return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+// Identidade de uma parada. _trackKey (vinda de pedido.html) é aceita como
+// identidade para não duplicar entregas aceitas antes desta versão.
+function idDaParada(s){
+  if (s._id) return s._id;
+  if (s._trackKey) return 'tk_' + s._trackKey;
+  return 'h_' + hashCurto([s.name, s.address, s.street, s.number, s.value, s._addedDate].join('|'));
+}
+
+// Conteúdo relevante para saber se mudou (ignora os metadados de sync)
+function conteudoDaParada(s){
+  const copia = {};
+  Object.keys(s).sort().forEach(k => { if (k !== '_upd' && k !== '_h') copia[k] = s[k]; });
+  return JSON.stringify(copia);
+}
+
+/* Carimba _id e _upd. _upd só avança quando o conteúdo realmente mudou —
+   se avançasse a cada gravação, toda parada local pareceria mais nova que
+   a do outro aparelho e o merge sempre daria empate a nosso favor. */
+function carimbarStops(){
+  const agora = Date.now();
+  stops.forEach(s => {
+    if (!s._id) s._id = idDaParada(s);
+    const h = hashCurto(conteudoDaParada(s));
+    if (s._h !== h) { s._h = h; s._upd = agora; }
+  });
+}
+
+// ── Tombstones: exclusões precisam viajar, senão a parada ressuscita ──
+function getTombs(){ const t = sbRead('sb_tombs', {}); return (t && typeof t === 'object') ? t : {}; }
+function podarTombs(t){
+  const limite = Date.now() - 7 * 24 * 3600 * 1000;   // 7 dias bastam para os dois aparelhos verem
+  Object.keys(t).forEach(id => { if (!(t[id] > limite)) delete t[id]; });
+  return t;
+}
+function saveTombs(t){ localStorage.setItem('sb_tombs', JSON.stringify(t)); }
+
+/* Ids presentes na última gravação. A diferença entre isto e o array atual
+   é o conjunto de exclusões — assim os cinco pontos que removem paradas
+   (excluir, limpar o dia, virada de dia, deduplicar, cancelamento do
+   cliente) geram tombstone sem que nenhum deles precise saber disso. */
+let _idsGravados = new Set(stops.map(idDaParada));
+// Carimba as paradas que vêm de versões anteriores, para que já entrem
+// no merge com identidade própria em vez do id derivado do conteúdo.
+carimbarStops();
+_idsGravados = new Set(stops.map(s => s._id));
+
+/* Restaurar backup e importar precisam VENCER o que está no servidor:
+   é uma decisão explícita do usuário, não uma edição concorrente. */
+function forcarCarimboAgora(){
+  const agora = Date.now();
+  stops.forEach(s => {
+    if (!s._id) s._id = idDaParada(s);
+    s._h = hashCurto(conteudoDaParada(s));
+    s._upd = agora;
+  });
+}
+
+function registrarExclusoes(){
+  const agora = Date.now();
+  const idsAgora = new Set(stops.map(s => s._id));
+  const tombs = getTombs();
+  let mudou = false;
+  _idsGravados.forEach(id => { if (!idsAgora.has(id)) { tombs[id] = agora; mudou = true; } });
+  _idsGravados = idsAgora;
+  if (mudou || Object.keys(tombs).length) saveTombs(podarTombs(tombs));
+}
+
+/* Merge item a item. Vence quem tem _upd maior; exclusão vence versão
+   mais antiga que ela. Paradas vindas de uma versão antiga do app não têm
+   _upd — nesse caso a versão local prevalece, porque é a única com carimbo. */
+function mergeStops(local, remoto, tombs){
+  tombs = tombs || {};
+  const porId = new Map();
+
+  const considerar = (s, ehLocal) => {
+    if (!s || typeof s !== 'object') return;
+    const id = idDaParada(s);
+    const upd = s._upd || 0;
+    if (tombs[id] && tombs[id] >= upd) return;        // excluída depois desta versão
+    const atual = porId.get(id);
+    if (!atual) { porId.set(id, { s, upd, ehLocal }); return; }
+    // Empate de carimbo: fica com a local, que é a que o usuário está vendo
+    if (upd > atual.upd || (upd === atual.upd && ehLocal)) porId.set(id, { s, upd, ehLocal });
+  };
+
+  (Array.isArray(remoto) ? remoto : []).forEach(s => considerar(s, false));
+  (Array.isArray(local)  ? local  : []).forEach(s => considerar(s, true));
+
+  // Preserva a ordem local (é a ordem da rota do dia) e acrescenta o que só existe no remoto
+  const saida = [];
+  const usados = new Set();
+  (Array.isArray(local) ? local : []).forEach(s => {
+    // Arrays vindos do Realtime Database podem ter buracos (null) quando um
+    // índice é removido — sem esta guarda o merge inteiro estoura e a
+    // sincronização morre em silêncio.
+    if (!s || typeof s !== 'object') return;
+    const id = idDaParada(s);
+    if (porId.has(id) && !usados.has(id)) { saida.push(porId.get(id).s); usados.add(id); }
+  });
+  porId.forEach((v, id) => { if (!usados.has(id)) { saida.push(v.s); usados.add(id); } });
+  return saida;
+}
+
+function saveStops()   {
+  carimbarStops();
+  registrarExclusoes();
+  localStorage.setItem('sb_stops', JSON.stringify(stops));
+  fbPush();
+}
 function saveHistory() { localStorage.setItem('sb_history', JSON.stringify(history)); fbPushHistory(); }
 function saveCfg()     { localStorage.setItem('sb_cfg',     JSON.stringify(cfg)); }
 
@@ -3425,9 +3559,10 @@ function getGPS(){const btn=document.querySelector('.btn-gps');if(!navigator.geo
 // ═══════════════════════════════════════════════════════
 //  FIREBASE
 // ═══════════════════════════════════════════════════════
+const _CLASSES_SYNC={synced:'synced',syncing:'syncing',error:'error',offline:'offline',pending:'pending'};
 function setSyncUI(status,label){
   const dots=[document.getElementById('syncDot'),document.getElementById('cfgSyncDot')];
-  dots.forEach(d=>{if(d)d.className='sync-dot '+(status==='synced'?'synced':status==='syncing'?'syncing':status==='error'?'error':'');});
+  dots.forEach(d=>{if(d)d.className='sync-dot '+(_CLASSES_SYNC[status]||'');});
   const sl=document.getElementById('syncLabel'); if(sl)sl.textContent=label;
   const cl=document.getElementById('cfgSyncLbl'); if(cl)cl.textContent=label;
   const row=document.getElementById('syncRow'); if(row)row.classList.toggle('visible',status!=='off');
@@ -3508,32 +3643,126 @@ function startSync(code){
             return !archKeys.has(k);
           });
         }
-        if(JSON.stringify(remote)!==JSON.stringify(stops)){
+        /* Antes aqui era `stops = remote`: qualquer alteração local ainda
+           não enviada era destruída pela chegada de um snapshot. Agora as
+           duas versões são fundidas item a item. */
+        const fundido = mergeStops(stops, remote, getTombs());
+
+        if(JSON.stringify(fundido)!==JSON.stringify(stops)){
           const prevLen=stops.length;
-          stops=remote;localStorage.setItem('sb_stops',JSON.stringify(stops));renderHome();toast('🔄 Lista sincronizada!','success');
-          if(remote.length>prevLen){
-            const added=remote.length-prevLen;
+          stops=fundido;
+          carimbarStops();
+          _idsGravados=new Set(stops.map(s=>s._id));
+          localStorage.setItem('sb_stops',JSON.stringify(stops));
+          renderHome();
+          toast('🔄 Lista sincronizada!','success');
+          if(stops.length>prevLen){
+            const added=stops.length-prevLen;
             sendNotify('🔔 SPEEDBOY — Nova entrega!',added===1?'1 nova entrega adicionada à lista':`${added} novas entregas adicionadas à lista`,'sync');
           }
         }
-      }catch(e){console.error(e);}
+        /* Se o resultado da fusão difere do que está no servidor, temos
+           informação que ele não tem (parada criada offline, exclusão
+           nossa) — devolvemos. Quando os dois lados já convergiram, isto
+           não dispara, então não há ping-pong entre os aparelhos. */
+        if(JSON.stringify(fundido)!==JSON.stringify(remote)) fbPush();
+      }catch(e){ sbLogError('merge de sincronização', e); }
     }
-    setSyncUI('synced','🟢 Sala: '+code);
-  },err=>{setSyncUI('error','❌ Erro de conexão');console.error(err);});
+    atualizarStatusSync();
+  },err=>{setSyncUI('error','❌ Erro de conexão');sbLogError('listener de stops',err);});
   toast('🔥 Sala '+code+' ativa!','success');
+  /* Exclusões feitas no outro aparelho chegam por aqui. Sem este listener
+     uma parada apagada por ela voltaria à lista dele no próximo snapshot. */
+  fbMods.onValue(fbMods.ref(fbDb,'rooms/'+code+'/tombs'),snap=>{
+    try{
+      const raw=snap.val();
+      if(raw==null)return;
+      const remotos=typeof raw==='string'?JSON.parse(raw):raw;
+      if(!remotos||typeof remotos!=='object')return;
+      const locais=getTombs();
+      let novidade=false;
+      Object.keys(remotos).forEach(id=>{
+        const quando=Number(remotos[id])||0;
+        if(!(locais[id]>=quando)){ locais[id]=quando; novidade=true; }
+      });
+      if(!novidade)return;
+      saveTombs(podarTombs(locais));
+      const restante=mergeStops(stops,[],locais);
+      if(restante.length!==stops.length){
+        stops=restante;
+        _idsGravados=new Set(stops.map(s=>s._id));
+        localStorage.setItem('sb_stops',JSON.stringify(stops));
+        renderHome();
+      }
+    }catch(e){ sbLogError('merge de exclusões',e); }
+  },err=>sbLogError('listener de tombs',err));
+
   setTimeout(listenPending,500);
   setTimeout(listenClientRequests,800);
   startLocationWatch();
+  // Alteração feita sem sinal numa sessão anterior: envia agora.
+  if(temPendencia()) setTimeout(fbPush,1200);
+  atualizarStatusSync();
+}
+
+// ── Pendência: há alteração local que o servidor ainda não confirmou ──
+// Fica no localStorage para sobreviver a fechar o app sem sinal.
+function temPendencia(){ return localStorage.getItem('sb_pendente') === '1'; }
+function marcarPendencia(v){
+  if (v) localStorage.setItem('sb_pendente', '1');
+  else   localStorage.removeItem('sb_pendente');
+}
+
+/* Status honesto. Antes o ponto ficava verde assim que a sala entrava,
+   mesmo com alteração não enviada — dizia "sincronizado" sem ser verdade. */
+function atualizarStatusSync(){
+  if (!fbDb || !fbRoomPath) { setSyncUI('off', ''); return; }
+  const sala = localStorage.getItem('sb_room_code') || '';
+  if (!navigator.onLine) {
+    setSyncUI('offline', temPendencia() ? '📴 Sem sinal — alterações guardadas' : '📴 Sem sinal');
+    return;
+  }
+  if (fbPushing)      { setSyncUI('syncing', '⬆️ Enviando...'); return; }
+  if (temPendencia()) { setSyncUI('pending', '⏳ Aguardando envio'); return; }
+  setSyncUI('synced', '🟢 Sala: ' + sala);
 }
 
 function fbPush(){
-  if(!fbDb||!fbRoomPath||fbPushing)return;
-  fbPushing=true;
-  fbMods.set(fbMods.ref(fbDb,fbRoomPath),JSON.stringify(stops))
-    .then(()=>setSyncUI('synced','🟢 Sala: '+(localStorage.getItem('sb_room_code')||'')))
-    .catch(e=>setSyncUI('error','❌ Falha ao sincronizar'))
-    .finally(()=>fbPushing=false);
+  if (!fbDb || !fbRoomPath) return;              // sem sala não há para onde enviar
+
+  // A pendência só é limpa quando o servidor confirma.
+  marcarPendencia(true);
+
+  if (!navigator.onLine) { atualizarStatusSync(); return; }
+
+  /* Antes era `if(fbPushing) return` — a escrita era DESCARTADA. Duas
+     alterações rápidas seguidas (marcar entregue e ajustar o valor) e a
+     segunda nunca chegava ao Firebase, mesmo salva no aparelho. Agora
+     marca sujo e reenvia assim que a escrita em voo terminar. */
+  if (fbPushing) { fbSujo = true; return; }
+
+  fbPushing = true;
+  atualizarStatusSync();
+
+  const corpo    = JSON.stringify(stops);
+  const tombPath = fbRoomPath.replace(/\/stops$/, '/tombs');
+
+  Promise.all([
+    fbMods.set(fbMods.ref(fbDb, fbRoomPath), corpo),
+    fbMods.set(fbMods.ref(fbDb, tombPath), JSON.stringify(getTombs()))
+  ])
+    .then(() => { if (!fbSujo) marcarPendencia(false); })
+    .catch(e => { sbLogError('envio ao Firebase', e); })
+    .finally(() => {
+      fbPushing = false;
+      if (fbSujo) { fbSujo = false; fbPush(); }
+      else atualizarStatusSync();
+    });
 }
+
+// Reconectou: manda o que ficou guardado.
+window.addEventListener('online',  () => { atualizarStatusSync(); if (temPendencia()) fbPush(); });
+window.addEventListener('offline', () => atualizarStatusSync());
 
 function fbPushHistory(){
   if(!fbDb)return;
@@ -3778,6 +4007,7 @@ function restoreAutoBackup(key){
   history = Array.isArray(b.history) ? b.history : [];
   if(b.cfg && typeof b.cfg==='object'){ cfg={...cfg,...b.cfg}; saveCfg(); }
   if(Array.isArray(b.expenses)) saveExpenses(b.expenses);
+  forcarCarimboAgora();
   saveStops(); saveHistory();
   toast(`✅ Cópia de ${dia} restaurada`,'success');
   goNav('homeScreen','nav-home');
@@ -3790,7 +4020,7 @@ function exportBackup(){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`speedboy_backup_${today}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
   toast('💾 Backup exportado!','success');
 }
-function importBackup(file){if(!file)return;const reader=new FileReader();reader.onload=e=>{try{const data=JSON.parse(e.target.result);if(!data.version||!Array.isArray(data.stops)){toast('Backup inválido','error');return;}if(!confirm(`Importar backup de ${data.exportedAt?new Date(data.exportedAt).toLocaleDateString('pt-BR'):'?'}?\nIsso substituirá suas paradas e histórico.`))return;stops=data.stops||[];history=data.history||[];if(data.cfg){cfg={...cfg,...data.cfg};saveCfg();}saveStops();saveHistory();toast('✅ Backup importado!','success');goNav('homeScreen','nav-home');}catch(e){toast('Erro ao ler backup','error');}};reader.readAsText(file,'UTF-8');}
+function importBackup(file){if(!file)return;const reader=new FileReader();reader.onload=e=>{try{const data=JSON.parse(e.target.result);if(!data.version||!Array.isArray(data.stops)){toast('Backup inválido','error');return;}if(!confirm(`Importar backup de ${data.exportedAt?new Date(data.exportedAt).toLocaleDateString('pt-BR'):'?'}?\nIsso substituirá suas paradas e histórico.`))return;stops=data.stops||[];history=data.history||[];if(data.cfg){cfg={...cfg,...data.cfg};saveCfg();}forcarCarimboAgora();saveStops();saveHistory();toast('✅ Backup importado!','success');goNav('homeScreen','nav-home');}catch(e){toast('Erro ao ler backup','error');}};reader.readAsText(file,'UTF-8');}
 
 // ═══════════════════════════════════════════════════════
 //  CLEAR

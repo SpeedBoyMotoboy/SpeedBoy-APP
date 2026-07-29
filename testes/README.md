@@ -23,8 +23,23 @@ Ou individualmente:
 |---|---|
 | `escape.mjs` | `esc()` e `escJs()` — escape de HTML e de string dentro de `onclick` |
 | `backup.mjs` | leitura tolerante, backup rotativo, cota estourada, migração de schema |
+| `sync.mjs` | merge entre os dois aparelhos (veja abaixo) |
 | `lint.mjs` | guarda de regressão (veja abaixo) |
 | `smoke.mjs` | o app inteiro num navegador real |
+
+## `sync.mjs` — ninguém pode perder entrega
+
+Cada teste corresponde a uma forma concreta de perder dado que o app tinha
+antes da Etapa 3:
+
+- adições simultâneas nos dois aparelhos: as duas sobrevivem
+- edição concorrente da mesma parada: vence a de carimbo mais novo
+- alteração local ainda não enviada não é destruída por um snapshot que chega
+- exclusão não ressuscita — e uma recriação posterior à exclusão volta
+- parada vinda de uma versão antiga (sem `_upd`) não sobrescreve a carimbada
+- o merge é idempotente e os dois lados convergem para o mesmo conjunto
+- o carimbo só avança quando o conteúdo muda de verdade
+- `null` no meio do array (buraco vindo do Realtime Database) não derruba nada
 
 ## `lint.mjs` — guarda de regressão
 

@@ -24,6 +24,9 @@ jobs:
       - name: Persistência, backup e migração
         run: node testes/backup.mjs
 
+      - name: Merge de sincronização entre aparelhos
+        run: node testes/sync.mjs
+
       - name: Guarda de regressão
         run: node testes/lint.mjs
 

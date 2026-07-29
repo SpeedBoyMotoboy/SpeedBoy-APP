@@ -106,7 +106,9 @@ await secao('index.html carrega e as telas existem', async () => {
   ok(await page.evaluate(() => typeof window.speedboyLoginAnonimo === 'function'), 'helper de login anônimo disponível');
 
   // schema carimbado e viewport liberado
-  ok(await page.evaluate(() => localStorage.getItem('sb_schema_version') === '1'), 'sbMigrate carimbou a versão do schema no boot');
+  // Comparado com a constante do app, para não quebrar a cada bump de schema
+  ok(await page.evaluate(() => localStorage.getItem('sb_schema_version') === String(SB_SCHEMA_VERSION)),
+    'sbMigrate carimbou a versão do schema no boot');
   const vp = await page.getAttribute('meta[name=viewport]', 'content');
   ok(!/user-scalable=no|maximum-scale/.test(vp), 'viewport permite zoom (acessibilidade)');
 
@@ -301,6 +303,64 @@ await secao('O app abre offline, do cache', async () => {
   }
 
   await ctx.setOffline(false);
+  await ctx.close();
+});
+
+// ── 9b. Sincronização: pendência e status honesto ────────────
+await secao('Sincronização offline', async () => {
+  const { page, ctx } = await abrir('/index.html');
+
+  const fns = await page.evaluate(() =>
+    ['mergeStops', 'carimbarStops', 'idDaParada', 'getTombs', 'temPendencia', 'atualizarStatusSync']
+      .filter(n => typeof window[n] !== 'function'));
+  ok(fns.length === 0, 'funções de sincronização disponíveis' + (fns.length ? ' — faltando: ' + fns.join(', ') : ''));
+
+  // Toda parada salva ganha identidade e carimbo
+  const carimbo = await page.evaluate(() => {
+    stops = [{ name: 'Ana', value: '10' }, { name: 'Beto', value: '20' }];
+    saveStops();
+    return { comId: stops.every(s => !!s._id), comUpd: stops.every(s => !!s._upd),
+             idsUnicos: new Set(stops.map(s => s._id)).size === 2 };
+  });
+  ok(carimbo.comId && carimbo.comUpd, 'salvar carimba _id e _upd em toda parada');
+  ok(carimbo.idsUnicos, 'cada parada recebe identidade própria');
+
+  // Excluir deixa tombstone — sem isso a parada volta do outro aparelho
+  const exclusao = await page.evaluate(() => {
+    const alvo = stops[0]._id;
+    stops.splice(0, 1);            // qualquer ponto que remova, sem avisar ninguém
+    saveStops();
+    return { tombstoneCriado: !!getTombs()[alvo], restou: stops.length };
+  });
+  ok(exclusao.tombstoneCriado, 'remover uma parada gera tombstone automaticamente');
+  ok(exclusao.restou === 1, 'a lista fica com o restante');
+
+  // Sem sala configurada não há o que enviar, e o app não pode fingir sincronia
+  const semSala = await page.evaluate(() => {
+    fbDb = null; fbRoomPath = null;
+    atualizarStatusSync();
+    return document.getElementById('syncDot').className;
+  });
+  ok(!/synced/.test(semSala), 'sem sala, o ponto não mostra "sincronizado"');
+
+  // Com sala e sem sinal, a alteração fica guardada e o status diz a verdade
+  const offline = await page.evaluate(() => {
+    fbDb = {}; fbRoomPath = 'rooms/SB-TEST/stops';
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+    stops.push({ name: 'Carla', value: '30' });
+    saveStops();                                   // chama fbPush por dentro
+    return { pendente: temPendencia(), ponto: document.getElementById('syncDot').className,
+             rotulo: document.getElementById('syncLabel').textContent };
+  });
+  ok(offline.pendente, 'alteração sem sinal fica marcada como pendente');
+  ok(/offline/.test(offline.ponto), 'o ponto mostra o estado offline');
+  ok(/sinal/i.test(offline.rotulo), `o rótulo avisa que está sem sinal (${offline.rotulo})`);
+
+  // A pendência precisa sobreviver a fechar o app sem sinal
+  await page.reload({ waitUntil: 'load' });
+  ok(await page.evaluate(() => temPendencia()),
+    'a pendência sobrevive ao fechamento do app');
+
   await ctx.close();
 });
 

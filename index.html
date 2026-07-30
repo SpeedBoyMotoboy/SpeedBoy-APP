@@ -4000,30 +4000,49 @@ function listenClientRequests(){
   fbMods.onValue(crRef,snap=>{
     const data=snap.val();
     if(!data)return;
-    Object.entries(data).forEach(([key,raw])=>{
-      if(_crSeen[key])return;
-      _crSeen[key]=true;
+    /* reqId é a chave da SOLICITAÇÃO; a entrega alvo vem em req.orderKey.
+       Antes as duas eram a mesma coisa, então uma edição e um cancelamento
+       do mesmo pedido colidiam: um sobrescrevia o outro no banco, e o
+       _crSeen ainda descartava o segundo. */
+    Object.entries(data).forEach(([reqId,raw])=>{
+      if(_crSeen[reqId])return;
+      _crSeen[reqId]=true;
       let req;
       try{req=typeof raw==='string'?JSON.parse(raw):raw;}catch(e){return;}
-      if(req.type==='edit') showEditRequest(key,req);
-      else if(req.type==='cancel') showCancelRequest(key,req);
+      if(req.type==='edit') showEditRequest(reqId,req);
+      else if(req.type==='cancel') showCancelRequest(reqId,req);
     });
   });
 }
-function showEditRequest(key,req){
+// Solicitações gravadas por versões anteriores não têm orderKey: nelas a
+// própria chave da solicitação era a chave do pedido.
+function chaveDoPedido(reqId,req){ return (req && req.orderKey) || reqId; }
+
+function showEditRequest(reqId,req){
+  const key=chaveDoPedido(reqId,req);
   const si=stops.findIndex(s=>s._trackKey===key);
   // Entregas já finalizadas não podem ser alteradas pelo cliente
-  if(si>=0&&stops[si].done){toast('⚠️ Entrega de '+(req.name||'?')+' já finalizada — edição ignorada','error');rmClientRequest(key);return;}
+  if(si>=0&&stops[si].done){toast('⚠️ Entrega de '+(req.name||'?')+' já finalizada — edição ignorada','error');rmClientRequest(reqId);return;}
   const f=req.fields||{};
   const lines=Object.entries(f).filter(([,v])=>v).map(([k,v])=>`${k}: ${v}`).join('\n');
   const msg=`✏️ Cliente quer EDITAR a entrega de "${req.name||'?'}":\n\n${lines}\n\nAceitar alterações?`;
-  if(!confirm(msg)){rmClientRequest(key);return;}
+  if(!confirm(msg)){rmClientRequest(reqId);return;}
   if(si>=0){Object.assign(stops[si],req.fields||{});saveStops();renderHome();toast('✅ Entrega de '+req.name+' atualizada','success');}
-  else toast('⚠️ Entrega não encontrada nos stops ativos','error');
-  rmClientRequest(key);
+  /* O cliente pode pedir alteração antes de o motoboy aceitar. Nesse caso a
+     entrega ainda está em /pending e não existe em stops — antes caía no
+     "não encontrada" e o pedido dele era descartado. */
+  else if(pendingData[key]){
+    Object.assign(pendingData[key],req.fields||{});
+    updatePending(key,pendingData[key]);
+    renderPending();
+    toast('✅ Pedido de '+(req.name||'?')+' atualizado','success');
+  }
+  else toast('⚠️ Entrega não encontrada','error');
+  rmClientRequest(reqId);
 }
-function showCancelRequest(key,req){
-  if(!confirm(`❌ Cliente quer CANCELAR a entrega de "${req.name||'?'}".\n\nAceitar cancelamento? A entrega será assinalada como CANCELADA e a taxa zerada.`)){rmClientRequest(key);return;}
+function showCancelRequest(reqId,req){
+  const key=chaveDoPedido(reqId,req);
+  if(!confirm(`❌ Cliente quer CANCELAR a entrega de "${req.name||'?'}".\n\nAceitar cancelamento? A entrega será assinalada como CANCELADA e a taxa zerada.`)){rmClientRequest(reqId);return;}
   const markCancelled=s=>{ s.cancelled=true; s.value=0; s.paid=false; };
   const si=stops.findIndex(s=>s._trackKey===key);
   if(si>=0){
@@ -4042,13 +4061,27 @@ function showCancelRequest(key,req){
     let found=false;
     history.forEach(day=>day.stops.forEach(s=>{ if(s._trackKey===key){ markCancelled(s); found=true; } }));
     if(found){ saveHistory(); renderHome(); toast('🚫 Entrega de '+(req.name||'?')+' cancelada (taxa zerada)','success'); }
+    // Ainda não aceita: basta tirar da fila de pendentes
+    else if(pendingData[key]){ rmPending(key); toast('🗑️ Pedido de '+(req.name||'?')+' cancelado','success'); }
     else toast('⚠️ Entrega não encontrada','error');
   }
-  rmClientRequest(key);
+  rmClientRequest(reqId);
 }
-async function rmClientRequest(key){
+// Grava de volta um pedido que ainda não foi aceito, depois de o cliente
+// pedir alteração. Mesmo formato de /pending: string JSON.
+async function updatePending(key,obj){
   if(!fbDb)return;
-  try{const room=localStorage.getItem('sb_room_code')||'';const{ref:r,remove}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');await remove(r(fbDb,'rooms/'+room+'/client_requests/'+key));}catch(e){console.error(e);}
+  try{
+    const room=localStorage.getItem('sb_room_code')||'';
+    const {ref:r,set}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
+    await set(r(fbDb,'rooms/'+room+'/pending/'+key),JSON.stringify(obj));
+  }catch(e){ sbLogError('atualizar pedido pendente',e); }
+}
+
+// Remove a SOLICITAÇÃO já tratada — não a entrega.
+async function rmClientRequest(reqId){
+  if(!fbDb)return;
+  try{const room=localStorage.getItem('sb_room_code')||'';const{ref:r,remove}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');await remove(r(fbDb,'rooms/'+room+'/client_requests/'+reqId));}catch(e){sbLogError('remover solicitação do cliente',e);}
 }
 
 async function updateTracking(key,status,stopInfo=null){

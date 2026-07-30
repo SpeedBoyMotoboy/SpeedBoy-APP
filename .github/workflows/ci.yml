@@ -27,6 +27,9 @@ jobs:
       - name: Merge de sincronização entre aparelhos
         run: node testes/sync.mjs
 
+      - name: Solicitações do cliente (editar / cancelar)
+        run: node testes/solicitacoes.mjs
+
       - name: Guarda de regressão
         run: node testes/lint.mjs
 

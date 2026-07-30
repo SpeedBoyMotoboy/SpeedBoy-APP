@@ -7,6 +7,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="../speedboy-firebase.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 :root{--bg:#070709;--card:#13131a;--card2:#1a1a24;--border:#252535;--accent:#f5c518;--accent2:#ff6b00;--green:#00a854;--red:#ff4560;--blue:#3b82f6;--text:#f0f0f0;--muted:#666;--radius:16px;}
@@ -64,7 +66,7 @@ body{max-width:480px;margin:0 auto;padding-bottom:40px;}
 <body>
 <div class="toast" id="toast"></div>
 <div class="hero">
-  <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Claro</button>
+  <button type="button" class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Claro</button>
   <div class="hero-logo">SPEED<span>BOY</span></div>
   <div class="hero-tag">Captação de parceiros</div>
   <div class="hero-badge">🛠️ Painel do Luan · Sala <span id="roomSpan">—</span></div>
@@ -80,12 +82,12 @@ body{max-width:480px;margin:0 auto;padding-bottom:40px;}
   <div class="section">
     <div class="section-title">Convidar motoboy</div>
     <div class="card">
-      <button class="btn btn-primary" onclick="gerarConvite()">➕ Gerar link de convite</button>
+      <button type="button" class="btn btn-primary" onclick="gerarConvite()">➕ Gerar link de convite</button>
       <div class="invite-box" id="inviteBox">
         <div class="invite-link" id="inviteLink"></div>
         <div class="invite-actions">
-          <button class="btn btn-green" onclick="shareWhats()">📲 WhatsApp</button>
-          <button class="btn btn-ghost" onclick="copyLink()">📋 Copiar</button>
+          <button type="button" class="btn btn-green" onclick="shareWhats()">📲 WhatsApp</button>
+          <button type="button" class="btn btn-ghost" onclick="copyLink()">📋 Copiar</button>
         </div>
       </div>
     </div>
@@ -114,15 +116,9 @@ body{max-width:480px;margin:0 auto;padding-bottom:40px;}
 // ═══════════════════════════════════════════════════
 //  CONFIGURAÇÃO FIREBASE — copiada (arquivos antigos não são tocados)
 // ═══════════════════════════════════════════════════
-var FIREBASE_CONFIG = {
-  apiKey:            "AIzaSyDL8c28T9Q-IAK9JihzEXtT-OPiYOx24Jg",
-  authDomain:        "speedboy-3c1c6.firebaseapp.com",
-  projectId:         "speedboy-3c1c6",
-  storageBucket:     "speedboy-3c1c6.firebasestorage.app",
-  messagingSenderId: "702743802978",
-  appId:             "1:702743802978:web:7b99217bebcc89f9bc8d3b",
-  databaseURL:       "https://speedboy-3c1c6-default-rtdb.firebaseio.com"
-};
+// Definida em speedboy-firebase.js — antes desta mudanca cada arquivo
+// carregava sua propria copia da configuracao.
+var FIREBASE_CONFIG = window.SPEEDBOY_FIREBASE_CONFIG;
 
 var params = new URLSearchParams(window.location.search);
 var ROOM   = (params.get('room') || '').toUpperCase();
@@ -167,6 +163,14 @@ function init(){
     toast('Erro ao conectar', 'error');
     return;
   }
+  // As regras do banco (database.rules.json) exigem sessao autenticada.
+  // Best-effort enquanto as regras antigas (permissivas) estiverem publicadas.
+  window.speedboyLoginAnonimo()
+    .catch(function(e){ console.warn('Login anonimo falhou (seguindo mesmo assim):', e); })
+    .then(function(){ ouvirMotoboys(); });
+}
+
+function ouvirMotoboys(){
   // Escuta a lista de motoboys parceiros em tempo real
   capRef('motoboys_parceiros').on('value', function(snap){
     motoboys = snap.val() || {};
@@ -265,14 +269,14 @@ function render(){
     html += '<div class="moto-meta">Cadastrado em ' + fmtDate(m.criado_em) + '</div>';
     if (m.status === 'convidado'){
       html += '<div class="moto-actions">';
-      html += '<button class="btn btn-green" onclick="aprovar(\'' + id + '\')">✓ Aprovar</button>';
-      html += '<button class="btn btn-red" onclick="recusar(\'' + id + '\')">✕ Recusar</button>';
+      html += '<button type="button" class="btn btn-green" onclick="aprovar(\'' + id + '\')">✓ Aprovar</button>';
+      html += '<button type="button" class="btn btn-red" onclick="recusar(\'' + id + '\')">✕ Recusar</button>';
       html += '</div>';
     } else if (m.status === 'aprovado'){
       html += '<span class="pill aprovado">Aprovado' + (m.aprovado_em ? ' · ' + fmtDate(m.aprovado_em) : '') + '</span>';
     } else if (m.status === 'recusado'){
       html += '<span class="pill recusado">Recusado</span> ';
-      html += '<button class="btn btn-ghost" style="margin-top:10px;" onclick="aprovar(\'' + id + '\')">Reativar / Aprovar</button>';
+      html += '<button type="button" class="btn btn-ghost" style="margin-top:10px;" onclick="aprovar(\'' + id + '\')">Reativar / Aprovar</button>';
     }
     html += '</div>';
     return html;

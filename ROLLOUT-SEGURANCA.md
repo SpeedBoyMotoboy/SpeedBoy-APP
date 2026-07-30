@@ -44,8 +44,10 @@ Confirme nos quatro:
 - [ ] `pedido.html` — abrir um link de loja e enviar um pedido de teste
 - [ ] `motoboy.html` — abrir um link de repasse
 - [ ] `fatura.html` — abrir um link de fatura publicada
+- [ ] `captacao/admin.html` — abrir com `?room=SUASALA` e gerar um convite
+- [ ] `captacao/cadastro.html` — abrir o link do convite e enviar um cadastro
 
-**Só avance quando os quatro estiverem confirmados.** Se algum falhar, pare — as
+**Só avance quando todos estiverem confirmados.** Se algum falhar, pare — as
 regras do passo 3 vão bloquear exatamente esse caminho.
 
 ---

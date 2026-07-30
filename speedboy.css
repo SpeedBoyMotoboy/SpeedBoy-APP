@@ -1,0 +1,88 @@
+/* ═══════════════════════════════════════════════════════════════
+   SpeedBoy — tokens de design
+
+   Antes deste arquivo, index.html, pedido.html e motoboy.html tinham
+   TRÊS paletas escuras com os MESMOS nomes de token e valores
+   diferentes (--bg, --card, --muted, --green, --radius). A base aqui é
+   a do index.html, que é a que passa em contraste.
+
+   Correção que isto traz: --muted era #666 no pedido/motoboy, o que dá
+   3,22:1 sobre o card — reprova AA para texto normal (mínimo 4,5:1). O
+   texto secundário das páginas do cliente estava difícil de ler.
+   Com #aaa a razão sobe para 7,64:1.
+
+   fatura.html tem paleta própria, clara, e fica de fora de propósito:
+   é documento para impressão, contexto diferente.
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── superfícies ── */
+  --bg:      #0a0a0a;
+  --card:    #181818;
+  --card2:   #1f1f1f;
+  --border:  #2a2a2a;
+
+  /* ── cores de marca e estado ── */
+  --accent:  #f5c518;
+  --accent2: #ff6b00;
+  --green:   #00e676;
+  --red:     #ff3d3d;
+  --blue:    #3b82f6;
+
+  /* ── texto ── */
+  --text:    #f0f0f0;
+  --muted:   #aaa;      /* 7,64:1 sobre --card — passa AA */
+
+  /* ── forma ── */
+  --radius:    14px;
+  --radius-sm: 9px;
+  --radius-lg: 20px;
+
+  /* ── espaçamento ── */
+  --esp-1: 4px;
+  --esp-2: 8px;
+  --esp-3: 12px;
+  --esp-4: 16px;
+  --esp-5: 24px;
+  --esp-6: 32px;
+
+  /* ── alvo de toque ──
+     48px é o mínimo para dedo com luva, em movimento. */
+  --toque: 48px;
+
+  /* ── movimento ── */
+  --rapido: .15s;
+  --normal: .25s;
+}
+
+body.light {
+  --bg:      #ffffff;
+  --card:    #f5f5f5;
+  --card2:   #efefef;
+  --border:  #ddd;
+  --accent:  #c9920a;
+  --accent2: #e05500;
+  --green:   #1a7a3f;
+  --red:     #cc2233;
+  --blue:    #1a65d6;
+  --text:    #000;
+  --muted:   #333;
+}
+
+/* Quem preferir menos animação no sistema não deve levar animação. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* Alvo de toque mínimo em qualquer coisa clicável, sem mexer no visual. */
+button, .btn, [role="button"] {
+  min-height: var(--toque);
+}
+/* Botões deliberadamente compactos (chips, fechar, contadores) optam por sair. */
+button.compacto, .btn-compacto {
+  min-height: 0;
+}

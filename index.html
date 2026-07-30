@@ -10,20 +10,15 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="SpeedBoy">
-<link rel="apple-touch-icon" href="https://speedboymotoboy.github.io/SpeedBoy-APP/favicon.ico">
+<link rel="icon" type="image/png" sizes="192x192" href="./icones/icone-192.png">
+<link rel="apple-touch-icon" href="./icones/icone-180.png">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Paleta e escalas compartilhadas com pedido.html e motoboy.html.
+     Antes cada arquivo declarava o proprio :root, com os mesmos nomes e
+     valores diferentes. -->
+<link rel="stylesheet" href="speedboy.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-:root{
-  --bg:#0a0a0a;--card:#181818;--card2:#1f1f1f;--border:#2a2a2a;
-  --accent:#f5c518;--accent2:#ff6b00;--green:#00e676;--red:#ff3d3d;--blue:#3b82f6;
-  --text:#f0f0f0;--muted:#aaa;--radius:14px;
-}
-body.light{
-  --bg:#ffffff;--card:#f5f5f5;--card2:#efefef;--border:#ddd;
-  --accent:#c9920a;--accent2:#e05500;--green:#1a7a3f;--red:#cc2233;--blue:#1a65d6;
-  --text:#000;--muted:#333;
-}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;overscroll-behavior-x:none;}
 body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height:100vh;}
 
@@ -165,6 +160,11 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 .paste-area{width:100%;background:var(--card);border:2px dashed var(--border);border-radius:var(--radius);padding:14px 38px 14px 14px;font-size:13px;color:var(--text);min-height:90px;resize:none;font-family:'Barlow',sans-serif;line-height:1.5;outline:none;transition:border-color .2s;}
 .paste-area:focus{border-color:var(--accent);}
 .paste-area::placeholder{color:var(--muted);}
+/* Excecoes ao alvo minimo de 48px do speedboy.css.
+   .btn-clear e um circulo de 26px dentro do campo: esticar so deforma.
+   #themeToggleBtn fica no cabecalho, que aparece em todas as telas —
+   22px a mais ali custam altura util em cada tela, por um botao raro. */
+.btn-clear,#themeToggleBtn{min-height:0;}
 .btn-clear{position:absolute;top:9px;right:9px;background:var(--card2);border:none;color:var(--muted);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;}
 .btn-parse{width:100%;margin-top:10px;background:var(--accent);color:#000;border:none;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;padding:13px;border-radius:var(--radius);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;}
 .free-badge{background:#1a2a1a;border:1px solid var(--green);color:var(--green);font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;}
@@ -937,6 +937,7 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 
 <!-- Padrão único de fatura (schema speedboy.fatura/v1) — compartilhado com fatura.html -->
 <script src="speedboy-firebase.js"></script>
+<script src="speedboy-core.js"></script>
 <script src="fatura-padrao.js"></script>
 
 <script>
@@ -1237,33 +1238,20 @@ function saveStops()   {
 function saveHistory() { localStorage.setItem('sb_history', JSON.stringify(history)); fbPushHistory(); }
 function saveCfg()     { localStorage.setItem('sb_cfg',     JSON.stringify(cfg)); }
 
-function fmtMoney(v) { return 'R$ ' + (parseFloat(v)||0).toFixed(2).replace('.',','); }
-function parseMoney(s){ return parseFloat(String(s||'').replace(',','.')) || 0; }
 
-function maskPhone(el) {
-  let v = el.value.replace(/\D/g,'');
-  if(v.length>11) v=v.substring(0,11);
-  if(v.length>7)  v=`(${v.substring(0,2)}) ${v.substring(2,7)}-${v.substring(7)}`;
-  else if(v.length>2) v=`(${v.substring(0,2)}) ${v.substring(2)}`;
-  el.value=v;
-}
-function maskMoney(el) {
-  let v=el.value.replace(/[^0-9,]/g,'');
-  const p=v.split(',');
-  if(p.length>2) v=p[0]+','+p.slice(1).join('');
-  if(p[1]&&p[1].length>2) v=p[0]+','+p[1].substring(0,2);
-  el.value=v;
-}
-function fmtPhone(p) {
-  const d=String(p||'').replace(/\D/g,'');
-  return d.length===11?`(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`:(p||'');
-}
+
+
+
+
+
 // ── ESCAPE ──────────────────────────────────────────────
 // Dados de cliente chegam por pedido.html e vão parar em innerHTML.
 // esc()   → texto/atributo HTML.  <div>${esc(s.name)}</div>
 // escJs() → string JS dentro de atributo inline.  onclick="fn('${escJs(nome)}')"
 //           (escapa para JS e depois para HTML, porque o navegador
 //            decodifica a entidade antes de o JS ser interpretado)
+/* fmtMoney, parseMoney, maskPhone, maskMoney e fmtPhone vem do
+   speedboy-core.js — eram copias identicas em outros arquivos. */
 function esc(s){
   return String(s==null?'':s)
     .replace(/&/g,'&amp;')
@@ -1772,28 +1760,18 @@ function openMapsWithAddress(i){
 
 
 // Bairros customizados (localStorage)
-function getCustomBairros(){try{return JSON.parse(localStorage.getItem('sb_custom_bairros')||'{}');}catch(e){return {};}}
-function saveCustomBairros(cb){localStorage.setItem('sb_custom_bairros',JSON.stringify(cb));}
-function addCustomBairro(city,bairro){if(!city||!bairro)return;const cb=getCustomBairros();if(!cb[city])cb[city]=[];bairro=bairro.trim();if(!cb[city].includes(bairro)){cb[city].push(bairro);cb[city].sort();saveCustomBairros(cb);}}
+function getCustomBairros(){ return SpeedBoy.getCustomBairros(); }
+function saveCustomBairros(cb){ SpeedBoy.saveCustomBairros(cb); }
+function addCustomBairro(city,bairro){ return SpeedBoy.addCustomBairro(city,bairro); }
 
 // ═══════════════════════════════════════════════════════
 //  BAIRROS POR CIDADE
 // ═══════════════════════════════════════════════════════
-const CIDADE_BAIRROS={
-  SRR:["Alterosas","André Carloni","Bairro das Laranjeiras","Bairro de Fátima","Bairro Novo","Balneário Carapebus","Barcelona","Barro Branco","Belvedere","Bicanga","Boa Vista","Caçaroca","Câmara","Campinho da Serra I","Campinho da Serra II","Cantinho do Céu","Carapina Grande","Carapina I","Castelândia","Central Carapina","Centro","Chácara Parreiral","Cidade Continental","Cidade Pomar","CIVIT I","CIVIT II","Colina da Serra","Conjunto Jacaraípe","Costa Dourada","Costabella","Diamantina","Divinópolis","Eldorado","Enseada de Jacaraípe","Eurico Salles","Feu Rosa","Guaraciaba","Hélio Ferraz","Jardim Atlântico","Jardim Bela Vista","Jardim Carapina","Jardim da Serra","Jardim Guanabara","Jardim Limoeiro","Jardim Primavera","Jardim Tropical","José de Anchieta","Laranjeiras Velha","Manguinhos","Manoel Plaza","Marbella","Maringá","Mata da Serra","Morada de Laranjeiras","Nova Carapina I","Nova Carapina II","Nova Zelândia","Novo Horizonte","Novo Porto Canoa","Ourimar","Parque das Gaivotas","Parque Jacaraípe","Parque Residencial Laranjeiras","Parque Residencial Mestre Álvaro","Pitanga","Planalto de Carapina","Planalto Serrano","Planície da Serra","Portal dos Laranjais","Porto Canoa","Praia de Carapebus","Praiamar","Reis Magos","Residencial Centro da Serra","Residencial Jacaraípe","Rosário de Fátima","Santa Luzia","Santa Rita de Cássia","Santo Antônio","São Diogo I","São Diogo II","São Domingos","São Francisco","São Geraldo","São João","São Judas Tadeu","São Lourenço","São Marcos","São Pedro","Serra Dourada I","Serra Dourada II","Serra Dourada III","Serramar","Taquara I","Taquara II","Valparaíso","Vila Nova de Colares","Vista da Serra I","Vista da Serra II"],
-  VIX:["Aeroporto","Andorinhas","Antônio Honório","Barro Vermelho","Bela Vista","Bento Ferreira","Boa Vista","Bonfim","Centro","Conquista","Consolação","Cruzamento","Da Penha","De Lourdes","Do Moscoso","Enseada do Suá","Fonte Grande","Forte São João","Fradinhos","Goiabeiras","Gurigica","Ilha das Caieiras","Ilha de Monte Belo","Ilha de Santa Maria","Ilha do Boi","Ilha do Frade","Ilha do Príncipe","Inhanguetá","Itararé","Jabour","Jardim Camburi","Jardim da Penha","Jesus de Nazareth","Joana D'arc","Jucutuquara","Maria Ortiz","Mário Cypreste","Maruípe","Mata da Praia","Monte Belo","Morada de Camburi","Nazareth","Nova Palestina","Parque Moscoso","Piedade","Pontal de Camburi","Praia do Canto","Praia do Suá","Redenção","República","Resistência","Romão","Santa Cecília","Santa Clara","Santa Helena","Santa Lúcia","Santa Luíza","Santa Martha","Santa Teresa","Santo André","Santo Antônio","Santos Dumont","Santos Reis","São Benedito","São Cristóvão","São José","São Pedro","Tabuazeiro","Universitário","Vila Rubim"],
-  VV:["Alecrim","Alvorada","Araçás","Argolas","Aribiri","Ataíde","Atalaia","Barra do Jucú","Barramares","Boa Vista 01","Boa Vista 02","Brisamar","Capuaba","Cavalieri","Chácara do Conde","Cidade da Barra","Cobilândia","Cocal","Coqueiral de Itaparica","Cristóvão Colombo","Divino Espírito Santo","Garoto","Glória","Guadalupe","Guaranhuns","Ibes","Ilha da Conceição","Ilha das Flores","Ilha dos Ayres","Ilha dos Bentos","Interlagos","Itapoã","Jaburuna","Jardim Colorado","Jardim Guadalajara","Jardim Guaranhuns","Jardim Marilândia","Jockey de Itaparica","Morada da Barra","Morada do Sol","Nova América","Nova Itaparica","Novo México","Olaria","Parque das Gaivotas","Paul","Planalto","Ponta da Fruta","Pontal das Garças","Praia da Costa","Praia de Itaparica","Prainha da Glória","Primeiro de Maio","Residencial Coqueiral","Rio Marinho","Riviera da Barra","Sagrada Família","Santa Clara","Santa Inês","Santa Mônica","Santa Paula I","Santa Paula II","Santa Rita","Santos Dumont","São Torquato","Soteco","Terra Vermelha","Vale Encantado","Vila Batista","Vila Garrido","Vila Nova","Vila Velha - Centro","Vista da Penha","Zumbi dos Palmares"],
-  CCA:["Alice Coutinho","Alto Boa Vista","Alto Lage","Bandeirantes","Bela Aurora","Bela Vista","Bubu","Campina Grande","Campo Belo","Campo Grande","Campo Verde","Cariacica Sede","Castelo Branco","Cruzeiro do Sul","Flexal I","Flexal II","Formate","Graúna","Itacibá","Itanguá","Jardim América","Jardim Botânico","Jardim Campo Grande","Jardim de Alah","Morada de Santa Fé","Nova Brasília","Nova Campo Grande","Nova Canaã","Nova Esperança","Nova Rosa da Penha","Nova Valverde","Novo Brasil","Novo Horizonte","Padre Gabriel","Porto de Cariacica","Porto de Santana","Porto Novo","Prolar","Rio Branco","Rio Marinho","Rosa da Penha","Santa Bárbara","Santa Cecília","Santana","Santo André","Santo Antônio","São Conrado","São Francisco","São Geraldo I","São Geraldo II","São João Batista","Sotelândia","Tabajara","Vale dos Reis","Valparaíso","Vera Cruz","Vila Capixaba","Vila Progresso","Vista Dourada","Vista Mar"],
-  VIA:["Areinha","Arlindo Villaschi","Bom Pastor","Campo Verde","Canaã","Caxias do Sul","Industrial","Ipanema","Jucu","Marcílio de Noronha","Morada de Bethânia","Nova Belém","Nova Bethânia","Nova Viana","Primavera","Ribeira","Santa Terezinha","Santo Agostinho","Soteco","Universal","Verona","Vila Bethânia","Vila Nova"]
-};
+// CIDADE_BAIRROS vem do speedboy-core.js. O app usava {codigo:[bairros]} e o
+// pedido.html usava {codigo:{nome,bairros}}; as listas divergiram em 93
+// bairros. Agora e uma so, no formato com nome.
 
-function getAllFormBairros(cityCode){
-  const official=CIDADE_BAIRROS[cityCode]||[];
-  const custom=getCustomBairros()[cityCode]||[];
-  const seen={};const result=[];
-  official.concat(custom).forEach(function(b){const k=b.toLowerCase();if(!seen[k]){seen[k]=true;result.push(b);}});
-  return result.sort();
-}
+function getAllFormBairros(cityCode){ return SpeedBoy.bairrosDaCidade(cityCode); }
 
 function onCityChange(){
   document.getElementById('fBairro').value='';

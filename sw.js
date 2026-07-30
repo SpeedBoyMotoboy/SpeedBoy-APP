@@ -15,7 +15,7 @@
    conteúdo dos arquivos — não edite à mão.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION = '20260730-c18aab5d';                       // gerado por scripts/bump-versao.mjs
+const VERSION = '20260730-3cb7f845';                       // gerado por scripts/bump-versao.mjs
 const CACHE   = 'speedboy-' + VERSION;
 
 // Casca do app: o que precisa estar disponível para abrir offline.
@@ -23,9 +23,14 @@ const SHELL = [
   './index.html',
   './manifest.json',
   './speedboy-firebase.js',
+  './speedboy-core.js',
+  './speedboy.css',
   './fatura-padrao.js',
   './fatura.html',
-  './offline.html'
+  './offline.html',
+  './icones/icone-192.png',
+  './icones/icone-512.png',
+  './icones/icone-180.png'
 ];
 
 /* Hosts cujas respostas NUNCA podem ir para o cache: são dados vivos.

@@ -7,10 +7,16 @@ import fs from 'fs';
 import path from 'path';
 import { RAIZ, chromiumPath, criarPlacar } from './_util.mjs';
 
+/* O Content-Type importa de verdade aqui. Servido como text/plain, o
+   navegador RECUSA o speedboy.css inteiro (checagem estrita de MIME para
+   folha de estilo) e a página abre sem paleta nenhuma — foi exatamente
+   assim que este mapa ficou incompleto sem ninguém notar. */
 const TIPOS = {
   '.html': 'text/html; charset=utf-8',
   '.js':   'text/javascript; charset=utf-8',
+  '.css':  'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.png':  'image/png',
   '.ico':  'image/x-icon'
 };
 
@@ -325,6 +331,46 @@ await secao('Link direto e rolagem', async () => {
   const voltou = await b.page.evaluate(() => document.getElementById('homeScreen').scrollTop);
   ok(Math.abs(voltou - rolou) < 40, `voltar devolve a rolagem onde estava (${rolou} → ${voltou})`);
   await b.ctx.close();
+});
+
+// ── 7d. Núcleo compartilhado, no navegador de verdade ────────
+/* Os testes de nucleo.mjs rodam o speedboy-core.js isolado. Aqui a
+   pergunta é outra: o APP, carregado de verdade, oferece os bairros que
+   antes só existiam no formulário do cliente? Era o bug de campo — o
+   cliente escolhia "Caratoíra", o pedido chegava, e ao editar a parada o
+   motoboy não achava o bairro no seletor. */
+await secao('Núcleo compartilhado no app', async () => {
+  const { page, ctx } = await abrir('/index.html');
+
+  ok(await page.evaluate(() => typeof window.SpeedBoy === 'object'),
+    'o app carrega o speedboy-core.js');
+
+  // A paleta tem de vir do arquivo externo, não de um :root local.
+  const muted = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--muted').trim());
+  ok(muted === '#aaa', `--muted vem do speedboy.css (${muted})`);
+
+  /* Um por cidade, entre os 93 que existiam só na lista do cliente.
+     Se a unificação regredir, isto quebra antes de chegar ao celular. */
+  const RECUPERADOS = {
+    VIX: 'Caratoíra',
+    VV:  'Cobi de Baixo',
+    CCA: 'Boa Sorte',
+    SRR: 'Estância Monazítica'
+  };
+  for (const [cidade, bairro] of Object.entries(RECUPERADOS)) {
+    const achou = await page.evaluate(([c, b]) => {
+      document.getElementById('fCity').value = c;
+      document.getElementById('fBairro').value = b;
+      filterBairros();
+      const lista = document.getElementById('fBairroList');
+      return lista.classList.contains('show') &&
+             [...lista.querySelectorAll('.bairro-item')].some(e => e.textContent === b);
+    }, [cidade, bairro]);
+    ok(achou, `o seletor do app sugere "${bairro}" (${cidade}) — só existia na lista do cliente`);
+  }
+
+  await ctx.close();
 });
 
 // ── 8. Faixa de atualização e controles de versão ────────────

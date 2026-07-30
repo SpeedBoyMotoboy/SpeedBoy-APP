@@ -30,6 +30,13 @@ jobs:
       - name: Solicitações do cliente (editar / cancelar)
         run: node testes/solicitacoes.mjs
 
+      # Precisa do histórico: o teste compara a lista de bairros unificada
+      # com as duas listas antigas, lidas de origin/main.
+      - name: Núcleo compartilhado e integridade dos bairros
+        run: |
+          git fetch --depth=1 origin main:refs/remotes/origin/main || true
+          node testes/nucleo.mjs
+
       - name: Guarda de regressão
         run: node testes/lint.mjs
 

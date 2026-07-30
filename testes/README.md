@@ -24,8 +24,27 @@ Ou individualmente:
 | `escape.mjs` | `esc()` e `escJs()` — escape de HTML e de string dentro de `onclick` |
 | `backup.mjs` | leitura tolerante, backup rotativo, cota estourada, migração de schema |
 | `sync.mjs` | merge entre os dois aparelhos (veja abaixo) |
+| `solicitacoes.mjs` | editar e cancelar pedido do cliente sem colisão |
+| `nucleo.mjs` | `speedboy-core.js` — sobretudo: nenhum bairro se perdeu (veja abaixo) |
 | `lint.mjs` | guarda de regressão (veja abaixo) |
 | `smoke.mjs` | o app inteiro num navegador real |
+
+## `nucleo.mjs` — nenhum bairro pode sumir
+
+`CIDADE_BAIRROS` existia duas vezes, em formatos diferentes, e as duas cópias
+divergiram: **93 bairros que o cliente conseguia escolher no `pedido.html` não
+existiam na lista do app**. Ao editar a parada, o motoboy não achava o bairro
+que o próprio cliente tinha informado.
+
+Unificar só vale se nada se perder no caminho. O teste lê as **duas listas
+originais direto do histórico do git** (`git show origin/main:index.html` e
+`:pedido.html`) e compara cidade por cidade contra a lista de hoje. Reprova se
+algum bairro sumir, e confere que os 93 do cliente realmente entraram.
+
+Cobre também: formato único `{nome, bairros[]}`, os dois escopos de bairro
+personalizado (o do app e o de cada loja) sem vazar um no outro, `fmtPhone(null)`
+— que quebrava o `motoboy.html` — e a regra de que nenhuma página pode
+*reimplementar* o que vem do núcleo (delegar é permitido; copiar não).
 
 ## `sync.mjs` — ninguém pode perder entrega
 
@@ -55,6 +74,11 @@ e a regra impede que ele volte sem ninguém notar:
 - o `install` do service worker **não** chama `skipWaiting()`, e o reload por
   `controllerchange` só acontece com atualização pedida pelo usuário
 - Firebase, Nominatim e OSRM continuam na lista de nunca cachear
+- nenhuma página redeclara a paleta (`:root{--bg…}`) — ela vem só do
+  `speedboy.css` — e a paleta única passa em contraste AA (4,5:1) em todos os
+  pares de texto sobre fundo, nos dois temas
+- os ícones do PWA são PNG de verdade, do tamanho que o `manifest.json`
+  promete, e por caminho relativo (URL absoluta quebra fora do domínio)
 - todo bloco `<script>` inline tem sintaxe válida
 
 Ele já pegou quatro vazamentos reais de escape que passaram na Etapa 1.
@@ -74,6 +98,9 @@ Sobe um servidor estático na raiz e abre as páginas num Chromium. Verifica:
 - **o app abre offline, servido do cache** — e carrega o script completo,
   não uma página parcial
 - com o servidor fora do ar, uma navegação nova cai no `offline.html`
+- o `speedboy-core.js` carrega e o seletor de bairro do app oferece nomes que
+  antes só existiam na lista do cliente (`Caratoíra`, `Cobi de Baixo`, …)
+- `--muted` chega na página vindo do `speedboy.css`
 
 Erros de rede (Firebase, fontes do Google) são esperados em ambiente isolado e
 ficam filtrados — o teste só reprova por erro de código.
@@ -83,6 +110,9 @@ ficam filtrados — o teste só reprova por erro de código.
 - Rodando como root em container, o Chromium às vezes cai no meio da suíte.
   O teste religa o navegador e tenta de novo; cada seção é isolada, então uma
   queda não apaga o resultado das outras.
+- O `Content-Type` do servidor de teste não é detalhe: servido como
+  `text/plain`, o navegador **recusa** o `speedboy.css` inteiro e a página abre
+  sem paleta. Todo tipo de arquivo novo precisa entrar no mapa `TIPOS`.
 - `ctx.setOffline()` corta a rede da **página**, não a do service worker — o
   `fetch` dele ainda chega ao servidor. Por isso o teste de queda de rede
   derruba o servidor de verdade em vez de usar o emulador de offline.

@@ -869,8 +869,11 @@ window.submitEdit = function() {
     timeFrom:   document.getElementById('editTimeFrom').value.trim(),
     timeTo:     document.getElementById('editTimeTo').value.trim()
   };
-  var payload = { type: 'edit', name: _editName, fields: fields, ts: Date.now() };
-  db.ref('rooms/' + (_editRoom || ROOM) + '/client_requests/' + _editKey).set(JSON.stringify(payload))
+  /* push() em vez de set() na chave do pedido: gravando na mesma chave, um
+     pedido de edição e um de cancelamento do MESMO pedido se sobrescreviam,
+     e o motoboy só via um dos dois. O pedido de origem vai no orderKey. */
+  var payload = { type: 'edit', orderKey: _editKey, name: _editName, fields: fields, ts: Date.now() };
+  db.ref('rooms/' + (_editRoom || ROOM) + '/client_requests').push(JSON.stringify(payload))
     .then(function() {
       // Se a edição veio do histórico, atualiza a cópia local guardada
       if (_editHist) {
@@ -892,8 +895,8 @@ window.submitEdit = function() {
 function sendCancelRequest(room, key, name, onDone) {
   if (!confirm('Tem certeza que deseja cancelar a entrega de ' + name + '?')) return;
   if (!db) { showToast('Sem conexão. Recarregue a página.', 'error'); return; }
-  var payload = { type: 'cancel', name: name, ts: Date.now() };
-  db.ref('rooms/' + (room || ROOM) + '/client_requests/' + key).set(JSON.stringify(payload))
+  var payload = { type: 'cancel', orderKey: key, name: name, ts: Date.now() };
+  db.ref('rooms/' + (room || ROOM) + '/client_requests').push(JSON.stringify(payload))
     .then(function() {
       showToast('❌ Cancelamento enviado ao motoboy!', 'success');
       if (onDone) onDone();

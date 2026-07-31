@@ -10,20 +10,13 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 <script src="speedboy-firebase.js"></script>
+<script src="speedboy-core.js"></script>
+<!-- Paleta compartilhada. O --muted daqui era #666 (3,22:1 sobre o card,
+     reprova AA); agora vem do speedboy.css em #aaa. -->
+<link rel="stylesheet" href="speedboy.css">
 
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-:root{
-  --bg:#070709;--card:#13131a;--card2:#1a1a24;--border:#252535;
-  --accent:#f5c518;--accent2:#ff6b00;--green:#00a854;--red:#ff4560;
-  --text:#f0f0f0;--muted:#666;--radius:16px;
-}
-/* LIGHT THEME */
-body.light{
-  --bg:#f5f5f0;--card:#ffffff;--card2:#f0f0eb;--border:#ddddd5;
-  --accent:#c9920a;--accent2:#e05500;--green:#1a7a3f;--red:#cc2233;
-  --text:#1a1a1a;--muted:#888;
-}
 html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;}
 body{max-width:480px;margin:0 auto;padding-bottom:50px;}
 
@@ -250,38 +243,8 @@ body.light .theme-toggle{background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.15)
 // ═══════════════════════════════════════════════════
 //  BAIRROS POR CIDADE — Região Metropolitana Vitória
 // ═══════════════════════════════════════════════════
-var CIDADE_BAIRROS = {
-  'VIX': {
-    nome: 'Vitória',
-    bairros: [
-      "Aeroporto", "Andorinhas", "Antônio Honório", "Ariovaldo Favalessa", "Barro Vermelho", "Bela Vista", "Bento Ferreira", "Boa Vista", "Bonfim", "Caratoíra", "Centro", "Comdusa", "Conquista", "Consolação", "Cruzamento", "Da Penha", "De Lourdes", "Do Cabral", "Do Moscoso", "Do Quadro", "Enseada do Suá", "Estrelinha", "Fonte Grande", "Forte São João", "Fradinhos", "Goiabeiras", "Grande Vitória", "Guaçuí", "Gurigica", "Horácio Bento", "Ilha das Caieiras", "Ilha de Monte Belo", "Ilha de Santa Maria", "Ilha do Boi", "Ilha do Frade", "Ilha do Príncipe", "Inhanguetá", "Itararé", "Jabour", "Jardim Camburi", "Jardim da Penha", "Jesus de Nazareth", "Joana D'arc", "Jucutuquara", "Maria Ortiz", "Mário Cypreste", "Maruípe", "Mata da Praia", "Monte Belo", "Morada de Camburi", "Nazareth", "Nova Palestina", "Parque Moscoso", "Piedade", "Pontal de Camburi", "Praia do Canto", "Praia do Suá", "Redenção", "República", "Resistência", "Romão", "Santa Cecília", "Santa Clara", "Santa Helena", "Santa Lúcia", "Santa Luíza", "Santa Martha", "Santa Teresa", "Santo André", "Santo Antônio", "Santos Dumont", "Santos Reis", "São Benedito", "São Cristóvão", "São José", "São Pedro", "Segurança do Lar", "Solon Borges", "Tabuazeiro", "Universitário", "Vila Rubim"
-    ].sort()
-  },
-  'VV': {
-    nome: 'Vila Velha',
-    bairros: [
-      "23 de Maio", "Alecrim", "Alvorada", "Araçás", "Argolas", "Aribiri", "Ataíde", "Atalaia", "Balneário Ponta da Fruta", "Barra do Jucú", "Barramares", "Boa Vista 01", "Boa Vista 02", "Brisamar", "Capuaba", "Cavalieri", "Chácara do Conde", "Cidade da Barra", "Cobi de Baixo", "Cobi de Cima", "Cobilândia", "Cocal", "Coqueiral de Itaparica", "Cristóvão Colombo", "Darcy Santos", "Divino Espírito Santo", "Dom João Batista", "Garoto", "Glória", "Guadalupe", "Guaranhuns", "Ibes", "Ilha da Conceição", "Ilha das Flores", "Ilha dos Ayres", "Ilha dos Bentos", "Industrial", "Interlagos", "Ipessa", "Itapoã", "Jaburuna", "Jardim Asteca", "Jardim Colorado", "Jardim do Vale", "Jardim Guadalajara", "Jardim Guaranhuns", "Jardim Marilândia", "Jardim São Paulo", "João Goulart", "Jockey de Itaparica", "Morada da Barra", "Morada do Sol", "Morro da Lagoa", "Morro da Philips", "Morro do Cruzeiro", "Normília da Cunha", "Nossa Senhora da Penha II", "Nova América", "Nova Itaparica", "Nova Ponta da Fruta", "Novo México", "Olaria", "Parque das Gaivotas", "Paul", "Pedra dos Búzios", "Planalto", "Ponta da Fruta", "Pontal das Garças", "Praia da Costa", "Praia de Itaparica", "Praia dos Recifes", "Prainha da Glória", "Primeiro de Maio", "Residencial Coqueiral", "Residencial Jabaeté", "Rio Marinho", "Riviera da Barra", "Sagrada Família", "Santa Clara", "Santa Inês", "Santa Mônica", "Santa Mônica Popular", "Santa Paula I", "Santa Paula II", "Santa Rita", "Santos Dumont", "São Conrado", "São Torquato", "Soteco", "Terra Vermelha", "Ulisses Guimarães", "Vale Encantado", "Vila Batista", "Vila Garrido", "Vila Guaranhuns", "Vila Nova", "Vila Velha - Centro", "Vista da Penha", "Zumbi dos Palmares"
-    ].sort()
-  },
-  'CCA': {
-    nome: 'Cariacica',
-    bairros: [
-      "Alice Coutinho", "Alto Boa Vista", "Alto Lage", "Alzira Ramos", "Antônio Ferreira Borges", "Aparecida", "Bandeirantes", "Bela Aurora", "Bela Vista", "Boa Sorte", "Bubu", "Caçaroca", "Campina Grande", "Campo Belo", "Campo Grande", "Campo Verde", "Cangaíba", "Cariacica Sede", "Castelo Branco", "Chácaras União", "Cruzeiro do Sul", "Dom Bosco", "Expedito", "Flexal I", "Flexal II", "Formate", "Foz do Rio Bubu", "Graúna", "Ibiapaba", "Itacibá", "Itanguá", "Itapemirim", "Itaquari", "Jardim América", "Jardim Botânico", "Jardim Campo Grande", "Jardim de Alah", "Maracanã", "Morada de Santa Fé", "Mucuri", "Nova Brasília", "Nova Campo Grande", "Nova Canaã", "Nova Esperança", "Nova Rosa da Penha", "Nova Valverde", "Novo Brasil", "Novo Horizonte", "Operário", "Oriente", "Padre Gabriel", "Padre Mathias", "Palestina", "Parque Gramado", "Piranema", "Planeta", "Porto de Cariacica", "Porto de Santana", "Porto Novo", "Presidente Médice", "Prolar", "Retiro Saudoso", "Rio Branco", "Rio Marinho", "Rosa da Penha", "Santa Bárbara", "Santa Cecília", "Santa Luzia", "Santa Paula", "Santana", "Santo André", "Santo Antônio", "São Benedito", "São Conrado", "São Francisco", "São Geraldo I", "São Geraldo II", "São Gonçalo", "São João Batista", "Serra do Anil", "Sotelândia", "Sotema", "Tabajara", "Tiradentes", "Tucum", "Vale dos Reis", "Vale Esperança", "Valparaíso", "Vera Cruz", "Vila Cajueiro", "Vila Capixaba", "Vila Independência", "Vila Isabel", "Vila Merlo", "Vila Progresso", "Vila Prudêncio", "Vista Dourada", "Vista Linda", "Vista Mar"
-    ].sort()
-  },
-  'SRR': {
-    nome: 'Serra',
-    bairros: [
-      "Alterosas", "André Carloni", "Bairro das Laranjeiras", "Bairro de Fátima", "Bairro Novo", "Balneário Carapebus", "Barcelona", "Barro Branco", "Belvedere", "Bicanga", "Boa Vista", "Caçaroca", "Câmara", "Campinho da Serra I", "Campinho da Serra II", "Cantinho do Céu", "Carapina Grande", "Carapina I", "Castelândia", "Central Carapina", "Centro", "Centro Industrial do Município", "Chácara Parreiral", "Cidade Continental", "Cidade Pomar", "CIVIT I", "CIVIT II", "Colina da Serra", "Condomínio Ecológico Parque da Lagoa", "Conjunto Jacaraípe", "Costa Dourada", "Costabella", "Diamantina", "Divinópolis", "Eldorado", "Enseada de Jacaraípe", "Estância Monazítica", "Eurico Salles", "Fazenda Cascata", "Feu Rosa", "Guaraciaba", "Hélio Ferraz", "Jardim Atlântico", "Jardim Bela Vista", "Jardim Carapina", "Jardim da Serra", "Jardim Guanabara", "Jardim Limoeiro", "Jardim Primavera", "Jardim Tropical", "José de Anchieta", "José de Anchieta III", "Laranjeiras Velha", "Loteamento Fonte Limpa", "Loteamento Potiguara", "Manguinhos", "Manoel Plaza", "Marbella", "Maringá", "Mata da Serra", "Morada de Laranjeiras", "Niobe", "Nossa Senhora da Conceição", "Nova Carapina I", "Nova Carapina II", "Nova Zelândia", "Novo Horizonte", "Novo Porto Canoa", "Ourimar", "Parque das Gaivotas", "Parque Jacaraípe", "Parque Residencial Laranjeiras", "Parque Residencial Mestre Álvaro", "Parque Residencial Nova Almeida", "Parque Residencial Tubarão", "Parque Santa Fé", "Pitanga", "Planalto de Carapina", "Planalto Serrano", "Planície da Serra", "Portal dos Laranjais", "Portal Jacaraípe", "Porto Canoa", "Praia de Capuba", "Praia de Carapebus", "Praiamar", "Reis Magos", "Residencial Centro da Serra", "Residencial Jacaraípe", "Rosário de Fátima", "Santa Luzia", "Santa Rita de Cássia", "Santo Antônio", "São Diogo I", "São Diogo II", "São Domingos", "São Francisco", "São Geraldo", "São João", "São Judas Tadeu", "São Lourenço", "São Marcos", "São Patrício", "São Pedro", "Serra Dourada I", "Serra Dourada II", "Serra Dourada III", "Serramar", "Sítio Irema", "Solar de Anchieta", "Taquara I", "Taquara II", "Valparaíso", "Vila Maria", "Vila Nova de Colares", "Vista da Serra I", "Vista da Serra II"
-    ].sort()
-  },
-  'VIA': {
-    nome: 'Viana',
-    bairros: [
-      "Areinha", "Arlindo Villaschi", "Bom Pastor", "Campo Verde", "Canaã", "Caxias do Sul", "Industrial", "Ipanema", "Jucu", "Marcílio de Noronha", "Morada de Bethânia", "Nova Belém", "Nova Bethânia", "Nova Viana", "Primavera", "Ribeira", "Santa Terezinha", "Santo Agostinho", "Soteco", "Universal", "Verona", "Vila Bethânia", "Vila Nova"
-    ].sort()
-  }
-};
+// CIDADE_BAIRROS vem do speedboy-core.js — a lista era duplicada e tinha
+// divergido do app em 93 bairros.
 
 // ═══════════════════════════════════════════════════
 //  CONFIGURAÇÃO FIREBASE — hardcoded
@@ -304,46 +267,15 @@ var clientReqRoom = '';
 // ═══════════════════════════════════════════════════
 //  BAIRROS CUSTOMIZADOS (localStorage por loja)
 // ═══════════════════════════════════════════════════
-function getCustomBairros() {
-  var key = 'sb_custom_bairros_' + (STORE_NAME||'default');
-  try { return JSON.parse(localStorage.getItem(key)||'{}'); } catch(e) { return {}; }
-}
+/* Escopo por loja: cada link de loja guarda os bairros que o cliente
+   digitou. O app guarda os dele num escopo global. As duas coisas vivem
+   no mesmo speedboy-core.js, separadas pelo parametro de escopo. */
+function escopoBairros() { return STORE_NAME || 'default'; }
+function getCustomBairros()   { return SpeedBoy.getCustomBairros(escopoBairros()); }
+function saveCustomBairros(o) { return SpeedBoy.saveCustomBairros(o, escopoBairros()); }
+function addCustomBairro(city, bairro) { return SpeedBoy.addCustomBairro(city, bairro, escopoBairros()); }
+function getAllBairros(city)  { return SpeedBoy.bairrosDaCidade(city, escopoBairros()); }
 
-function saveCustomBairros(customBairros) {
-  var key = 'sb_custom_bairros_' + (STORE_NAME||'default');
-  localStorage.setItem(key, JSON.stringify(customBairros));
-}
-
-function addCustomBairro(city, bairro) {
-  if (!city || !bairro) return false;
-  var customBairros = getCustomBairros();
-  if (!customBairros[city]) customBairros[city] = [];
-  bairro = bairro.trim();
-  if (customBairros[city].indexOf(bairro) === -1) {
-    customBairros[city].push(bairro);
-    customBairros[city].sort();
-    saveCustomBairros(customBairros);
-    return true;
-  }
-  return false;
-}
-
-function getAllBairros(city) {
-  if (!city || !CIDADE_BAIRROS[city]) return [];
-  var officialBairros = CIDADE_BAIRROS[city].bairros || [];
-  var customBairros = getCustomBairros();
-  var custom = customBairros[city] || [];
-  var combined = officialBairros.concat(custom);
-  var unique = [];
-  var seen = {};
-  combined.forEach(function(b) {
-    if (!seen[b.toLowerCase()]) {
-      seen[b.toLowerCase()] = true;
-      unique.push(b);
-    }
-  });
-  return unique.sort();
-}
 
 // ═══════════════════════════════════════════════════
 //  INIT
@@ -952,13 +884,7 @@ window.sendWhatsApp = function() {
 // ═══════════════════════════════════════════════════
 //  UTILS
 // ═══════════════════════════════════════════════════
-window.maskPhone = function(el) {
-  var v = el.value.replace(/\D/g,'');
-  if(v.length>11) v=v.substring(0,11);
-  if(v.length>7)  v='('+v.substring(0,2)+') '+v.substring(2,7)+'-'+v.substring(7);
-  else if(v.length>2) v='('+v.substring(0,2)+') '+v.substring(2);
-  el.value=v;
-};
+// maskPhone vem do speedboy-core.js (exposta tambem no escopo global)
 
 window.maskMoney = function(el) {
   var v=el.value.replace(/[^0-9,]/g,'');
@@ -968,9 +894,7 @@ window.maskMoney = function(el) {
   el.value=v;
 };
 
-function parseMoney(s) {
-  return parseFloat(String(s||'').replace(',','.')) || 0;
-}
+// parseMoney vem do speedboy-core.js
 
 var _toastTimer;
 function showToast(msg, type) {

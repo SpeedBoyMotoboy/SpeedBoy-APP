@@ -189,8 +189,102 @@ for (const arq of PAGINAS) {
   }
 }
 
+// ── 7b. Uma paleta só, e ela precisa passar em contraste ──────
+/* index, pedido e motoboy tinham TRÊS blocos :root com os mesmos nomes de
+   token e valores diferentes. Pior: o --muted do pedido/motoboy era #666
+   sobre um card #13131a — 3,22:1, reprova AA para texto normal, e é
+   justamente a cor dos rótulos do formulário que o cliente preenche.
+
+   Estas duas regras seguram as duas metades do problema: ninguém volta a
+   declarar a paleta localmente, e a paleta única não pode escurecer a
+   ponto de reprovar de novo. */
+{
+  const APP = ['index.html', 'pedido.html', 'motoboy.html'];
+
+  for (const arq of APP) {
+    const src = lerApp(arq);
+    ok(/<link[^>]+href=["']speedboy\.css["']/.test(src),
+      `${arq}: carrega o speedboy.css`);
+    // Basta procurar um :root que declare --bg: é a assinatura da paleta.
+    const local = /:root\s*\{[^}]*--bg\s*:/.test(src) || /body\.light\s*\{[^}]*--bg\s*:/.test(src);
+    ok(!local, `${arq}: não redeclara a paleta localmente`);
+  }
+
+  const css = fs.readFileSync(path.join(RAIZ, 'speedboy.css'), 'utf8');
+  const bloco = sel => {
+    const m = new RegExp(sel.replace('.', '\\.') + '\\s*\\{([^}]*)\\}').exec(css);
+    return m ? m[1] : '';
+  };
+  const tokens = corpo => Object.fromEntries(
+    [...corpo.matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)].map(m => [m[1], m[2].trim()]));
+
+  // Luminância relativa e razão de contraste (WCAG 2.1, 1.4.3)
+  const canal = v => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const lum = hex => {
+    let h = hex.replace('#', '');
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+    return 0.2126 * canal(r) + 0.7152 * canal(g) + 0.0722 * canal(b);
+  };
+  const razao = (a, b) => {
+    const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+    return (x + 0.05) / (y + 0.05);
+  };
+
+  const escuro = tokens(bloco(':root'));
+  const claro  = { ...escuro, ...tokens(bloco('body.light')) };
+
+  /* 4,5:1 é o mínimo de AA para texto normal. --muted é usado em rótulo e
+     texto secundário, tamanho normal — não vale a folga de texto grande. */
+  const PARES = [['text', 'bg'], ['text', 'card'], ['muted', 'bg'], ['muted', 'card'], ['muted', 'card2']];
+  for (const [tema, paleta] of [['escuro', escuro], ['claro', claro]]) {
+    for (const [frente, fundo] of PARES) {
+      const r = razao(paleta[frente], paleta[fundo]);
+      ok(r >= 4.5,
+        `contraste ${tema}: --${frente} sobre --${fundo} = ${r.toFixed(2)}:1 (AA pede 4,5:1)`);
+    }
+  }
+}
+
+// ── 7c. Ícones do PWA de verdade ──────────────────────────────
+/* Os três tamanhos declarados apontavam para o MESMO favicon.ico, por URL
+   absoluta do GitHub Pages — e o arquivo nem está no repositório. Instalado
+   no celular, o app ficava com ícone genérico.
+   Aqui conferimos o que o Android realmente lê: caminho relativo (URL
+   absoluta quebra em qualquer outro domínio), arquivo presente, PNG de
+   verdade e com a dimensão que o manifest promete. */
+{
+  const man = JSON.parse(fs.readFileSync(path.join(RAIZ, 'manifest.json'), 'utf8'));
+
+  const remotos = man.icons.filter(i => /^https?:/i.test(i.src));
+  ok(remotos.length === 0,
+    'manifest.json: nenhum ícone por URL absoluta' +
+    (remotos.length ? ` — ${remotos.map(i => i.src).join(', ')}` : ''));
+
+  ok(man.icons.some(i => String(i.purpose || '').includes('maskable')),
+    'manifest.json: existe ícone maskable (o Android recorta em formato próprio)');
+
+  for (const icone of man.icons) {
+    const arq = path.join(RAIZ, icone.src.replace(/^\.\//, ''));
+    if (!fs.existsSync(arq)) { ok(false, `manifest.json: ${icone.src} não existe`); continue; }
+    const buf = fs.readFileSync(arq);
+    const assinatura = buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    // Largura e altura vivem no IHDR, sempre nos bytes 16..24 de um PNG.
+    const larg = buf.readUInt32BE(16), alt = buf.readUInt32BE(20);
+    const pedido = Number(String(icone.sizes).split('x')[0]);
+    ok(assinatura && larg === pedido && alt === pedido,
+      `${icone.src}: PNG ${pedido}x${pedido} de verdade (tem ${larg}x${alt})`);
+  }
+
+  // O apple-touch-icon é lido do HTML, não do manifest.
+  const idx = lerApp('index.html');
+  const apple = /<link[^>]+rel=["']apple-touch-icon["'][^>]+href=["']([^"']+)["']/.exec(idx);
+  ok(!!apple && !/^https?:/i.test(apple[1]) && fs.existsSync(path.join(RAIZ, apple[1].replace(/^\.\//, ''))),
+    'index.html: apple-touch-icon aponta para um arquivo local existente');
+}
+
 // ── 8. Arquivos .js soltos ────────────────────────────────────
-for (const arq of ['sw.js', 'speedboy-firebase.js', 'fatura-padrao.js', 'scripts/bump-versao.mjs']) {
+for (const arq of ['sw.js', 'speedboy-firebase.js', 'speedboy-core.js', 'fatura-padrao.js', 'scripts/bump-versao.mjs', 'scripts/gerar-icones.mjs']) {
   try {
     execFileSync(process.execPath, ['--check', path.join(RAIZ, arq)], { stdio: 'pipe' });
     ok(true, `${arq}: sintaxe valida`);

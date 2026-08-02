@@ -38,64 +38,36 @@ const SB = janela.SpeedBoy;
 }
 
 // ── 2. NENHUM BAIRRO PODE TER SUMIDO ─────────────────────────
-// Compara a lista unificada com as duas originais, extraídas do histórico
-// do git — se alguém apagar um bairro sem querer, isto reprova.
+/* A base de comparação está CONGELADA em bairros-antes.json, gerado uma
+   vez do último commit anterior à Etapa 5.
+
+   A primeira versão deste teste lia as duas listas antigas de
+   `git show origin/main:...`. Funcionou até o PR da Etapa 5 ser mesclado:
+   aí `origin/main` PASSOU A SER o código novo, a referência sumiu e o
+   teste quebrou na main. Base de comparação não pode ser uma referência
+   que se move — e ainda por cima o CI clona raso, então nem sempre há
+   histórico para ler. */
 {
-  const { execFileSync } = await import('child_process');
-  const doGit = (rev, arq) => {
-    try { return execFileSync('git', ['show', `${rev}:${arq}`], { cwd: RAIZ, encoding: 'utf8', stdio: ['pipe','pipe','pipe'] }); }
-    catch (e) { return null; }
-  };
-  const BASE = 'origin/main';
-  const idxAntigo = doGit(BASE, 'index.html');
-  const pedAntigo = doGit(BASE, 'pedido.html');
+  const ANTES = JSON.parse(fs.readFileSync(path.join(RAIZ, 'testes', 'bairros-antes.json'), 'utf8'));
+  const codigos = Object.keys(ANTES.cidades).sort();
 
-  if (!idxAntigo || !pedAntigo) {
-    ok(true, 'listas originais indisponíveis (sem origin/main) — comparação de bairros pulada');
-  } else {
-    const corpo = (src, marca) => {
-      let i = src.indexOf(marca); i = src.indexOf('{', i);
-      let prof = 0, j = i;
-      for (; j < src.length; j++) {
-        if (src[j] === '{') prof++;
-        else if (src[j] === '}' && --prof === 0) break;
-      }
-      return src.slice(i, j + 1);
-    };
-    // app antigo: CODIGO:[ "a","b" ]
-    const app = {};
-    for (const m of corpo(idxAntigo, 'const CIDADE_BAIRROS').matchAll(/(\w+)\s*:\s*\[(.*?)\]/gs)) {
-      app[m[1]] = [...m[2].matchAll(/"([^"]*)"/g)].map(x => x[1]);
-    }
-    // cliente antigo: 'CODIGO': { nome:'X', bairros:[ "a" ] }
-    const cli = {};
-    for (const m of corpo(pedAntigo, 'var CIDADE_BAIRROS').matchAll(/'(\w+)'\s*:\s*\{\s*nome\s*:\s*'([^']*)'\s*,\s*bairros\s*:\s*\[(.*?)\]/gs)) {
-      cli[m[1]] = [...m[3].matchAll(/"([^"]*)"/g)].map(x => x[1]);
-    }
+  ok(codigos.length > 0, `a base congelada foi lida (${codigos.length} cidades)`);
 
-    const codigos = [...new Set([...Object.keys(app), ...Object.keys(cli)])].sort();
-    ok(codigos.length > 0, `as listas originais foram lidas (${codigos.length} cidades)`);
-
-    let perdidos = 0;
-    for (const cid of codigos) {
-      const antes = new Set([...(app[cid] || []), ...(cli[cid] || [])]);
-      const agora = new Set((SB.CIDADE_BAIRROS[cid] || { bairros: [] }).bairros);
-      const sumiram = [...antes].filter(b => !agora.has(b));
-      perdidos += sumiram.length;
-      ok(sumiram.length === 0,
-        `${cid} (${SB.nomeDaCidade(cid)}): ${antes.size} bairros preservados` +
-        (sumiram.length ? ` — SUMIRAM ${sumiram.length}: ${sumiram.slice(0, 5).join(', ')}` : ''));
-    }
-    ok(perdidos === 0, `nenhum bairro perdido na unificação (${perdidos} perdas)`);
-
-    // E o app tem que ter GANHADO os que só existiam no cliente
-    let ganhos = 0;
-    for (const cid of codigos) {
-      const soCliente = new Set((cli[cid] || []).filter(b => !(app[cid] || []).includes(b)));
-      ganhos += soCliente.size;
-    }
-    ok(ganhos > 0, `o app ganhou os bairros que só existiam no formulário do cliente (${ganhos})`);
+  let perdidos = 0;
+  for (const cid of codigos) {
+    const antes = ANTES.cidades[cid].bairros;
+    const agora = new Set((SB.CIDADE_BAIRROS[cid] || { bairros: [] }).bairros);
+    const sumiram = antes.filter(b => !agora.has(b));
+    perdidos += sumiram.length;
+    ok(sumiram.length === 0,
+      `${cid} (${SB.nomeDaCidade(cid)}): ${antes.length} bairros preservados` +
+      (sumiram.length ? ` — SUMIRAM ${sumiram.length}: ${sumiram.slice(0, 5).join(', ')}` : ''));
   }
+  ok(perdidos === 0, `nenhum bairro perdido na unificação (${perdidos} perdas)`);
+
+  // E o app tem que continuar com os que só existiam no formulário do cliente
+  ok(ANTES.totalGanhos === 93,
+    `a base congelada registra os 93 bairros que só o cliente tinha (${ANTES.totalGanhos})`);
 }
 
 // ── 3. Formato único ─────────────────────────────────────────

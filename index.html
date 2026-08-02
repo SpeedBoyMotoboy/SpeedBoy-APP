@@ -2842,11 +2842,28 @@ function markDayReceived(ref){
   saveHistory();renderReport();
 }
 
+/* Guarda as paradas de hoje no histórico do dia.
+
+   Antes esta função fazia `history[ex] = entry`: o lote de agora
+   SUBSTITUÍA tudo que já estava gravado naquela data. Quem limpa a lista
+   duas vezes no mesmo dia — de manhã e de tarde, que é o uso normal —
+   perdia as entregas da manhã do histórico, e com elas o valor delas no
+   fechamento. Dois lotes de R$ 27 e R$ 20 viravam R$ 20.
+
+   Agora funde por identidade. A versão de agora vence a que já estava
+   gravada (é a mais recente da mesma parada), e o que só existe na
+   gravada permanece. */
 function saveToHistory(date){
   if(!stops.length)return;
-  const ex=history.findIndex(d=>d.date===date);
-  const entry={date,stops:JSON.parse(JSON.stringify(stops))};
-  if(ex>=0)history[ex]=entry; else history.unshift(entry);
+  const novas = JSON.parse(JSON.stringify(stops));
+  const ex = history.findIndex(d=>d.date===date);
+  if(ex>=0){
+    const porId = new Map((history[ex].stops||[]).map(s=>[idDaParada(s), s]));
+    novas.forEach(s=>porId.set(idDaParada(s), s));
+    history[ex] = {date, stops:[...porId.values()]};
+  } else {
+    history.unshift({date, stops:novas});
+  }
   if(history.length>60)history=history.slice(0,60);
   saveHistory();
 }
@@ -2879,9 +2896,18 @@ function getReportData(){
   else{ cutoff=new Date(now); cutoff.setDate(now.getDate()-60); }
   const days=allDays.filter(d=>parseDate(d.date)>=cutoff);
   let total=0,received=0,deliveries=0,cancelled=0; const allStops=[]; const sm={};
+  /* A mesma entrega pode aparecer duas vezes: `stops` (hoje) e o registro
+     que o "limpar o dia" gravou em history para a data de hoje descrevem
+     as mesmas paradas. Sem esta trava ela entra DUAS VEZES no total do
+     fechamento. Vence a primeira ocorrência, que é a de `stops` — a mais
+     recente. */
+  const jaContadas=new Set();
   days.forEach(day=>day.stops.forEach(s=>{
     // Apenas entregas finalizadas entram no fechamento
     if(!s.done)return;
+    const id=idDaParada(s);
+    if(jaContadas.has(id))return;
+    jaContadas.add(id);
     // Usa a data em que foi finalizada (_doneDate); cai para a lógica antiga se ausente
     const reportDate=s._doneDate||(day===days[0]?(s.deliveryDate||s._addedDate||day.date):day.date);
     // Entregas canceladas aparecem assinaladas, com taxa zerada e fora dos totais

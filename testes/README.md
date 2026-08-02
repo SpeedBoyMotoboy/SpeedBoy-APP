@@ -25,9 +25,42 @@ Ou individualmente:
 | `backup.mjs` | leitura tolerante, backup rotativo, cota estourada, migração de schema |
 | `sync.mjs` | merge entre os dois aparelhos (veja abaixo) |
 | `solicitacoes.mjs` | editar e cancelar pedido do cliente sem colisão |
+| `fechamento.mjs` | histórico do dia e contagem de entregas (veja abaixo) |
 | `nucleo.mjs` | `speedboy-core.js` — sobretudo: nenhum bairro se perdeu (veja abaixo) |
+| `desfazer.mjs` | desfazer e confirmação (veja abaixo) |
 | `lint.mjs` | guarda de regressão (veja abaixo) |
 | `smoke.mjs` | o app inteiro num navegador real |
+
+## `fechamento.mjs` — o número que vira fatura
+
+Duas formas de o total sair errado, as duas achadas lendo o código. Nenhuma dá
+erro, avisa ou aparece na tela — o número simplesmente sai diferente do que o
+dia foi.
+
+- `saveToHistory` **substituía** o dia em vez de fundir. Limpar a lista de manhã
+  e de tarde apagava as entregas da manhã: **R$ 67 do dia viravam R$ 20**
+- `getReportData` lê hoje de `stops` **e** de `history`; depois de um "limpar o
+  dia" a mesma entrega estava nos dois e contava duas vezes: **R$ 30 viravam
+  R$ 60**
+
+Rodado contra o `index.html` de antes da correção, o teste reprova em 5
+verificações com esses sintomas exatos. Cobre também o que a correção **não**
+pode quebrar: três entregas distintas continuam somando, e parada ainda não
+entregue continua fora do fechamento.
+
+## `desfazer.mjs` — a lápide precisa sair junto
+
+O teste mais importante do arquivo. Excluir uma parada grava um *tombstone*
+(Etapa 3), e no merge ele vence toda versão mais antiga. Se o desfazer
+restaurar a parada **sem apagar a lápide**, ela volta na tela e o próximo
+snapshot do outro aparelho a mata de novo — o desfazer pareceria funcionar e se
+desfaria sozinho segundos depois.
+
+Cobre ainda: a lápide de *outra* parada não pode ser apagada junto; o retrato
+não compartilha referência com o array vivo (senão o "antes" muda com o
+"depois"); nenhum `confirm()` do navegador sobrou; toda ação destrutiva oferece
+desfazer **ou** pede confirmação; e a confirmação resolve com "não" quando
+fechada por fora, para não deixar a promessa pendurada.
 
 ## `nucleo.mjs` — nenhum bairro pode sumir
 
@@ -101,6 +134,10 @@ Sobe um servidor estático na raiz e abre as páginas num Chromium. Verifica:
 - o `speedboy-core.js` carrega e o seletor de bairro do app oferece nomes que
   antes só existiam na lista do cliente (`Caratoíra`, `Cobi de Baixo`, …)
 - `--muted` chega na página vindo do `speedboy.css`
+- excluir uma parada age em um toque, a barra de desfazer aparece dizendo o que
+  saiu, e tocar em Desfazer devolve a parada **e apaga a lápide junto**
+- a confirmação de apagar histórico abre dentro do app com os números reais, e
+  fechá-la pelo botão voltar **não** executa a ação
 
 Erros de rede (Firebase, fontes do Google) são esperados em ambiente isolado e
 ficam filtrados — o teste só reprova por erro de código.

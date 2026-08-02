@@ -195,9 +195,13 @@ await secao('Backup automático roda no boot e é restaurável', async () => {
   ok(r.copias === 1, 'backup automático criou uma cópia');
   ok(r.paradas === 1, 'a cópia contém a parada salva');
 
-  const restaurado = await page.evaluate((chave) => {
-    window.confirm = () => true;      // aceita o diálogo de confirmação
-    restoreAutoBackup(chave);
+  /* Restaurar agora pede a confirmação do próprio app, não o confirm() do
+     navegador — então o teste responde tocando no botão, como o usuário. */
+  const restaurado = await page.evaluate(async (chave) => {
+    const promessa = restoreAutoBackup(chave);
+    await new Promise(r => setTimeout(r, 100));
+    document.getElementById('confirmSim').click();
+    await promessa;
     return { n: stops.length, nome: stops[0] && stops[0].name, temPre: !!localStorage.getItem('sb_bkp_antes_restauro') };
   }, r.chave);
   ok(restaurado.n === 1 && restaurado.nome === 'Cliente Backup', 'restaurar traz as paradas de volta');
@@ -369,6 +373,69 @@ await secao('Núcleo compartilhado no app', async () => {
     }, [cidade, bairro]);
     ok(achou, `o seletor do app sugere "${bairro}" (${cidade}) — só existia na lista do cliente`);
   }
+
+  await ctx.close();
+});
+
+// ── 7e. Desfazer e confirmação, no navegador ─────────────────
+await secao('Desfazer e confirmação', async () => {
+  const { page, ctx } = await abrir('/index.html');
+
+  // Excluir uma parada agora age em UM toque e oferece saída
+  const estado = await page.evaluate(() => {
+    stops = [{ _id: 'a', name: 'Cliente A', value: '10' },
+             { _id: 'b', name: 'Cliente B', value: '20' }];
+    saveStops(); renderHome();
+    delStop(0);
+    return {
+      sobraram: stops.length,
+      barraVisivel: document.getElementById('snack').classList.contains('show'),
+      texto: document.getElementById('snackMsg').textContent,
+      lapide: !!(JSON.parse(localStorage.getItem('sb_tombs') || '{}').a)
+    };
+  });
+  ok(estado.sobraram === 1, 'excluir remove a parada sem pedir confirmação');
+  ok(estado.barraVisivel, 'a barra de desfazer aparece');
+  ok(/Cliente A/.test(estado.texto), `a barra diz o que saiu (${estado.texto})`);
+  ok(estado.lapide, 'a exclusão gerou lápide, como manda a sincronização');
+
+  // Tocar em Desfazer devolve a parada E limpa a lápide
+  await page.click('#snackUndo');
+  await page.waitForTimeout(150);
+  const depois = await page.evaluate(() => ({
+    total: stops.length,
+    voltou: stops.some(s => s._id === 'a'),
+    lapide: !!(JSON.parse(localStorage.getItem('sb_tombs') || '{}').a),
+    barraVisivel: document.getElementById('snack').classList.contains('show')
+  }));
+  ok(depois.total === 2 && depois.voltou, 'Desfazer devolve a parada');
+  ok(!depois.lapide,
+    'a lápide sumiu junto — sem isso o outro aparelho apagaria a parada de novo');
+  ok(!depois.barraVisivel, 'a barra some depois de usada');
+
+  // E não dá para desfazer duas vezes
+  const duplicou = await page.evaluate(() => { desfazerAgora(); return stops.length; });
+  ok(duplicou === 2, 'chamar desfazer de novo não duplica nada');
+
+  /* A confirmação em massa precisa dizer os números — e o botão voltar do
+     aparelho tem que fechá-la SEM executar a ação. */
+  const conf = await page.evaluate(async () => {
+    history = [{ date: '01/01/2026', stops: [{ _id: 'x', name: 'X', value: '30', done: true }] }];
+    const promessa = clearHist();
+    await new Promise(r => setTimeout(r, 100));
+    const visivel = !document.getElementById('confirmModal').classList.contains('hidden');
+    const texto = document.getElementById('confirmTexto').textContent;
+    const detalhe = document.getElementById('confirmDetalhe').textContent;
+    window.history.back();                       // botão voltar do aparelho
+    await promessa;
+    return { visivel, texto, detalhe, diasRestantes: history.length };
+  });
+  ok(conf.visivel, 'a confirmação abre dentro do app, não no diálogo do navegador');
+  ok(/1 dia\(s\) e 1 entrega\(s\)/.test(conf.texto),
+    `a confirmação conta o que vai sumir (${conf.texto})`);
+  ok(/R\$ 30/.test(conf.detalhe), `e diz quanto vale (${conf.detalhe})`);
+  ok(conf.diasRestantes === 1,
+    'fechar pelo botão voltar NÃO executa a ação — o histórico continua lá');
 
   await ctx.close();
 });

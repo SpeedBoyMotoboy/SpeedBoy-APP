@@ -389,11 +389,58 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 .toast.success{border-color:var(--green);color:var(--green);}
 .toast.error{border-color:var(--red);color:var(--red);}
+
+/* DESFAZER
+   Barra separada do toast, e por dois motivos: o toast tem
+   pointer-events:none (não recebe toque) e white-space:nowrap (não cabe
+   botão). Fica embaixo, acima da barra de navegação, onde o polegar
+   alcança sem atravessar a tela. */
+.snack{position:fixed;left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));max-width:456px;margin:0 auto;background:var(--card2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--radius);padding:10px 10px 10px 14px;display:flex;align-items:center;gap:10px;z-index:420;opacity:0;transform:translateY(12px);transition:opacity var(--normal),transform var(--normal);pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.45);}
+.snack.show{opacity:1;transform:translateY(0);pointer-events:auto;}
+.snack-msg{flex:1;font-size:13px;font-weight:600;color:var(--text);line-height:1.35;}
+.snack-btn{background:var(--accent);border:none;color:#000;border-radius:9px;padding:0 16px;min-height:40px;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;}
+
+/* CONFIRMAÇÃO
+   O confirm() do navegador não deixa dizer o que se perde, trava a thread
+   e no Android abre um diálogo do sistema que não parece parte do app. */
+/* O .modal-name é verde para todos os modais. Verde numa confirmação de
+   apagar lê como "pode seguir" — exatamente o contrário do que a tela quer
+   dizer. Em ação destrutiva o título acompanha o botão. */
+#confirmTitulo.perigo{color:var(--red);}
+.confirm-texto{font-size:14px;color:var(--text);line-height:1.5;margin:10px 0 6px;}
+.confirm-detalhe{font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:16px;}
+.confirm-acoes{display:flex;gap:8px;}
+.confirm-acoes button{flex:1;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;padding:12px 8px;}
+.confirm-nao{background:var(--card2);border:1px solid var(--border);color:var(--text);}
+.confirm-sim{background:var(--green);border:none;color:#000;}
+.confirm-sim.perigo{background:var(--red);color:#fff;}
 </style>
 </head>
 <body>
 
 <div class="toast" id="toast"></div>
+
+<!-- DESFAZER: aria-live para o leitor de tela anunciar sem roubar o foco -->
+<div class="snack" id="snack" role="status" aria-live="polite">
+  <span class="snack-msg" id="snackMsg"></span>
+  <button type="button" class="snack-btn compacto" id="snackUndo" onclick="desfazerAgora()">Desfazer</button>
+</div>
+
+<!-- CONFIRMAÇÃO -->
+<div class="modal-overlay hidden" id="confirmModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <div class="modal-name" id="confirmTitulo">Confirmar</div>
+      <button type="button" class="modal-close compacto" onclick="responderConfirmacao(false)">✕</button>
+    </div>
+    <div class="confirm-texto" id="confirmTexto"></div>
+    <div class="confirm-detalhe" id="confirmDetalhe"></div>
+    <div class="confirm-acoes">
+      <button type="button" class="confirm-nao" onclick="responderConfirmacao(false)">Cancelar</button>
+      <button type="button" class="confirm-sim" id="confirmSim" onclick="responderConfirmacao(true)">Confirmar</button>
+    </div>
+  </div>
+</div>
 
 <!-- WPP MODAL -->
 <div class="modal-overlay hidden" id="wppModal">
@@ -1290,6 +1337,115 @@ function toast(msg,type=''){
 }
 
 // ═══════════════════════════════════════════════════════
+//  DESFAZER
+// ═══════════════════════════════════════════════════════
+/* Por que desfazer no lugar de mais um confirm():
+
+   Confirmação em excesso vira reflexo. O dedo aprende a tocar "OK" antes
+   de o olho ler, e aí ela não protege mais nada — só cobra um toque a
+   mais de quem já sabia o que queria. Para excluir UM item, desfazer
+   protege melhor: age em um toque, e a saída fica visível por alguns
+   segundos, inclusive para quem só percebeu o erro depois.
+
+   Confirmação continua existindo, mas onde ela ganha: ação em massa e
+   ação sem volta. Ver confirmarAcao() abaixo. */
+
+let _desfazerFn = null, _desfazerTimer = null;
+const DESFAZER_MS = 8000;      // tempo de guardar o guidão e olhar a tela
+
+function comDesfazer(mensagem, desfazer, ms){
+  const barra = document.getElementById('snack');
+  if (!barra) { toast(mensagem, 'success'); return; }   // fallback: nunca engolir o aviso
+  _desfazerFn = typeof desfazer === 'function' ? desfazer : null;
+  document.getElementById('snackMsg').textContent = mensagem;
+  document.getElementById('snackUndo').style.display = _desfazerFn ? '' : 'none';
+  barra.classList.add('show');
+  clearTimeout(_desfazerTimer);
+  _desfazerTimer = setTimeout(esconderDesfazer, ms || DESFAZER_MS);
+}
+
+function esconderDesfazer(){
+  const barra = document.getElementById('snack');
+  if (barra) barra.classList.remove('show');
+  clearTimeout(_desfazerTimer);
+  _desfazerFn = null;                  // some a chance: não dá para desfazer duas vezes
+}
+
+function desfazerAgora(){
+  const fn = _desfazerFn;
+  esconderDesfazer();
+  if (!fn) return;
+  try { fn(); } catch (e) { sbLogError('desfazer', e); toast('Não consegui desfazer','error'); }
+}
+
+/* Restaura um retrato das paradas.
+
+   O detalhe que não dá para ignorar: excluir grava tombstone (Etapa 3), e
+   no merge o tombstone vence toda versão mais antiga que ele. Restaurar
+   sem apagar o tombstone junto traria a parada de volta na tela — e o
+   próximo snapshot vindo do outro aparelho a mataria de novo. O desfazer
+   pareceria funcionar e se desfaria sozinho segundos depois. */
+function restaurarParadas(retrato){
+  const tombs = getTombs();
+  retrato.forEach(s => { delete tombs[idDaParada(s)]; });
+  saveTombs(tombs);
+  stops = JSON.parse(JSON.stringify(retrato));
+  saveStops();
+  renderHome();
+}
+
+// Retrato das paradas de agora, para devolver depois
+function retratoParadas(){ return JSON.parse(JSON.stringify(stops)); }
+
+/* Limpar o dia mexe em DUAS coisas: esvazia as paradas e grava um registro
+   no histórico. Desfazer só as paradas deixaria a mesma entrega nos dois
+   lugares — e o fechamento tem trava contra isso, mas o histórico ficaria
+   com um registro que não deveria existir. */
+function retratoDoDia(){
+  return { stops: retratoParadas(), history: JSON.parse(JSON.stringify(history)) };
+}
+function restaurarDia(r){
+  history = JSON.parse(JSON.stringify(r.history));
+  saveHistory();
+  restaurarParadas(r.stops);
+}
+
+// ═══════════════════════════════════════════════════════
+//  CONFIRMAÇÃO
+// ═══════════════════════════════════════════════════════
+/* Substitui o confirm() do navegador nas ações em massa. Três ganhos
+   concretos: dá para dizer O QUE se perde (contado, não "TODO o
+   histórico"), não trava a thread, e no Android deixa de abrir um
+   diálogo do sistema que não parece parte do app.
+
+   Passa por abrirModal/fecharModal, então o botão voltar do aparelho
+   fecha a confirmação em vez de sair da tela — é o que a Etapa 3
+   construiu. */
+let _respostaConfirmacao = null;
+
+function confirmarAcao({titulo, texto, detalhe, botao, perigo}){
+  return new Promise(resolve => {
+    const tit = document.getElementById('confirmTitulo');
+    tit.textContent = titulo || 'Confirmar';
+    tit.className = 'modal-name' + (perigo ? ' perigo' : '');
+    document.getElementById('confirmTexto').textContent   = texto || '';
+    document.getElementById('confirmDetalhe').textContent = detalhe || '';
+    const sim = document.getElementById('confirmSim');
+    sim.textContent = botao || 'Confirmar';
+    sim.className = 'confirm-sim' + (perigo ? ' perigo' : '');
+    _respostaConfirmacao = resolve;
+    abrirModal('confirmModal');
+  });
+}
+
+function responderConfirmacao(sim){
+  const resolve = _respostaConfirmacao;
+  _respostaConfirmacao = null;
+  fecharModal('confirmModal');
+  if (resolve) resolve(!!sim);
+}
+
+// ═══════════════════════════════════════════════════════
 //  NAVEGAÇÃO
 //
 //  Antes a navegação era só mostrar/esconder <div class="screen">, sem
@@ -1333,6 +1489,15 @@ function _empilhar(){
 function _mostrarModal(id, mostrar){
   const el = document.getElementById(id);
   if (el) el.classList.toggle('hidden', !mostrar);
+  /* Ponto único por onde TODO fechamento passa — botão voltar, troca de
+     tela, ✕. Se a confirmação sumir por qualquer um deles, a promessa
+     precisa ser resolvida com "não"; senão quem chamou fica esperando
+     para sempre e a ação nunca acontece nem é cancelada. */
+  if (id === 'confirmModal' && !mostrar && _respostaConfirmacao) {
+    const resolve = _respostaConfirmacao;
+    _respostaConfirmacao = null;
+    resolve(false);
+  }
 }
 
 function abrirModal(id){
@@ -1749,7 +1914,16 @@ function togDone(i){
 
 function togPaid(i)        { stops[i].paid=!stops[i].paid; saveStops(); renderHome(); }
 function togProductPaid(i) { stops[i].productPaid=!stops[i].productPaid; saveStops(); renderHome(); }
-function delStop(i){ if(!confirm(`Remover ${stops[i].name}?`))return; stops.splice(i,1); saveStops(); renderHome(); }
+/* Um toque para remover, e a saída fica visível por 8 segundos. Antes era
+   confirm() — dois toques, e nenhuma volta depois do OK. */
+function delStop(i){
+  const s=stops[i]; if(!s)return;
+  const antes=retratoParadas();
+  stops.splice(i,1); saveStops(); renderHome();
+  comDesfazer(`🗑️ "${s.name||'Parada'}" removida`, ()=>{
+    restaurarParadas(antes); toast('↩️ Parada de volta','success');
+  });
+}
 
 // Abrir Google Maps com endereço pré-preenchido
 function openMapsWithAddress(i){
@@ -1971,8 +2145,13 @@ function _renderQsAddrList(){
     </div>`).join('');
 }
 function rmQsAddr(i){
+  const antes=JSON.parse(JSON.stringify(_qsAddresses));
+  const alvo=_qsAddresses[i]; if(!alvo)return;
   _qsAddresses.splice(i,1);
   _renderQsAddrList();
+  comDesfazer(`📍 Endereço removido`, ()=>{
+    _qsAddresses=antes;_renderQsAddrList();toast('↩️ Endereço de volta','success');
+  });
 }
 
 function openQsAddrForm(addrIdx){
@@ -2031,7 +2210,14 @@ function saveQsModal(){
   renderQuickStoresConfig();
   toast((_qsEditIdx>=0?'✅ Empresa atualizada!':'⚡ "'+name+'" adicionada!'),'success');
 }
-function rmQuickStore(i){const qs=getQuickStores();if(!confirm('Remover '+qs[i]?.name+'?'))return;qs.splice(i,1);saveQuickStores(qs);renderQuickStoresConfig();}
+function rmQuickStore(i){
+  const antes=getQuickStores(); const alvo=antes[i]; if(!alvo)return;
+  const restantes=antes.slice(); restantes.splice(i,1);
+  saveQuickStores(restantes);renderQuickStoresConfig();
+  comDesfazer(`⚡ "${alvo.name||'Loja rápida'}" removida`, ()=>{
+    saveQuickStores(antes);renderQuickStoresConfig();toast('↩️ Loja rápida de volta','success');
+  });
+}
 function renderQuickStoresConfig(){
   const el=document.getElementById('quickStoresList');
   if(!el)return;
@@ -2663,9 +2849,15 @@ function saveExpense(){
   toast('💸 Despesa registrada!','success');
 }
 
+/* Apagava a despesa sem confirmar E sem avisar: o valor sumia da tela e
+   pronto. Agora avisa e dá volta. */
 function delExpense(id){
-  const exps=getExpenses().filter(e=>e.id!==id);
-  saveExpenses(exps);renderFinance();
+  const antes=getExpenses();
+  const alvo=antes.find(e=>e.id===id);
+  saveExpenses(antes.filter(e=>e.id!==id));renderFinance();
+  comDesfazer(`🗑️ Despesa de ${fmtMoney(alvo?alvo.amount:0)} apagada`, ()=>{
+    saveExpenses(antes);renderFinance();toast('↩️ Despesa de volta','success');
+  });
 }
 
 function getTodayExpenses(){
@@ -3601,7 +3793,14 @@ function renderLinks(){
 
 function copyLink(i){ const l=getLinks()[i]?.link; if(!l)return; navigator.clipboard?.writeText(l).then(()=>toast('📋 Link copiado!','success')).catch(()=>toast('Link: '+l,'success')); }
 function shareLink(i){ const l=getLinks()[i]; if(!l)return; const msg=`Olá! 👋\n\nUse este link para solicitar entregas ao SPEEDBOY:\n\n${l.link}\n\nÉ só abrir e preencher! 🛵`; window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank'); }
-function delLink(i){ const links=getLinks(); if(!confirm('Remover link da loja '+links[i]?.name+'?'))return; links.splice(i,1); saveLinks(links); renderLinks(); }
+function delLink(i){
+  const antes=getLinks(); const alvo=antes[i]; if(!alvo)return;
+  const restantes=antes.slice(); restantes.splice(i,1);
+  saveLinks(restantes); renderLinks();
+  comDesfazer(`🔗 Link de "${alvo.name||'loja'}" removido`, ()=>{
+    saveLinks(antes); renderLinks(); toast('↩️ Link de volta','success');
+  });
+}
 
 
 // ═══════════════════════════════════════════════════════
@@ -3665,7 +3864,14 @@ function renderStores(){
   list.innerHTML=cfg.stores.map((s,i)=>`<div class="store-chip">${s}<button type="button" class="store-chip-del" onclick="rmStore(${i})">×</button></div>`).join('');
 }
 function addStore(){const n=document.getElementById('newStore').value.trim();if(!n)return;if(cfg.stores.includes(n)){toast('Loja já cadastrada','error');return;}cfg.stores.push(n);document.getElementById('newStore').value='';saveCfg();renderStores();updateStoreSelect();toast(`🏪 "${n}" adicionada!`,'success');}
-function rmStore(i){cfg.stores.splice(i,1);saveCfg();renderStores();updateStoreSelect();}
+function rmStore(i){
+  const nome=cfg.stores[i]; if(nome===undefined)return;
+  const antes=cfg.stores.slice();
+  cfg.stores.splice(i,1);saveCfg();renderStores();updateStoreSelect();
+  comDesfazer(`🏪 "${nome}" removida`, ()=>{
+    cfg.stores=antes;saveCfg();renderStores();updateStoreSelect();toast('↩️ Loja de volta','success');
+  });
+}
 function updateStoreSelect(){const sel=document.getElementById('fStore');const cur=sel.value;sel.innerHTML='<option value="">— Sem loja específica —</option>'+cfg.stores.map(s=>`<option value="${s}">${s}</option>`).join('');sel.value=cur;}
 function getGPS(){const btn=document.querySelector('.btn-gps');if(!navigator.geolocation){toast('GPS não suportado','error');return;}btn.textContent='⏳...';navigator.geolocation.getCurrentPosition(async pos=>{try{const res=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);const data=await res.json();document.getElementById('cfgOrigin').value=data.display_name||`${pos.coords.latitude}, ${pos.coords.longitude}`;toast('📍 Capturado!','success');}catch(e){document.getElementById('cfgOrigin').value=`${pos.coords.latitude}, ${pos.coords.longitude}`;}btn.textContent='📍 GPS';},()=>{btn.textContent='📍 GPS';toast('Permita acesso ao GPS','error');});}
 
@@ -3990,8 +4196,23 @@ async function acceptPending(key){
   await rmPending(key);
   toast('✅ Entrega de '+s.name+' adicionada!','success'); renderHome();
 }
-async function rejectPending(key){const s=pendingData[key];if(!confirm('Recusar entrega de '+(s?.name||'cliente')+'?'))return;await updateTracking(key,'recusado');await rmPending(key);}
-async function rejectAll(){const keys=Object.keys(pendingData);if(!keys.length)return;if(!confirm('Recusar todos os '+keys.length+' pedido(s)?'))return;for(const k of keys){await updateTracking(k,'recusado');await rmPending(k);}}
+async function rejectPending(key){
+  const s=pendingData[key];
+  if(!await confirmarAcao({titulo:'Recusar entrega',
+    texto:`Recusar a entrega de "${s?.name||'cliente'}"?`,
+    detalhe:'O cliente vê a recusa no acompanhamento dele. O pedido sai da sua lista de pendentes.',
+    botao:'Recusar', perigo:true}))return;
+  await updateTracking(key,'recusado');await rmPending(key);
+}
+async function rejectAll(){
+  const keys=Object.keys(pendingData);if(!keys.length)return;
+  const nomes=keys.map(k=>pendingData[k]&&pendingData[k].name).filter(Boolean).slice(0,3).join(', ');
+  if(!await confirmarAcao({titulo:'Recusar todos os pedidos',
+    texto:`Recusar os ${keys.length} pedido(s) pendentes?`,
+    detalhe:(nomes?`Inclui ${nomes}${keys.length>3?' e outros':''}. `:'')+'Cada cliente vê a recusa no acompanhamento dele, e isto não tem como desfazer.',
+    botao:'Recusar todos', perigo:true}))return;
+  for(const k of keys){await updateTracking(k,'recusado');await rmPending(k);}
+}
 async function rmPending(key){if(!fbDb)return;try{const room=localStorage.getItem('sb_room_code')||'';const {ref:r,remove}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');await remove(r(fbDb,'rooms/'+room+'/pending/'+key));}catch(e){console.error(e);}}
 
 // ── Requisições do cliente (editar / cancelar) ──────────────────────
@@ -4022,15 +4243,17 @@ function listenClientRequests(){
 // própria chave da solicitação era a chave do pedido.
 function chaveDoPedido(reqId,req){ return (req && req.orderKey) || reqId; }
 
-function showEditRequest(reqId,req){
+async function showEditRequest(reqId,req){
   const key=chaveDoPedido(reqId,req);
   const si=stops.findIndex(s=>s._trackKey===key);
   // Entregas já finalizadas não podem ser alteradas pelo cliente
   if(si>=0&&stops[si].done){toast('⚠️ Entrega de '+(req.name||'?')+' já finalizada — edição ignorada','error');rmClientRequest(reqId);return;}
   const f=req.fields||{};
   const lines=Object.entries(f).filter(([,v])=>v).map(([k,v])=>`${k}: ${v}`).join('\n');
-  const msg=`✏️ Cliente quer EDITAR a entrega de "${req.name||'?'}":\n\n${lines}\n\nAceitar alterações?`;
-  if(!confirm(msg)){rmClientRequest(reqId);return;}
+  if(!await confirmarAcao({titulo:'✏️ Pedido de alteração',
+    texto:`O cliente quer EDITAR a entrega de "${req.name||'?'}".`,
+    detalhe:lines||'Sem detalhes informados.',
+    botao:'Aceitar alteração'})){rmClientRequest(reqId);return;}
   if(si>=0){Object.assign(stops[si],req.fields||{});saveStops();renderHome();toast('✅ Entrega de '+req.name+' atualizada','success');}
   /* O cliente pode pedir alteração antes de o motoboy aceitar. Nesse caso a
      entrega ainda está em /pending e não existe em stops — antes caía no
@@ -4044,9 +4267,12 @@ function showEditRequest(reqId,req){
   else toast('⚠️ Entrega não encontrada','error');
   rmClientRequest(reqId);
 }
-function showCancelRequest(reqId,req){
+async function showCancelRequest(reqId,req){
   const key=chaveDoPedido(reqId,req);
-  if(!confirm(`❌ Cliente quer CANCELAR a entrega de "${req.name||'?'}".\n\nAceitar cancelamento? A entrega será assinalada como CANCELADA e a taxa zerada.`)){rmClientRequest(reqId);return;}
+  if(!await confirmarAcao({titulo:'❌ Pedido de cancelamento',
+    texto:`O cliente quer CANCELAR a entrega de "${req.name||'?'}".`,
+    detalhe:'Aceitando, a entrega fica assinalada como CANCELADA e a taxa vai a zero no fechamento.',
+    botao:'Aceitar cancelamento', perigo:true})){rmClientRequest(reqId);return;}
   const markCancelled=s=>{ s.cancelled=true; s.value=0; s.paid=false; };
   const si=stops.findIndex(s=>s._trackKey===key);
   if(si>=0){
@@ -4137,11 +4363,14 @@ function renderAutoBackups(){
   }).join('');
 }
 
-function restoreAutoBackup(key){
+async function restoreAutoBackup(key){
   const b=sbRead(key,null);
   if(!b){toast('Cópia não encontrada','error');return;}
   const dia=(b.dia||key.slice(7)).split('-').reverse().join('/');
-  if(!confirm(`Restaurar a cópia de ${dia}?\n\n${(b.stops||[]).length} parada(s) e ${(b.history||[]).length} dia(s) de histórico vão SUBSTITUIR os dados atuais.\n\nO estado de agora é salvo antes, como cópia de segurança.`))return;
+  if(!await confirmarAcao({titulo:`Restaurar cópia de ${dia}`,
+    texto:`${(b.stops||[]).length} parada(s) e ${(b.history||[]).length} dia(s) de histórico vão SUBSTITUIR os dados de agora.`,
+    detalhe:`Hoje você tem ${stops.length} parada(s) e ${history.length} dia(s) de histórico. O estado atual é guardado antes, como cópia de segurança.`,
+    botao:'Restaurar', perigo:true}))return;
   // Guarda o estado atual antes de sobrescrever — restaurar não pode ser via de mão única
   try{
     localStorage.setItem('sb_bkp_antes_restauro', JSON.stringify({
@@ -4166,15 +4395,79 @@ function exportBackup(){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`speedboy_backup_${today}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
   toast('💾 Backup exportado!','success');
 }
-function importBackup(file){if(!file)return;const reader=new FileReader();reader.onload=e=>{try{const data=JSON.parse(e.target.result);if(!data.version||!Array.isArray(data.stops)){toast('Backup inválido','error');return;}if(!confirm(`Importar backup de ${data.exportedAt?new Date(data.exportedAt).toLocaleDateString('pt-BR'):'?'}?\nIsso substituirá suas paradas e histórico.`))return;stops=data.stops||[];history=data.history||[];if(data.cfg){cfg={...cfg,...data.cfg};saveCfg();}forcarCarimboAgora();saveStops();saveHistory();toast('✅ Backup importado!','success');goNav('homeScreen','nav-home');}catch(e){toast('Erro ao ler backup','error');}};reader.readAsText(file,'UTF-8');}
+function importBackup(file){
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!data.version||!Array.isArray(data.stops)){toast('Backup inválido','error');return;}
+      const quando=data.exportedAt?new Date(data.exportedAt).toLocaleDateString('pt-BR'):'data desconhecida';
+      /* O texto antigo era "Isso substituirá suas paradas e histórico" — não
+         dizia quanto vinha nem quanto ia embora. Importar por engano é
+         justamente onde os números importam. */
+      if(!await confirmarAcao({titulo:'Importar backup',
+        texto:`Importar o backup de ${quando}?`,
+        detalhe:`Vêm ${(data.stops||[]).length} parada(s) e ${(data.history||[]).length} dia(s) de histórico, SUBSTITUINDO as ${stops.length} parada(s) e ${history.length} dia(s) que você tem agora.`,
+        botao:'Importar', perigo:true}))return;
+      stops=data.stops||[];history=data.history||[];
+      if(data.cfg){cfg={...cfg,...data.cfg};saveCfg();}
+      forcarCarimboAgora();saveStops();saveHistory();
+      toast('✅ Backup importado!','success');
+      goNav('homeScreen','nav-home');
+    }catch(e){toast('Erro ao ler backup','error');}
+  };
+  reader.readAsText(file,'UTF-8');
+}
 
 // ═══════════════════════════════════════════════════════
 //  CLEAR
 // ═══════════════════════════════════════════════════════
-function clearDay(){if(!confirm('Apagar todas as paradas de hoje?'))return;saveToHistory(new Date().toLocaleDateString('pt-BR'));stops=[];saveStops();renderHome();toast('🗑️ Lista limpa','success');}
-function clearHist(){if(!confirm('Apagar TODO o histórico?'))return;history=[];saveHistory();toast('Histórico apagado','success');}
+/* Ação em massa: aqui a confirmação ganha do desfazer, porque o estrago é
+   grande. Mas ela precisa DIZER o estrago — "Apagar todas as paradas de
+   hoje?" não informa nada que o motoboy já não saiba. */
+async function clearDay(){
+  if(!stops.length){ toast('A lista já está vazia'); return; }
+  const total=stops.length, feitas=stops.filter(s=>s.done).length;
+  const ok=await confirmarAcao({
+    titulo:'🗑️ Limpar paradas do dia',
+    texto:`Apagar as ${total} parada(s) da lista?`,
+    detalhe:feitas
+      ? `As ${feitas} já entregue(s) vão para o histórico e continuam contando no fechamento. As outras ${total-feitas} saem sem deixar registro.`
+      : `Nenhuma foi entregue ainda, então as ${total} saem sem deixar registro no fechamento.`,
+    botao:'Limpar lista', perigo:true
+  });
+  if(!ok)return;
+  const antes=retratoDoDia();
+  saveToHistory(new Date().toLocaleDateString('pt-BR'));
+  stops=[];saveStops();renderHome();
+  comDesfazer(`🗑️ ${total} parada(s) removida(s)`, ()=>{
+    restaurarDia(antes); toast('↩️ Lista de volta','success');
+  });
+}
+
+/* O único caso do app sem volta possível: o histórico não é reconstruível
+   a partir de nada. Por isso é o que mais precisa dizer o tamanho do que
+   vai embora — e por isso não tem desfazer, teria de guardar um retrato do
+   histórico inteiro. */
+async function clearHist(){
+  if(!history.length){ toast('O histórico já está vazio'); return; }
+  const dias=history.length;
+  const entregas=history.reduce((t,d)=>t+(d.stops||[]).length,0);
+  const valor=history.reduce((t,d)=>t+(d.stops||[]).reduce((x,s)=>x+(s.done&&!s.cancelled?parseMoney(s.value):0),0),0);
+  const ok=await confirmarAcao({
+    titulo:'🗑️ Apagar todo o histórico',
+    texto:`Apagar ${dias} dia(s) e ${entregas} entrega(s)?`,
+    detalhe:`É a base do seu fechamento — ${fmtMoney(valor)} em entregas finalizadas. Isto NÃO tem como desfazer. Exporte um backup antes se tiver dúvida.`,
+    botao:'Apagar tudo', perigo:true
+  });
+  if(!ok)return;
+  history=[];saveHistory();renderReport();
+  toast('Histórico apagado','success');
+}
 
 function deduplicateStops(){
+  const antes=retratoParadas();
   const before=stops.length;
   const seen={};
   stops=stops.filter(function(s,i){
@@ -4188,7 +4481,12 @@ function deduplicateStops(){
   });
   const removed=before-stops.length;
   saveStops();renderHome();
-  toast(removed>0?'🔧 '+removed+' duplicata(s) removida(s)!':'✅ Sem duplicatas encontradas','success');
+  /* Remoção automática é onde o desfazer mais faz falta: quem apertou não
+     escolheu O QUE sairia, então não tem como conferir antes. */
+  if(removed>0) comDesfazer(`🔧 ${removed} duplicata(s) removida(s)`, ()=>{
+    restaurarParadas(antes); toast('↩️ Duplicatas de volta','success');
+  });
+  else toast('✅ Sem duplicatas encontradas','success');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -4370,7 +4668,10 @@ function aplicarAtualizacao() {
 
 // Saída de emergência: descarta service worker e caches e recarrega limpo.
 async function forcarAtualizacao() {
-  if (!confirm('Forçar atualização?\n\nO app recarrega buscando tudo de novo do servidor. Suas entregas e histórico NÃO são afetados.')) return;
+  if (!await confirmarAcao({titulo:'Forçar atualização',
+    texto:'Recarregar o app buscando tudo de novo do servidor?',
+    detalhe:'Suas entregas, histórico e configurações NÃO são afetados — sai só o cache do app. Use se algo parecer travado numa versão antiga.',
+    botao:'Atualizar agora'})) return;
   try {
     if ('serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();

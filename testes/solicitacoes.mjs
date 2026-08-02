@@ -42,7 +42,10 @@ const { ok, fim } = criarPlacar();
 
 // ── 3. chaveDoPedido: nova e antiga ──
 {
-  const bloco = trecho('function chaveDoPedido(', 'function showEditRequest(');
+  /* O corte para em `async function showEditRequest`, não em `function ...`:
+     showEditRequest virou async na Etapa 6, e cortar no `function` deixava
+     um `async` solto no fim do trecho — o extrato nem parseava. */
+  const bloco = trecho('function chaveDoPedido(', 'async function showEditRequest(');
   const { chaveDoPedido } = new Function(bloco + '\nreturn {chaveDoPedido};')();
 
   ok(chaveDoPedido('req-1', { orderKey: 'pedido-9' }) === 'pedido-9',

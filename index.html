@@ -314,6 +314,10 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 .stores-list{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px;}
 .store-chip{background:var(--card2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:13px;display:flex;align-items:center;gap:6px;}
 .store-chip-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0;}
+/* O nome da loja é um atalho para as taxas dela, mas continua parecendo
+   texto: quem não quiser mexer não precisa desviar dele. */
+.store-chip-nome{background:none;border:none;color:inherit;font:inherit;padding:0;cursor:pointer;}
+.store-chip.sem-taxa{border-color:var(--red);}
 .store-add-row{display:flex;gap:8px;}
 /* Taxas por cidade: uma linha por cidade, o valor à direita e largo o
    bastante para o polegar. */
@@ -961,7 +965,7 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
         <span class="cfg-resumo" id="resumo-taxas"></span><span class="cfg-seta">▾</span>
       </button>
       <div class="cfg-corpo" id="cfg-taxas">
-        <div class="info-box">A taxa entra sozinha quando você aceita um pedido da loja ou escolhe a cidade no formulário. Comece pela tabela padrão; só crie tabela de uma loja se ela pagar diferente.</div>
+        <div class="info-box">A taxa entra sozinha quando você aceita um pedido da loja ou escolhe a cidade no formulário. Defina a de cada loja que você atende. A padrão é a rede de segurança: vale para loja que ainda não tem a dela.</div>
         <select class="finput" id="taxaEscopo" onchange="renderTaxasGrid()" style="margin-bottom:8px;"></select>
         <div id="taxasGrid"></div>
         <div id="taxasNota" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;"></div>
@@ -2283,9 +2287,38 @@ function renderTaxasGrid(){
   const nota = document.getElementById('taxasNota');
   if(nota){
     nota.textContent = escopo === TAXA_PADRAO
-      ? 'Vale para toda loja que não tiver tabela própria. Cidade em branco entra como taxa zero e o app avisa ao aceitar.'
-      : 'Em branco = usa a taxa padrão (o valor cinza). Preencha só as cidades em que esta loja paga diferente.';
+      ? 'Rede de segurança: vale para loja que não tiver tabela própria. Cidade em branco entra como taxa zero, e o app avisa ao aceitar o pedido.'
+      : 'Preencha as cidades em que esta loja entrega. Em branco, ela usa a taxa padrão — que é o valor em cinza, quando existe.';
   }
+}
+
+/* Lojas que hoje entregariam de graça: sem taxa própria e sem padrão de
+   onde herdar. Se a padrão tiver qualquer valor, ninguém fica a zero em
+   toda cidade, e o aviso perde o sentido. */
+function lojasSemTaxa(){
+  const t = cfg.taxas || {};
+  const temPadrao = TAXA_CIDADES.some(c => Number((t[TAXA_PADRAO]||{})[c]) > 0);
+  if(temPadrao) return [];
+  return (cfg.stores||[]).filter(nome => {
+    const propria = tabelaDeTaxas(nome);
+    return !propria || !TAXA_CIDADES.some(c => Number(propria[c]) > 0);
+  });
+}
+
+/* Atalho do nome da loja e do cadastro de loja nova: abre a seção de
+   taxas já apontando para ela, com o cursor no primeiro valor. */
+function irParaTaxas(loja){
+  goNav('configScreen','nav-cfg');
+  renderTaxasConfig();
+  const sel = document.getElementById('taxaEscopo');
+  if(sel){
+    sel.value = (cfg.stores||[]).includes(loja) ? loja : TAXA_PADRAO;
+    renderTaxasGrid();
+  }
+  const cab = document.querySelector('.cfg-cab[aria-controls="cfg-taxas"]');
+  if(cab && cab.getAttribute('aria-expanded') !== 'true') dobrarSecao('taxas');
+  document.getElementById('cfg-taxas')?.scrollIntoView({behavior:'smooth',block:'nearest'});
+  document.getElementById('taxa_'+TAXA_CIDADES[0])?.focus();
 }
 
 function salvarTaxa(code){
@@ -2302,6 +2335,7 @@ function salvarTaxa(code){
   else delete cfg.taxas[escopo][code];
   saveCfg();
   renderTaxasGrid();
+  renderStores();       // some o ⚠️ da loja assim que ela ganha taxa
   atualizarResumosCfg();
 }
 
@@ -4044,8 +4078,12 @@ function atualizarResumosCfg(){
   const por = (id, txt) => { const el=document.getElementById('resumo-'+id); if(el) el.textContent=txt; };
   const n = (q, um, muitos) => q===0 ? 'nenhuma' : q===1 ? ('1 '+um) : (q+' '+muitos);
   por('lojas',   n((cfg.stores||[]).length, 'loja', 'lojas'));
+  /* O resumo mostra primeiro o que dói: loja que entregaria de graça. */
+  const semTaxa = lojasSemTaxa();
   const comTaxa = TAXA_CIDADES.filter(c => Number(((cfg.taxas||{})[TAXA_PADRAO]||{})[c]) > 0).length;
-  por('taxas',   comTaxa === 0 ? 'sem taxa' : comTaxa + '/' + TAXA_CIDADES.length + ' cidades');
+  por('taxas',   semTaxa.length ? '⚠️ ' + n(semTaxa.length, 'loja sem taxa', 'lojas sem taxa')
+               : comTaxa ? comTaxa + '/' + TAXA_CIDADES.length + ' cidades'
+               : 'por loja');
   por('rapidas', n(getQuickStores().length, 'loja', 'lojas'));
   por('links',   n(getLinks().length, 'link', 'links'));
   por('fatura',  (cfg.emiNome || faturaEmissor().nome || '').slice(0,20));
@@ -4144,9 +4182,23 @@ function saveConfig(){
 function renderStores(){
   const list=document.getElementById('storesList');
   if(!cfg.stores.length){list.innerHTML='<div style="font-size:12px;color:var(--muted)">Nenhuma loja cadastrada.</div>';return;}
-  list.innerHTML=cfg.stores.map((s,i)=>`<div class="store-chip">${s}<button type="button" class="store-chip-del" onclick="rmStore(${i})">×</button></div>`).join('');
+  /* Loja sem taxa é a que entrega de graça no fechamento. O aviso fica no
+     nome dela, e tocar no nome leva direto para onde se resolve. */
+  const faltando=lojasSemTaxa();
+  list.innerHTML=cfg.stores.map((s,i)=>{
+    const semTaxa=faltando.includes(s);
+    return `<div class="store-chip${semTaxa?' sem-taxa':''}">`
+      +`<button type="button" class="store-chip-nome" onclick="irParaTaxas('${escJs(s)}')"`
+      +` title="Definir as taxas de ${esc(s)}">${esc(s)}${semTaxa?' ⚠️':''}</button>`
+      +`<button type="button" class="store-chip-del" onclick="rmStore(${i})" aria-label="Remover ${esc(s)}">×</button>`
+      +`</div>`;
+  }).join('');
 }
-function addStore(){const n=document.getElementById('newStore').value.trim();if(!n)return;if(cfg.stores.includes(n)){toast('Loja já cadastrada','error');return;}cfg.stores.push(n);document.getElementById('newStore').value='';saveCfg();renderStores();renderTaxasConfig();updateStoreSelect();toast(`🏪 "${n}" adicionada!`,'success');}
+function addStore(){const n=document.getElementById('newStore').value.trim();if(!n)return;if(cfg.stores.includes(n)){toast('Loja já cadastrada','error');return;}cfg.stores.push(n);document.getElementById('newStore').value='';saveCfg();renderStores();renderTaxasConfig();updateStoreSelect();
+  /* Loja nova sem taxa entrega de graça. Em vez de só avisar depois, leva
+     direto para a tabela dela — que é onde a decisão é tomada. */
+  toast(`🏪 "${n}" adicionada — defina a taxa dela`,'success');
+  irParaTaxas(n);}
 function rmStore(i){
   const nome=cfg.stores[i]; if(nome===undefined)return;
   const antes=cfg.stores.slice();

@@ -46,8 +46,13 @@ function montar(cfgInicial = {}) {
     trecho('const CITY_MAP=', '// ═══════════════ TAXAS POR CIDADE', 'index.html') +
     trecho("const TAXA_PADRAO = '_padrao';", '\nmigrarTaxas();', 'index.html');
 
+  const fonteExtra =
+    trecho('const TAXA_CIDADES =', 'function renderTaxasConfig(){', 'index.html') +
+    trecho('function lojasSemTaxa(){', '\n/* Atalho do nome da loja', 'index.html');
+
   const fabrica = new Function('ctx',
-    `with (ctx) { ${fonte}; return { migrarTaxas, taxaDaCidade, tabelaDeTaxas, resolveCityCode }; }`);
+    `with (ctx) { ${fonte}${fonteExtra}
+       return { migrarTaxas, taxaDaCidade, tabelaDeTaxas, resolveCityCode, lojasSemTaxa }; }`);
   return { ctx, salvos, ...fabrica(ctx) };
 }
 
@@ -188,6 +193,59 @@ function montar(cfgInicial = {}) {
   ok(doForm.length > 0 && faltando.length === 0,
     `as ${doForm.length} cidades do formulário aparecem na tela de taxas`
     + (faltando.length ? ' — faltando: ' + faltando.join(', ') : ''));
+}
+
+// ── 13. Loja sem taxa é apontada pelo nome ───────────────────
+/* A taxa é decidida loja a loja. Uma loja cadastrada e esquecida entrega
+   de graça o dia inteiro sem nada na tela denunciar. */
+{
+  const { lojasSemTaxa } = montar({
+    stores: ['KS', 'Padaria do Zé', 'Mercado'],
+    taxas: { _padrao: {}, KS: { SRR: 30 }, 'Padaria do Zé': {} }
+  });
+  const faltando = lojasSemTaxa();
+  ok(!faltando.includes('KS'), 'loja com taxa própria não é apontada');
+  ok(faltando.includes('Padaria do Zé'), 'loja com tabela vazia é apontada');
+  ok(faltando.includes('Mercado'), 'loja sem tabela nenhuma é apontada');
+  ok(faltando.length === 2, `aponta só as duas que faltam (achou ${faltando.length})`);
+}
+
+// ── 14. Com padrão preenchida, ninguém entrega de graça ──────
+/* Aí toda loja herda alguma coisa, e apontar todas seria alarme falso. */
+{
+  const { lojasSemTaxa } = montar({
+    stores: ['KS', 'Mercado'],
+    taxas: { _padrao: { SRR: 30 } }
+  });
+  ok(lojasSemTaxa().length === 0,
+    'padrão preenchida cobre quem não tem tabela própria, e o aviso se cala');
+}
+
+// ── 15. Cadastrar loja leva direto para a taxa dela ──────────
+{
+  const add = trecho('function addStore(){', '\nfunction rmStore', 'index.html');
+  ok(/irParaTaxas\(/.test(add),
+    'adicionar uma loja abre a tabela de taxas dela');
+
+  const ir = trecho('function irParaTaxas(loja){', '\nfunction salvarTaxa', 'index.html');
+  ok(/sel\.value\s*=/.test(ir) && /TAXA_PADRAO/.test(ir),
+    'o seletor aponta para a loja — e cai na padrão se ela não existir mais');
+  ok(/dobrarSecao\('taxas'\)/.test(ir),
+    'a seção é aberta, senão o atalho levaria a uma gaveta fechada');
+
+  const salvar = trecho('function salvarTaxa(code){', '\n// ═══', 'index.html');
+  ok(/renderStores\(\)/.test(salvar),
+    'salvar uma taxa apaga o aviso da loja na hora');
+}
+
+// ── 16. O nome da loja vai para o HTML escapado ──────────────
+/* O nome é digitado à mão e agora entra em dois lugares: no texto do
+   botão e dentro de um onclick. */
+{
+  const render = trecho('function renderStores(){', '\nfunction addStore', 'index.html');
+  ok(!/\$\{s\}/.test(render), 'o nome não é mais interpolado cru no HTML');
+  ok(/escJs\(s\)/.test(render), 'dentro do onclick vai por escJs');
+  ok(/esc\(s\)/.test(render), 'no texto visível vai por esc');
 }
 
 fim();

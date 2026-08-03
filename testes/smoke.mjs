@@ -440,6 +440,84 @@ await secao('Desfazer e confirmação', async () => {
   await ctx.close();
 });
 
+// ── 7f. Config dobrável e primeiro uso ───────────────────────
+await secao('Config dobrável e primeiro uso', async () => {
+  const { page, ctx } = await abrir('/index.html');
+
+  /* A Config tinha 1899px de conteúdo em 713px de tela — 2,7 telas de
+     rolagem — com tudo sempre aberto. */
+  const medida = await page.evaluate(() => {
+    cfg.stores = ['KS', 'Padaria'];
+    localStorage.setItem('sb_room_code', 'SB-RWZ4');
+    goNav('configScreen', 'nav-cfg');
+    loadConfig();
+    const corpo = document.querySelector('#configScreen .config-body');
+    return { total: corpo.scrollHeight, tela: corpo.clientHeight };
+  });
+  ok(medida.total < 1000,
+    `a Config cabe em pouco mais de uma tela (${medida.total}px, antes eram 1899px)`);
+
+  // O resumo diz o que tem dentro sem precisar abrir
+  const resumos = await page.evaluate(() => ({
+    lojas: document.getElementById('resumo-lojas').textContent,
+    sync:  document.getElementById('resumo-sync').textContent,
+    links: document.getElementById('resumo-links').textContent
+  }));
+  ok(resumos.sync === 'SB-RWZ4', `a Sincronização mostra a sala no cabeçalho (${resumos.sync})`);
+  ok(resumos.lojas === '2 lojas', `Minhas lojas mostra a contagem (${resumos.lojas})`);
+  ok(resumos.links === 'nenhuma', `Links mostra que está vazio (${resumos.links})`);
+
+  // Dobrar guarda o estado
+  const dobra = await page.evaluate(() => {
+    dobrarSecao('fatura');
+    const aberta = document.querySelector('[aria-controls="cfg-fatura"]').getAttribute('aria-expanded');
+    const salvo = JSON.parse(localStorage.getItem('sb_cfg_abertas') || '{}');
+    return { aberta, salvo: salvo.fatura };
+  });
+  ok(dobra.aberta === 'true' && dobra.salvo === true,
+    'abrir uma seção guarda o estado para a próxima vez');
+
+  /* Primeiro uso: aparelho zerado precisa ter caminho até a sala do outro
+     celular. Antes o campo do código ficava a 1116px do topo da Config. */
+  const bemvindo = await page.evaluate(() => {
+    stops = []; history = []; cfg.stores = [];
+    localStorage.removeItem('sb_ja_comecou');
+    localStorage.removeItem('sb_room_code');
+    goNav('homeScreen', 'nav-home');
+    renderHome();
+    const campo = document.getElementById('bvCodigo');
+    return {
+      temCampo: !!campo,
+      // O código tem que existir mesmo sem ninguém ter aberto a Config
+      codigoNaTela: /SB-[A-Z0-9]{4}/.test(document.querySelector('.bemvindo').textContent),
+      guardado: localStorage.getItem('sb_room_code')
+    };
+  });
+  ok(bemvindo.temCampo, 'aparelho novo mostra o campo do código na PRIMEIRA tela');
+  ok(bemvindo.codigoNaTela && /^SB-[A-Z0-9]{4}$/.test(bemvindo.guardado || ''),
+    `o código próprio já existe sem abrir a Config (${bemvindo.guardado})`);
+
+  // Código malformado não passa
+  const invalido = await page.evaluate(() => {
+    document.getElementById('bvCodigo').value = 'ABC';
+    entrarPeloBemVindo();
+    return { sala: localStorage.getItem('sb_room_code'), aviso: document.getElementById('toast').textContent };
+  });
+  ok(!/^ABC$/.test(invalido.sala) && /inválido/i.test(invalido.aviso),
+    `código malformado é recusado com aviso (${invalido.aviso})`);
+
+  // Código válido entra na sala e o cartão some
+  const entrou = await page.evaluate(() => {
+    document.getElementById('bvCodigo').value = 'sb-a1b2';    // minúsculo de propósito
+    entrarPeloBemVindo();
+    return { sala: localStorage.getItem('sb_room_code'), cartao: !!document.querySelector('.bemvindo') };
+  });
+  ok(entrou.sala === 'SB-A1B2', `o código digitado em minúsculo é aceito (${entrou.sala})`);
+  ok(!entrou.cartao, 'depois de entrar, o cartão de boas-vindas não volta');
+
+  await ctx.close();
+});
+
 // ── 8. Faixa de atualização e controles de versão ────────────
 await secao('Faixa de atualização e controles de versão', async () => {
   const { page, ctx } = await abrir('/index.html');

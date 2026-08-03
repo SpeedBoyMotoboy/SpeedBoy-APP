@@ -390,6 +390,34 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 .toast.success{border-color:var(--green);color:var(--green);}
 .toast.error{border-color:var(--red);color:var(--red);}
 
+/* CONFIG DOBRÁVEL
+   A tela tinha 1899px de conteúdo — 2,7 telas de rolagem — com tudo
+   sempre aberto. O que se toca uma vez na vida (dados da fatura, 412px)
+   ocupava o mesmo espaço do que se toca todo dia. */
+.cfg-cab{width:100%;background:none;border:none;padding:0;margin:0;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;color:inherit;text-align:left;font:inherit;min-height:0;}
+.cfg-cab .cfg-title{margin:0;flex:1;}
+.cfg-seta{font-size:15px;color:var(--muted);transition:transform var(--rapido);flex-shrink:0;}
+.cfg-cab[aria-expanded="true"] .cfg-seta{transform:rotate(180deg);}
+.cfg-corpo{padding-top:12px;}
+.cfg-cab[aria-expanded="false"]+.cfg-corpo{display:none;}
+/* Resumo de uma linha: dá para saber o que tem dentro sem abrir. */
+.cfg-resumo{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%;}
+.cfg-cab[aria-expanded="true"] .cfg-resumo{display:none;}
+
+/* PRIMEIRO USO
+   Quem abre o app num aparelho novo via uma lista vazia e nada mais. Para
+   entrar na sala de outro aparelho tinha de achar o campo do código, que
+   fica a 1116px do topo da Config — 1,6 tela abaixo. */
+.bemvindo{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--radius);padding:16px 14px;margin:12px;}
+.bemvindo-tit{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:19px;color:var(--accent);margin-bottom:6px;}
+.bemvindo-txt{font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:14px;}
+.bemvindo-ou{display:flex;align-items:center;gap:10px;margin:14px 0 12px;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:1px;}
+.bemvindo-ou::before,.bemvindo-ou::after{content:'';flex:1;height:1px;background:var(--border);}
+.bemvindo-row{display:flex;gap:8px;}
+.bemvindo-row .finput{flex:1;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;text-transform:uppercase;}
+.bemvindo-btn{background:var(--accent);border:none;color:#000;border-radius:12px;padding:0 18px;font-size:14px;font-weight:800;cursor:pointer;flex-shrink:0;}
+.bemvindo-sec{width:100%;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;}
+
 /* DESFAZER
    Barra separada do toast, e por dois motivos: o toast tem
    pointer-events:none (não recebe toque) e white-space:nowrap (não cabe
@@ -907,65 +935,99 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
     </div>
     <input type="hidden" id="cfgOrigin" />
     <input type="hidden" id="cfgWpp" />
-    <div class="cfg-section" style="padding:0;overflow:hidden;">
-      <div onclick="toggleLinksPanel()" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;">
-        <div class="cfg-title" style="margin:0;">🔗 Links das Lojas</div>
-        <span id="linksPanelArrow" style="font-size:18px;color:var(--muted);transition:transform .25s;">▾</span>
+    <!-- Ordem por frequência de uso: o que se toca todo dia em cima e
+         aberto, o que se toca uma vez fechado, perigo por último. -->
+    <div class="cfg-section">
+      <button type="button" class="cfg-cab compacto" onclick="dobrarSecao('lojas')" aria-expanded="true" aria-controls="cfg-lojas">
+        <span class="cfg-title">🏬 Minhas lojas</span>
+        <span class="cfg-resumo" id="resumo-lojas"></span><span class="cfg-seta">▾</span>
+      </button>
+      <div class="cfg-corpo" id="cfg-lojas">
+        <div class="stores-list" id="storesList"></div>
+        <div class="store-add-row"><input class="finput" id="newStore" placeholder="Nome da loja (ex: KS)" maxlength="30" /><button type="button" class="btn-store-add" onclick="addStore()">+ Adicionar</button></div>
       </div>
-      <div id="linksPanel" style="display:none;padding:0 14px 14px;">
+    </div>
+    <div class="cfg-section">
+      <button type="button" class="cfg-cab compacto" onclick="dobrarSecao('rapidas')" aria-expanded="true" aria-controls="cfg-rapidas">
+        <span class="cfg-title">⚡ Lojas rápidas (1 clique)</span>
+        <span class="cfg-resumo" id="resumo-rapidas"></span><span class="cfg-seta">▾</span>
+      </button>
+      <div class="cfg-corpo" id="cfg-rapidas">
+        <div class="info-box">Configure lojas que você atende sempre. Na tela de entregas, basta 1 toque para adicionar.</div>
+        <div class="stores-list" id="quickStoresList"></div>
+        <button type="button" class="btn-store-add" onclick="addQuickStore()" style="width:100%;margin-top:6px;">⚡ Adicionar loja rápida</button>
+      </div>
+    </div>
+    <div class="cfg-section">
+      <button type="button" class="cfg-cab compacto" onclick="dobrarSecao('links')" aria-expanded="false" aria-controls="cfg-links">
+        <span class="cfg-title">🔗 Links das lojas</span>
+        <span class="cfg-resumo" id="resumo-links"></span><span class="cfg-seta">▾</span>
+      </button>
+      <div class="cfg-corpo" id="cfg-links">
         <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6;">Gere um link por loja para clientes fazerem pedidos.</div>
         <div id="linksListCfg"></div>
         <button type="button" class="btn-new-link" onclick="genLink()" style="width:100%;margin-top:6px;">🔗 Gerar link para nova loja</button>
       </div>
     </div>
     <div class="cfg-section">
-      <div class="cfg-title">🏬 Minhas lojas</div>
-      <div class="stores-list" id="storesList"></div>
-      <div class="store-add-row"><input class="finput" id="newStore" placeholder="Nome da loja (ex: KS)" maxlength="30" /><button type="button" class="btn-store-add" onclick="addStore()">+ Adicionar</button></div>
-    </div>
-    <div class="cfg-section">
-      <div class="cfg-title">⚡ Lojas rápidas (1 clique)</div>
-      <div class="info-box">Configure lojas que você atende sempre. Na tela de entregas, basta 1 toque para adicionar.</div>
-      <div class="stores-list" id="quickStoresList"></div>
-      <button type="button" class="btn-store-add" onclick="addQuickStore()" style="width:100%;margin-top:6px;">⚡ Adicionar loja rápida</button>
-    </div>
-    <div class="cfg-section">
-      <div class="cfg-title">🧾 Dados da fatura (emissor)</div>
-      <div class="info-box">Aparecem no cabeçalho de todas as faturas e no fechamento do período.</div>
-      <div class="field" style="margin-bottom:8px;"><div class="flabel">Nome</div><input class="finput" id="cfgEmiNome" placeholder="SPEEDBOY" maxlength="40" /></div>
-      <div class="field" style="margin-bottom:8px;"><div class="flabel">Subtítulo</div><input class="finput" id="cfgEmiSub" placeholder="Motoboy Express" maxlength="40" /></div>
-      <div class="field" style="margin-bottom:8px;"><div class="flabel">CNPJ</div><input class="finput" id="cfgEmiCnpj" placeholder="00.000.000/0001-00" maxlength="20" /></div>
-      <div class="field" style="margin-bottom:8px;"><div class="flabel">Telefone</div><input class="finput" id="cfgEmiTel" placeholder="(27) 90000-0000" maxlength="20" /></div>
-      <div class="field"><div class="flabel">E-mail</div><input class="finput" id="cfgEmiEmail" type="email" placeholder="contato@exemplo.com" maxlength="60" /></div>
-    </div>
-    <div class="cfg-section">
-      <div class="cfg-title">🔥 Firebase (sincronização)</div>
-      <div id="fbEmbeddedNotice" style="display:none;background:rgba(0,200,100,.08);border:1px solid var(--green);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--green);margin-bottom:10px;">🔒 Firebase configurado internamente</div>
-      <div id="fbConfigSection">
-        <div class="info-box">Cole o <strong style="color:var(--accent)">firebaseConfig</strong> do seu projeto Firebase para sincronizar com sua esposa em tempo real.</div>
-        <div class="info-box warn">⚠️ Nunca compartilhe o celular com a chave inserida aqui.</div>
-        <div class="field"><div class="flabel">Firebase Config (JSON)</div><textarea class="fb-textarea" id="cfgFb" placeholder='{"apiKey":"...","databaseURL":"...","projectId":"..."}'></textarea></div>
+      <button type="button" class="cfg-cab compacto" onclick="dobrarSecao('sync')" aria-expanded="false" aria-controls="cfg-sync">
+        <span class="cfg-title">🔄 Sincronização</span>
+        <span class="cfg-resumo" id="resumo-sync"></span><span class="cfg-seta">▾</span>
+      </button>
+      <div class="cfg-corpo" id="cfg-sync">
+        <div id="fbEmbeddedNotice" style="display:none;background:rgba(0,200,100,.08);border:1px solid var(--green);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--green);margin-bottom:10px;">🔒 Firebase configurado internamente</div>
+        <div id="fbConfigSection">
+          <div class="info-box">Cole o <strong style="color:var(--accent)">firebaseConfig</strong> do seu projeto Firebase para sincronizar com sua esposa em tempo real.</div>
+          <div class="info-box warn">⚠️ Nunca compartilhe o celular com a chave inserida aqui.</div>
+          <div class="field"><div class="flabel">Firebase Config (JSON)</div><textarea class="fb-textarea" id="cfgFb" placeholder='{"apiKey":"...","databaseURL":"...","projectId":"..."}'></textarea></div>
+        </div>
+        <div class="room-box">
+          <div><div style="font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--muted);margin-bottom:4px;">CÓDIGO DA SALA</div><div class="room-code" id="roomCode">——</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Compartilhe com sua esposa</div></div>
+          <div id="fbRoomBtns" class="room-btns"><button type="button" class="btn-room" onclick="copyRoom()">📋 Copiar</button><button type="button" class="btn-room" onclick="newRoom()">🔄 Novo</button></div>
+        </div>
+        <div id="fbJoinRow" class="fb-join-row"><input class="finput" id="cfgRoom" placeholder="SB-XXXX" style="letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;" /><button type="button" class="btn-join" onclick="joinRoom()">Entrar</button></div>
+        <div class="fb-status"><div class="sync-dot" id="cfgSyncDot"></div><span id="cfgSyncLbl">Firebase não configurado</span></div>
       </div>
-      <div class="room-box">
-        <div><div style="font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--muted);margin-bottom:4px;">CÓDIGO DA SALA</div><div class="room-code" id="roomCode">——</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Compartilhe com sua esposa</div></div>
-        <div id="fbRoomBtns" class="room-btns"><button type="button" class="btn-room" onclick="copyRoom()">📋 Copiar</button><button type="button" class="btn-room" onclick="newRoom()">🔄 Novo</button></div>
+    </div>
+    <div class="cfg-section">
+      <button type="button" class="cfg-cab compacto" onclick="dobrarSecao('fatura')" aria-expanded="false" aria-controls="cfg-fatura">
+        <span class="cfg-title">🧾 Dados da fatura</span>
+        <span class="cfg-resumo" id="resumo-fatura"></span><span class="cfg-seta">▾</span>
+      </button>
+      <div class="cfg-corpo" id="cfg-fatura">
+        <div class="info-box">Aparecem no cabeçalho de todas as faturas e no fechamento do período.</div>
+        <div class="field" style="margin-bottom:8px;"><div class="flabel">Nome</div><input class="finput" id="cfgEmiNome" placeholder="SPEEDBOY" maxlength="40" /></div>
+        <div class="field" style="margin-bottom:8px;"><div class="flabel">Subtítulo</div><input class="finput" id="cfgEmiSub" placeholder="Motoboy Express" maxlength="40" /></div>
+        <div class="field" style="margin-bottom:8px;"><div class="flabel">CNPJ</div><input class="finput" id="cfgEmiCnpj" placeholder="00.000.000/0001-00" maxlength="20" /></div>
+        <div class="field" style="margin-bottom:8px;"><div class="flabel">Telefone</div><input class="finput" id="cfgEmiTel" placeholder="(27) 90000-0000" maxlength="20" /></div>
+        <div class="field"><div class="flabel">E-mail</div><input class="finput" id="cfgEmiEmail" type="email" placeholder="contato@exemplo.com" maxlength="60" /></div>
       </div>
-      <div id="fbJoinRow" class="fb-join-row"><input class="finput" id="cfgRoom" placeholder="SB-XXXX" style="letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;" /><button type="button" class="btn-join" onclick="joinRoom()">Entrar</button></div>
-      <div class="fb-status"><div class="sync-dot" id="cfgSyncDot"></div><span id="cfgSyncLbl">Firebase não configurado</span></div>
     </div>
     <button type="button" class="btn-cfg-save" onclick="saveConfig()">💾 Salvar configurações</button>
-    <div style="margin-top:20px;padding-top:18px;border-top:1px solid var(--border);">
-      <div class="cfg-title">💾 Backup</div>
-      <div class="backup-row">
-        <button type="button" class="btn-backup" onclick="exportBackup()">⬇️ Exportar backup</button>
-        <label class="btn-backup" style="cursor:pointer;">⬆️ Importar backup<input type="file" accept=".json" onchange="importBackup(this.files[0])" style="display:none" /></label>
+    <div class="cfg-section" style="margin-top:14px;">
+      <button type="button" class="cfg-cab compacto" onclick="dobrarSecao('backup')" aria-expanded="false" aria-controls="cfg-backup">
+        <span class="cfg-title">💾 Backup</span>
+        <span class="cfg-resumo" id="resumo-backup"></span><span class="cfg-seta">▾</span>
+      </button>
+      <div class="cfg-corpo" id="cfg-backup">
+        <div class="backup-row">
+          <button type="button" class="btn-backup" onclick="exportBackup()">⬇️ Exportar backup</button>
+          <label class="btn-backup" style="cursor:pointer;">⬆️ Importar backup<input type="file" accept=".json" onchange="importBackup(this.files[0])" style="display:none" /></label>
+        </div>
+        <button type="button" class="btn-backup" onclick="deduplicateStops()" style="width:100%;margin-bottom:10px;background:rgba(59,130,246,.1);border-color:var(--blue);color:var(--blue);">🔧 Remover entregas duplicadas</button>
+        <div class="info-box">🛟 O app guarda sozinho uma cópia por dia dos últimos 7 dias. Se algo der errado, volte por aqui.</div>
+        <div id="autoBackupList"></div>
       </div>
-      <button type="button" class="btn-backup" onclick="deduplicateStops()" style="width:100%;margin-bottom:10px;background:rgba(59,130,246,.1);border-color:var(--blue);color:var(--blue);">🔧 Remover entregas duplicadas</button>
-      <div class="info-box">🛟 O app guarda sozinho uma cópia por dia dos últimos 7 dias. Se algo der errado, volte por aqui.</div>
-      <div id="autoBackupList"></div>
-      <div class="cfg-title" style="color:var(--red);">⚠️ Zona de perigo</div>
-      <button type="button" class="danger-btn" onclick="clearDay()">🗑️ Limpar paradas do dia</button>
-      <button type="button" class="danger-btn gray" onclick="clearHist()">🗑️ Apagar todo o histórico</button>
+    </div>
+    <div class="cfg-section">
+      <button type="button" class="cfg-cab compacto" onclick="dobrarSecao('perigo')" aria-expanded="false" aria-controls="cfg-perigo">
+        <span class="cfg-title" style="color:var(--red);">⚠️ Zona de perigo</span>
+        <span class="cfg-seta">▾</span>
+      </button>
+      <div class="cfg-corpo" id="cfg-perigo">
+        <button type="button" class="danger-btn" onclick="clearDay()">🗑️ Limpar paradas do dia</button>
+        <button type="button" class="danger-btn gray" onclick="clearHist()">🗑️ Apagar todo o histórico</button>
+      </div>
     </div>
     <div style="margin-top:22px;padding-top:16px;border-top:1px solid var(--border);text-align:center;">
       <div id="appVersao" style="font-size:11px;color:var(--muted);letter-spacing:.5px;">versão —</div>
@@ -1641,6 +1703,61 @@ function resetForm(){
   setPaidBtnState('fProductPaidBtn','fProductPaid',false);
 }
 // ═══════════════════════════════════════════════════════
+//  PRIMEIRO USO
+// ═══════════════════════════════════════════════════════
+/* Quem abria o app num aparelho novo via "Nenhuma parada ainda" e nada
+   mais. Para ver a lista compartilhada era preciso entrar na sala do
+   outro aparelho — e o campo do código fica a 1116px do topo da Config,
+   depois de Lojas, Lojas rápidas, Links e do formulário da fatura.
+   Ninguém acha isso sozinho.
+
+   O cartão só aparece enquanto o app está de fato vazio: sem paradas,
+   sem histórico e sem lojas. Na primeira entrega ele some para sempre. */
+function ehPrimeiroUso(){
+  if(localStorage.getItem('sb_ja_comecou')) return false;
+  const vazio = !stops.length && !history.length && !(cfg.stores||[]).length;
+  if(!vazio){ try{ localStorage.setItem('sb_ja_comecou','1'); }catch(e){} return false; }
+  return true;
+}
+
+function cartaoPrimeiroUso(){
+  const sala = salaAtual();
+  return `<div class="bemvindo">
+    <div class="bemvindo-tit">Bem-vindo ao SpeedBoy</div>
+    <div class="bemvindo-txt">Se você já usa o app em outro celular, entre com o código da sala de lá para ver as mesmas entregas nos dois.</div>
+    <div class="bemvindo-row">
+      <input class="finput" id="bvCodigo" placeholder="SB-XXXX" maxlength="7" inputmode="text" autocapitalize="characters" aria-label="Código da sala" />
+      <button type="button" class="bemvindo-btn" onclick="entrarPeloBemVindo()">Entrar</button>
+    </div>
+    <div class="bemvindo-ou">OU</div>
+    <button type="button" class="bemvindo-sec" onclick="comecarDoZero()">Começar do zero neste celular</button>
+    <div class="bemvindo-txt" style="margin:12px 0 0;">Seu código é <strong style="color:var(--accent)">${esc(sala||'——')}</strong> — é ele que você passa para quem for usar junto.</div>
+  </div>`;
+}
+
+function entrarPeloBemVindo(){
+  const el = document.getElementById('bvCodigo');
+  const code = (el ? el.value : '').trim().toUpperCase();
+  /* Mesmo formato que as regras do Firebase exigem (SB- + 4). Validar
+     aqui evita a pessoa achar que entrou e ficar esperando a lista. */
+  if(!/^SB-[A-Z0-9]{4}$/.test(code)){
+    toast('Código inválido — é assim: SB-A1B2','error');
+    if(el) el.focus();
+    return;
+  }
+  trocarSalaPara(code);
+  try{ localStorage.setItem('sb_ja_comecou','1'); }catch(e){}
+  renderHome();
+  toast('🔄 Entrando na sala '+code,'success');
+}
+
+function comecarDoZero(){
+  try{ localStorage.setItem('sb_ja_comecou','1'); }catch(e){}
+  renderHome();
+  goForm(-1);            // já abre o cadastro da primeira parada
+}
+
+// ═══════════════════════════════════════════════════════
 //  HOME / STOPS
 // ═══════════════════════════════════════════════════════
 function renderHome(){
@@ -1654,7 +1771,12 @@ function renderHome(){
   renderQuickButtons();
 
   if(!total){
-    list.innerHTML=`<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">Nenhuma parada ainda</div><div class="empty-sub">Adicione clientes ou importe a lista da loja</div></div>`;
+    /* Aparelho novo: em vez da lista vazia sem saída, o caminho para
+       entrar na sala de quem já usa. Antes era preciso achar o campo do
+       código na Config, a 1116px do topo — 1,6 tela abaixo. */
+    list.innerHTML = ehPrimeiroUso()
+      ? cartaoPrimeiroUso()
+      : `<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">Nenhuma parada ainda</div><div class="empty-sub">Adicione clientes ou importe a lista da loja</div></div>`;
     return;
   }
 
@@ -3766,12 +3888,57 @@ function genLink(){
   toast('✅ Link da '+name.trim()+' gerado!','success');
 }
 
-function toggleLinksPanel(){
-  const panel=document.getElementById('linksPanel');
-  const arrow=document.getElementById('linksPanelArrow');
-  const open=panel.style.display==='none';
-  panel.style.display=open?'block':'none';
-  arrow.style.transform=open?'rotate(180deg)':'';
+// ═══════════════════════════════════════════════════════
+//  CONFIG DOBRÁVEL
+// ═══════════════════════════════════════════════════════
+/* Antes só "Links das Lojas" dobrava, com uma função própria e estilos
+   inline. As outras seis ficavam sempre abertas: 1899px de conteúdo,
+   2,7 telas de rolagem, com "Dados da fatura" (412px, tocado uma vez na
+   vida) ocupando mais espaço que "Minhas lojas".
+
+   O estado fica guardado — quem abre a Sincronização todo dia não precisa
+   reabrir toda vez. */
+const CFG_ABERTAS_PADRAO = { lojas:true, rapidas:true, links:false, sync:false, fatura:false, backup:false, perigo:false };
+
+function cfgAbertas(){
+  const salvo = sbRead('sb_cfg_abertas', null);
+  return { ...CFG_ABERTAS_PADRAO, ...(salvo && typeof salvo === 'object' ? salvo : {}) };
+}
+
+function dobrarSecao(nome){
+  const cab = document.querySelector(`.cfg-cab[aria-controls="cfg-${nome}"]`);
+  if(!cab) return;
+  const abrir = cab.getAttribute('aria-expanded') !== 'true';
+  cab.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+  const estado = cfgAbertas();
+  estado[nome] = abrir;
+  try{ localStorage.setItem('sb_cfg_abertas', JSON.stringify(estado)); }catch(e){}
+}
+
+function aplicarDobras(){
+  const estado = cfgAbertas();
+  /* Sem sala conectada, a Sincronização abre sozinha: é o que a pessoa
+     veio procurar num aparelho novo. */
+  if(!localStorage.getItem('sb_room_code')) estado.sync = true;
+  Object.entries(estado).forEach(([nome, aberta]) => {
+    const cab = document.querySelector(`.cfg-cab[aria-controls="cfg-${nome}"]`);
+    if(cab) cab.setAttribute('aria-expanded', aberta ? 'true' : 'false');
+  });
+}
+
+/* Resumo de uma linha em cada cabeçalho fechado. Sem isso, dobrar troca
+   "rolagem demais" por "não sei o que tem lá dentro". */
+function atualizarResumosCfg(){
+  const por = (id, txt) => { const el=document.getElementById('resumo-'+id); if(el) el.textContent=txt; };
+  const n = (q, um, muitos) => q===0 ? 'nenhuma' : q===1 ? ('1 '+um) : (q+' '+muitos);
+  por('lojas',   n((cfg.stores||[]).length, 'loja', 'lojas'));
+  por('rapidas', n(getQuickStores().length, 'loja', 'lojas'));
+  por('links',   n(getLinks().length, 'link', 'links'));
+  por('fatura',  (cfg.emiNome || faturaEmissor().nome || '').slice(0,20));
+  const sala = localStorage.getItem('sb_room_code');
+  por('sync',    sala ? sala : 'sem sala');
+  const copias = (typeof sbListBackups==='function' ? sbListBackups().length : 0);
+  por('backup',  n(copias, 'cópia', 'cópias'));
 }
 
 function renderLinks(){
@@ -3823,8 +3990,7 @@ function loadConfig(){
     const fbSaved=localStorage.getItem('sb_firebase_cfg');
     if(fbSaved){try{document.getElementById('cfgFb').value=JSON.stringify(JSON.parse(fbSaved),null,2);}catch(e){}}
   }
-  const room=(EMBEDDED_ROOM||localStorage.getItem('sb_room_code')||genRoomCode());
-  localStorage.setItem('sb_room_code',room);
+  const room=salaAtual();
   document.getElementById('roomCode').textContent=room;
   document.getElementById('cfgRoom').value=room;
   renderStores();
@@ -3832,6 +3998,8 @@ function loadConfig(){
   renderLinks();
   renderAutoBackups();
   mostrarVersaoApp();
+  aplicarDobras();
+  atualizarResumosCfg();
 }
 function saveConfig(){
   cfg.origin=document.getElementById('cfgOrigin').value.trim();
@@ -4117,7 +4285,47 @@ async function loadHistoryFromFirebase(room){
 }
 
 function genRoomCode(){const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let r='SB-';for(let i=0;i<4;i++)r+=c[Math.floor(Math.random()*c.length)];return r;}
-function newRoom(){const code=genRoomCode();localStorage.setItem('sb_room_code',code);document.getElementById('roomCode').textContent=code;document.getElementById('cfgRoom').value=code;if(fbDb)startSync(code);toast('🔄 Novo código: '+code,'success');}
+
+/* O código da sala só nascia quando a Config era aberta. Num aparelho
+   recém-instalado ninguém abriu a Config ainda — e o cartão de boas-vindas
+   precisa mostrar o código logo na primeira tela, porque é ele que a
+   pessoa passa para quem vai usar junto. */
+function salaAtual(){
+  const atual = EMBEDDED_ROOM || localStorage.getItem('sb_room_code');
+  if(atual) return atual;
+  const nova = genRoomCode();
+  try{ localStorage.setItem('sb_room_code', nova); }catch(e){}
+  return nova;
+}
+/* "🔄 Novo" ficava ao lado de "📋 Copiar", mesmo tamanho, mesmo estilo,
+   sem confirmação nenhuma — e trocar o código DESCONECTA o outro aparelho
+   em silêncio. Sua esposa continuaria gravando na sala antiga, você na
+   nova, e ninguém veria erro: as listas simplesmente parariam de
+   conversar. Agora avisa, e dá volta. */
+async function newRoom(){
+  const anterior = localStorage.getItem('sb_room_code') || '';
+  if(anterior && !await confirmarAcao({
+    titulo:'Gerar novo código de sala',
+    texto:`A sala passa de ${anterior} para um código novo.`,
+    detalhe:'Quem estiver usando o código antigo em outro celular PARA de receber as suas entregas — e você para de receber as dele. Só faça isto se quiser mesmo separar os aparelhos.',
+    botao:'Gerar novo', perigo:true
+  })) return;
+
+  const code=genRoomCode();
+  trocarSalaPara(code);
+  comDesfazer(`🔄 Sala nova: ${code}`, anterior ? ()=>{
+    trocarSalaPara(anterior);
+    toast('↩️ De volta à sala '+anterior,'success');
+  } : null);
+}
+
+function trocarSalaPara(code){
+  localStorage.setItem('sb_room_code',code);
+  const rc=document.getElementById('roomCode'); if(rc) rc.textContent=code;
+  const cr=document.getElementById('cfgRoom');  if(cr) cr.value=code;
+  if(fbDb)startSync(code);
+  atualizarResumosCfg();
+}
 function copyRoom(){const c=document.getElementById('roomCode').textContent;if(c==='——'){toast('Salve as configurações primeiro','error');return;}navigator.clipboard?.writeText(c).then(()=>toast('📋 Código copiado: '+c,'success')).catch(()=>toast('Código: '+c,'success'));}
 function joinRoom(){const code=document.getElementById('cfgRoom').value.trim().toUpperCase();if(!code){toast('Digite o código da sala','error');return;}startSync(code);}
 

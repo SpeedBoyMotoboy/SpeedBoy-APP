@@ -39,6 +39,9 @@ jobs:
       - name: Desfazer e confirmação
         run: node testes/desfazer.mjs
 
+      - name: Configurações e primeiro uso
+        run: node testes/config.mjs
+
       - name: Guarda de regressão
         run: node testes/lint.mjs
 

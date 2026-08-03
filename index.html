@@ -956,7 +956,7 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
       </div>
     </div>
     <div class="cfg-section">
-      <button type="button" class="cfg-cab compacto" onclick="dobrarSecao('taxas')" aria-expanded="true" aria-controls="cfg-taxas">
+      <button type="button" class="cfg-cab compacto" onclick="dobrarSecao('taxas')" aria-expanded="false" aria-controls="cfg-taxas">
         <span class="cfg-title">💰 Taxas por cidade</span>
         <span class="cfg-resumo" id="resumo-taxas"></span><span class="cfg-seta">▾</span>
       </button>
@@ -4007,7 +4007,10 @@ function genLink(){
 
    O estado fica guardado — quem abre a Sincronização todo dia não precisa
    reabrir toda vez. */
-const CFG_ABERTAS_PADRAO = { lojas:true, rapidas:true, links:false, sync:false, fatura:false, backup:false, perigo:false };
+/* Regra da tela: o que se toca todo dia começa aberto, o que se ajusta
+   uma vez começa fechado. Taxas é do segundo tipo — depois de montada,
+   ela trabalha sozinha no aceite do pedido. */
+const CFG_ABERTAS_PADRAO = { lojas:true, taxas:false, rapidas:true, links:false, sync:false, fatura:false, backup:false, perigo:false };
 
 function cfgAbertas(){
   const salvo = sbRead('sb_cfg_abertas', null);

@@ -315,6 +315,14 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 .store-chip{background:var(--card2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:13px;display:flex;align-items:center;gap:6px;}
 .store-chip-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0;}
 .store-add-row{display:flex;gap:8px;}
+/* Taxas por cidade: uma linha por cidade, o valor à direita e largo o
+   bastante para o polegar. */
+.taxa-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);}
+.taxa-row:last-child{border-bottom:none;}
+.taxa-cidade{flex:1;font-size:13px;font-weight:600;}
+.taxa-prefixo{font-size:12px;color:var(--muted);}
+.taxa-input{flex:0 0 108px;text-align:right;}
+.taxa-input.herdada{color:var(--muted);}
 .btn-store-add{background:var(--accent);color:#000;border:none;border-radius:10px;padding:11px 14px;font-weight:700;font-size:13px;cursor:pointer;}
 .fb-textarea{width:100%;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 12px;font-size:12px;font-family:'Barlow',sans-serif;line-height:1.6;outline:none;resize:none;min-height:120px;}
 .fb-textarea:focus{border-color:var(--accent);}
@@ -591,7 +599,7 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
     <!-- ROW 2: Loja (full) -->
     <div class="field-group">
       <div class="field-label">🏪 Loja de origem</div>
-      <select class="field-input" id="fStore" onchange="autoTaxaAritana();autoTaxaKS()"><option value="">— Sem loja específica —</option></select>
+      <select class="field-input" id="fStore" onchange="autoTaxaCidade()"><option value="">— Sem loja específica —</option></select>
     </div>
 
     <!-- ROW 3: Nome + Tipo -->
@@ -631,7 +639,7 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
     <div class="field-row">
       <div class="field-group">
         <div class="field-label">Cidade <span class="req">*</span></div>
-        <select class="field-input" id="fCity" onchange="onCityChange();autoTaxaKS()">
+        <select class="field-input" id="fCity" onchange="onCityChange();autoTaxaCidade()">
           <option value="">— Selecione —</option>
           <option value="SRR">Serra</option>
           <option value="VIX">Vitória</option>
@@ -644,7 +652,7 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
       <div class="field-group">
         <div class="field-label">Bairro <span class="req">*</span></div>
         <div class="bairro-wrap">
-          <input class="field-input" id="fBairro" placeholder="Digite para buscar..." autocomplete="off" oninput="filterBairros()" onfocus="filterBairros()" onblur="autoTaxaAritana()" />
+          <input class="field-input" id="fBairro" placeholder="Digite para buscar..." autocomplete="off" oninput="filterBairros()" onfocus="filterBairros()" />
           <div class="bairro-list" id="fBairroList"></div>
         </div>
       </div>
@@ -945,6 +953,18 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
       <div class="cfg-corpo" id="cfg-lojas">
         <div class="stores-list" id="storesList"></div>
         <div class="store-add-row"><input class="finput" id="newStore" placeholder="Nome da loja (ex: KS)" maxlength="30" /><button type="button" class="btn-store-add" onclick="addStore()">+ Adicionar</button></div>
+      </div>
+    </div>
+    <div class="cfg-section">
+      <button type="button" class="cfg-cab compacto" onclick="dobrarSecao('taxas')" aria-expanded="true" aria-controls="cfg-taxas">
+        <span class="cfg-title">💰 Taxas por cidade</span>
+        <span class="cfg-resumo" id="resumo-taxas"></span><span class="cfg-seta">▾</span>
+      </button>
+      <div class="cfg-corpo" id="cfg-taxas">
+        <div class="info-box">A taxa entra sozinha quando você aceita um pedido da loja ou escolhe a cidade no formulário. Comece pela tabela padrão; só crie tabela de uma loja se ela pagar diferente.</div>
+        <select class="finput" id="taxaEscopo" onchange="renderTaxasGrid()" style="margin-bottom:8px;"></select>
+        <div id="taxasGrid"></div>
+        <div id="taxasNota" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;"></div>
       </div>
     </div>
     <div class="cfg-section">
@@ -2092,7 +2112,6 @@ function filterBairros(){
 function selectFormBairro(b){
   document.getElementById('fBairro').value=b;
   document.getElementById('fBairroList').classList.remove('show');
-  autoTaxaAritana();
 }
 
 // Fechar sugestões ao clicar fora
@@ -2144,56 +2163,146 @@ function resolveCityCode(val){
 }
 function cityName(code){ return CITY_MAP[code]||code||''; }
 
-// ═══════════════ KS AUTO-TAXA POR CIDADE ═══════════════
-const KS_TAXAS_BY_CITY = { VIX:25, SRR:35, CCA:35, VV:35 };
+// ═══════════════ TAXAS POR CIDADE ═══════════════
+/* A taxa da entrega sai da CIDADE, não do bairro — é o que fecha o dia
+   sem conferência bairro a bairro.
 
-// ═══════════════ ARITANA AUTO-TAXA ═══════════════
-const ARITANA_TAXAS = {
-  "araçás":20,"argolas":20,"aribiri":20,"ataíde":20,"boa vista":20,"brisamar":20,"cavalieri":20,"centro":20,"chácara do conde":20,"cocal":20,"coqueiral de itaparica":20,"cristóvão colombo":20,"darly santos":20,"divino espírito santo":20,"dom joão batista":20,"garoto":20,"glória":20,"guaranhuns":20,"ibes":20,"ilha da conceição":20,"ilha das flores":20,"ilha dos ayres":20,"ilha dos bentos":20,"itaparica":20,"itapuã":20,"jaburuna":20,"jardim asteca":20,"jardim colorado":20,"jardim guadalajara":20,"jardim guaranhuns":20,"jockey de itaparica":20,"nossa senhora da penha":20,"nova itaparica":20,"novo méxico":20,"olaria":20,"paul":20,"pedra dos búzios":20,"pontal das garças":20,"praia da costa":20,"praia das gaivotas":20,"praia de itaparica":20,"primeiro de maio":20,"residencial coqueiral":20,"sagrada família":20,"santa inês":20,"santa mônica":20,"santa mônica popular":20,"santa rita":20,"santos dumont":20,"soteco":20,"vila batista":20,"vila garrido":20,"vila guaranhuns":20,"vila nova":20,"vista da penha":20,"zumbi dos palmares":20,
-  "aeroporto":25,"alecrim":25,"alto boa vista":25,"alto lage":25,"alvorada":25,"alzira ramos":25,"andorinhas":25,"antônio honório":25,"bandeirantes":25,"barro vermelho":25,"bela aurora":25,"bela vista":25,"bento ferreira":25,"boa sorte":25,"bonfim":25,"campo belo":25,"castelo branco":25,"caçaroca":25,"chácaras união":25,"cobi de baixo":25,"cobi de cima":25,"cobilândia":25,"consolação":25,"cruzamento":25,"da penha":25,"de lourdes":25,"enseada do suá":25,"expedito":25,"forte são joão":25,"fradinhos":25,"goiabeiras":25,"gurigica":25,"horto":25,"ilha de santa maria":25,"ilha do boi":25,"ilha do frade":25,"industrial":25,"itacibá":25,"itapemirim":25,"itaquari":25,"itararé":25,"jabour":25,"jardim américa":25,"jardim botânico":25,"jardim campo grande":25,"jardim marilândia":25,"jardim da penha":25,"jardim de alah":25,"jardim do vale":25,"jesus de nazareth":25,"joana d'arc":25,"jucutuquara":25,"maracanã":25,"maria ortiz":25,"maruípe":25,"mata da praia":25,"monte belo":25,"morada de camburi":25,"nazareth":25,"nova américa":25,"padre gabriel":25,"planalto":25,"pontal de camburi":25,"praia do canto":25,"praia do suá":25,"república":25,"rio marinho":25,"romão":25,"santa cecília":25,"santa clara":25,"santa helena":25,"santa luíza":25,"santa lúcia":25,"santa paula":25,"segurança do lar":25,"solon borges":25,"sotelândia":25,"sotema":25,"são benedito":25,"são conrado":25,"são cristóvão":25,"são torquato":25,"tabuazeiro":25,"vale encantado":25,"vale esperança":25,"valparaíso":25,"vasco da gama":25,"vila isabel":25,"vista linda":25,"vista mar":25,
-  "aparecida":30,"campina grande":30,"campo grande":30,"caratoíra":30,"comdusa":30,"conquista":30,"cruzeiro do sul":30,"do cabral":30,"do moscoso":30,"do quadro":30,"dom bosco":30,"estrelinha":30,"flexal":30,"fonte grande":30,"grande vitória":30,"graúna":30,"ilha das caieiras":30,"ilha do príncipe":30,"inhanguetá":30,"itanguá":30,"jardim camburi":30,"morada de santa fé":30,"mário cypreste":30,"nova brasília":30,"nova canaã":30,"nova palestina":30,"nova valverde":30,"oriente":30,"parque gramado":30,"parque moscoso":30,"piedade":30,"planeta":30,"porto novo":30,"porto de santana":30,"presidente médici":30,"redenção":30,"resistência":30,"retiro saudoso":30,"rio branco":30,"rosa da penha":30,"santa bárbara":30,"santa tereza":30,"santana":30,"santo andré":30,"santo antônio":30,"santos reis":30,"são francisco":30,"são geraldo":30,"são josé":30,"são pedro":30,"tabajara":30,"tiradentes":30,"tucum":30,"universitário":30,"vera cruz":30,"vila capixaba":30,"vila palestina":30,"vila prudêncio":30,"vila rubim":30,
-  "andré carloni":35,"bairro de fátima":35,"carapina grande":35,"conjunto carapina":35,"eurico salles":35,"hélio ferraz":35,"jardim carapina":35,"manoel plaza":35,"rosário de fátima":35,
-  "alterozas":40,"camará":40,"cantinho do céu":40,"central carapina":40,"chacará parreiral":40,"civit ii":40,"diamantina":40,"guaraciaba":40,"jardim limoeiro":40,"jardim tropical":40,"josé de anchieta":40,"laranjeiras velha":40,"morada de laranjeiras":40,"mucuri":40,"nova campo grande":40,"nova zelândia":40,"novo brasil":40,"novo horizonte":40,"operário":40,"parq. resid. laranjeiras":40,"piranema":40,"planalto de carapina":40,"santa luzia":40,"solar de anchieta":40,"são diogo":40,"são gonçalo":40,"tims":40,"taquara":40,"vale dos reis":40,"valparaiso":40,"vila independência":40,"vista dourada":40,
-  "alice coutinho":45,"antônio ferreira borges":45,"barcelona":45,"barro branco":45,"bubú":45,"campo verde":45,"cangaíba":45,"cariacica sede":45,"cidade pomar":45,"civit i":45,"eldorado":45,"maringá":45,"mata da serra":45,"nova carapina":45,"novo porto canoa":45,"pitanga":45,"planície da serra":45,"porto canoa":45,"prolar":45,"resid. mestre álvaro":45,"resid. tubarão":45,"serra dourada":45,"são joão batista":45,"vila merlo":45,
-  "alphaville":50,"baln. de carapebus":50,"barra do jucu":50,"barramares":50,"castelândia":50,"cidade continental":50,"cidade da barra":50,"feu rosa":50,"jabaeté":50,"joão goulart":50,"morada da barra":50,"normília da cunha":50,"nova esperança":50,"nova rosa da penha":50,"padre mathias":50,"porto de cariacica":50,"praia de carapebus":50,"praia dos recifes":50,"riviera da barra":50,"ulisses guimarães":50,"vila nova de colares":50,"vila progresso":50,
-  "campinho da serra":55,"cascata":55,"centro da serra":55,"colina da serra":55,"divinopólis":55,"jardim bela vista":55,"jardim guanabara":55,"jardim primavera":55,"jardim da serra":55,"nos. sra. da conceição":55,"planalto serrano":55,"serra centro":55,"são domingos":55,"são judas tadeu":55,"são lourenço":55,"são marcos":55,"vila maria níobe":55,"vista da serra":55,
-  "balneário ponta da fruta":60,"bicanga":60,"conjunto jacaraípe":60,"costa dourada":60,"costabela":60,"das laranjeiras":60,"enseada de jacaralpe":60,"estância monazítica":60,"interlagos":60,"jardim atlântico":60,"lagoa de jacaraípe":60,"manguinhos":60,"morada do sol":60,"morro da lagoa":60,"nova ponta da fruta":60,"ourimar":60,"parque jacaraípe":60,"ponta da fruta":60,"portal de jacaraípe":60,"praia de capuba":60,"resid. jacaraípe":60,"são patrício":60,
-  "bairro novo":75,"marbela":75,"nova almeida":75,"nova almeida centro":75,"parque nova fé":75,"parque da gaivotas":75,"praiamar":75,"reis magos":75,"serramar":75,"são joão":75
-};
-function detectarTaxaAritana(endereco){
-  if(!endereco)return null;
-  const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').trim();
-  const endNorm=norm(endereco);
-  let best=null,bestLen=0;
-  for(const[bairro,taxa]of Object.entries(ARITANA_TAXAS)){
-    const b=norm(bairro);
-    if(endNorm.includes(b)&&b.length>bestLen){bestLen=b.length;best={taxa,bairro};}
+   cfg.taxas guarda uma tabela padrão, que vale para qualquer loja, e
+   tabelas próprias para as lojas que pagam diferente. A tabela da loja
+   tem prioridade; cidade que ela não define cai na padrão.
+
+   Antes eram duas regras fixas no código: uma por bairro (ARITANA) e uma
+   por cidade (KS). A de bairro procurava o nome do bairro dentro do
+   endereço inteiro, que começa pela rua, então casava com nome de rua:
+   "Rua São Marcos, 100, Centro" cobrava R$ 55 (bairro São Marcos) em vez
+   de R$ 20 (Centro), e ainda avisava em verde como se tivesse acertado.
+   Saiu junto com a loja. */
+const TAXA_PADRAO = '_padrao';
+const KS_TAXAS_ANTIGAS = { VIX:25, SRR:35, CCA:35, VV:35 };
+
+/* Roda uma vez, na abertura. Quem já usava a taxa automática da KS
+   continua com ela, agora como tabela editável em vez de código fixo. */
+function migrarTaxas(){
+  if(cfg.taxas && typeof cfg.taxas === 'object') return;
+  cfg.taxas = { [TAXA_PADRAO]: {} };
+  if((cfg.stores||[]).some(n => String(n).trim().toUpperCase() === 'KS')){
+    cfg.taxas.KS = { ...KS_TAXAS_ANTIGAS };
   }
-  return best;
+  saveCfg();
 }
-function autoTaxaAritana(){
-  const store=(document.getElementById('fStore')?.value||'').toUpperCase();
-  if(store!=='ARITANA')return;
-  const bairro=document.getElementById('fBairro')?.value||'';
-  const rua=document.getElementById('fRua')?.value||'';
-  const fValue=document.getElementById('fValue');
-  if(!fValue||fValue.value)return;
-  const match=detectarTaxaAritana(bairro+' '+rua);
-  if(!match)return;
-  fValue.value=match.taxa.toFixed(2).replace('.',',');
-  toast('🛵 Taxa ARITANA: R$ '+match.taxa+' — '+match.bairro,'success');
+
+/* Nome de loja é digitado à mão em vários lugares (config, link da loja,
+   texto colado), então a busca ignora caixa e espaço em volta. */
+function tabelaDeTaxas(loja){
+  const t = cfg.taxas || {};
+  const alvo = String(loja||'').trim().toUpperCase();
+  if(!alvo) return null;
+  const chave = Object.keys(t).find(k => k !== TAXA_PADRAO && k.toUpperCase() === alvo);
+  return chave ? t[chave] : null;
 }
-function autoTaxaKS(){
-  const store=(document.getElementById('fStore')?.value||'').toUpperCase();
-  if(store!=='KS')return;
-  const city=document.getElementById('fCity')?.value||'';
-  const code=resolveCityCode(city);
-  const fValue=document.getElementById('fValue');
-  if(!fValue||fValue.value)return;
-  const taxa=KS_TAXAS_BY_CITY[code];
-  if(!taxa)return;
-  fValue.value=taxa.toFixed(2).replace('.',',');
-  toast('🛵 Taxa KS: R$ '+taxa+' — '+cityName(code),'success');
+
+/* {taxa, origem} — origem diz de onde o valor veio, para o aviso ser
+   verificável em vez de só aparecer um número. taxa 0 = não achou. */
+function taxaDaCidade(loja, cidade){
+  const code = resolveCityCode(cidade);
+  if(!code) return { taxa:0, origem:'' };
+  const daLoja = tabelaDeTaxas(loja);
+  const v = daLoja ? Number(daLoja[code]) : NaN;
+  if(v > 0) return { taxa:v, origem:String(loja).trim() };
+  const p = Number(((cfg.taxas||{})[TAXA_PADRAO]||{})[code]);
+  if(p > 0) return { taxa:p, origem:'padrão' };
+  return { taxa:0, origem:'' };
+}
+
+/* Formulário manual: preenche ao escolher loja ou cidade.
+   Só mexe em campo vazio — valor digitado à mão nunca é sobrescrito. */
+function autoTaxaCidade(){
+  const fValue = document.getElementById('fValue');
+  if(!fValue || fValue.value) return;
+  const loja   = document.getElementById('fStore')?.value || '';
+  const cidade = document.getElementById('fCity')?.value  || '';
+  const { taxa, origem } = taxaDaCidade(loja, cidade);
+  if(!taxa) return;
+  fValue.value = taxa.toFixed(2).replace('.', ',');
+  toast('\u{1F6F5} Taxa ' + origem + ': ' + fmtMoney(taxa) + ' — ' + cityName(resolveCityCode(cidade)), 'success');
+}
+
+/* Entrega sem taxa não some do fechamento: entra nele valendo zero, ou
+   seja, como entrega de graça. Por isso o aviso é de erro, e diz onde
+   resolver em vez de só constatar. */
+function avisarTaxaZero(s){
+  const cidade = cityName(s.city);
+  toast('⚠️ Sem taxa para ' + (cidade || 'cidade não reconhecida')
+        + ' — defina em Config › Taxas por cidade', 'error');
+}
+
+migrarTaxas();
+
+/* Ordem das cidades igual à do formulário, para o olho não ter de
+   reaprender a lista em cada tela. */
+const TAXA_CIDADES = ['SRR','VIX','VV','CCA','VIA','OUT'];
+
+function _taxaEscopoAtual(){
+  return document.getElementById('taxaEscopo')?.value || TAXA_PADRAO;
+}
+function _fmtTaxaInput(v){
+  return Number(v) > 0 ? Number(v).toFixed(2).replace('.', ',') : '';
+}
+
+function renderTaxasConfig(){
+  const sel = document.getElementById('taxaEscopo');
+  if(!sel) return;
+  const antes = sel.value;
+  sel.innerHTML = `<option value="${TAXA_PADRAO}">Padrão — todas as lojas</option>`
+    + (cfg.stores||[]).map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  if(antes && [...sel.options].some(o => o.value === antes)) sel.value = antes;
+  renderTaxasGrid();
+}
+
+function renderTaxasGrid(){
+  const el = document.getElementById('taxasGrid');
+  if(!el) return;
+  const escopo = _taxaEscopoAtual();
+  const tabela = (cfg.taxas||{})[escopo] || {};
+  const padrao = (cfg.taxas||{})[TAXA_PADRAO] || {};
+  el.innerHTML = TAXA_CIDADES.map(code => {
+    const proprio  = Number(tabela[code]) > 0;
+    /* Numa loja, campo vazio não quer dizer "sem taxa": quer dizer "usa a
+       padrão". O placeholder mostra qual valor ela vai usar. */
+    const herdado  = escopo !== TAXA_PADRAO && !proprio && Number(padrao[code]) > 0;
+    const dica     = herdado ? _fmtTaxaInput(padrao[code]) : '0,00';
+    return `<div class="taxa-row">
+      <span class="taxa-cidade">${esc(cityName(code))}</span>
+      <span class="taxa-prefixo">R$</span>
+      <input class="finput taxa-input${herdado ? ' herdada' : ''}" inputmode="decimal"
+             id="taxa_${code}" value="${proprio ? _fmtTaxaInput(tabela[code]) : ''}"
+             placeholder="${dica}" aria-label="Taxa para ${esc(cityName(code))}"
+             oninput="maskMoney(this)" onchange="salvarTaxa('${code}')" />
+    </div>`;
+  }).join('');
+  const nota = document.getElementById('taxasNota');
+  if(nota){
+    nota.textContent = escopo === TAXA_PADRAO
+      ? 'Vale para toda loja que não tiver tabela própria. Cidade em branco entra como taxa zero e o app avisa ao aceitar.'
+      : 'Em branco = usa a taxa padrão (o valor cinza). Preencha só as cidades em que esta loja paga diferente.';
+  }
+}
+
+function salvarTaxa(code){
+  const input = document.getElementById('taxa_' + code);
+  if(!input) return;
+  const escopo = _taxaEscopoAtual();
+  if(!cfg.taxas) cfg.taxas = { [TAXA_PADRAO]: {} };
+  if(!cfg.taxas[escopo]) cfg.taxas[escopo] = {};
+  const v = parseMoney(input.value);
+  /* Apagar o campo remove a cidade da tabela em vez de gravar zero: numa
+     loja isso devolve a herança da padrão, e na padrão deixa claro que a
+     cidade não tem taxa definida. */
+  if(v > 0) cfg.taxas[escopo][code] = v;
+  else delete cfg.taxas[escopo][code];
+  saveCfg();
+  renderTaxasGrid();
+  atualizarResumosCfg();
 }
 
 // ═══════════════ QUICK STORES ═══════════════
@@ -3932,6 +4041,8 @@ function atualizarResumosCfg(){
   const por = (id, txt) => { const el=document.getElementById('resumo-'+id); if(el) el.textContent=txt; };
   const n = (q, um, muitos) => q===0 ? 'nenhuma' : q===1 ? ('1 '+um) : (q+' '+muitos);
   por('lojas',   n((cfg.stores||[]).length, 'loja', 'lojas'));
+  const comTaxa = TAXA_CIDADES.filter(c => Number(((cfg.taxas||{})[TAXA_PADRAO]||{})[c]) > 0).length;
+  por('taxas',   comTaxa === 0 ? 'sem taxa' : comTaxa + '/' + TAXA_CIDADES.length + ' cidades');
   por('rapidas', n(getQuickStores().length, 'loja', 'lojas'));
   por('links',   n(getLinks().length, 'link', 'links'));
   por('fatura',  (cfg.emiNome || faturaEmissor().nome || '').slice(0,20));
@@ -3994,6 +4105,7 @@ function loadConfig(){
   document.getElementById('roomCode').textContent=room;
   document.getElementById('cfgRoom').value=room;
   renderStores();
+  renderTaxasConfig();
   renderQuickStoresConfig();
   renderLinks();
   renderAutoBackups();
@@ -4031,13 +4143,15 @@ function renderStores(){
   if(!cfg.stores.length){list.innerHTML='<div style="font-size:12px;color:var(--muted)">Nenhuma loja cadastrada.</div>';return;}
   list.innerHTML=cfg.stores.map((s,i)=>`<div class="store-chip">${s}<button type="button" class="store-chip-del" onclick="rmStore(${i})">×</button></div>`).join('');
 }
-function addStore(){const n=document.getElementById('newStore').value.trim();if(!n)return;if(cfg.stores.includes(n)){toast('Loja já cadastrada','error');return;}cfg.stores.push(n);document.getElementById('newStore').value='';saveCfg();renderStores();updateStoreSelect();toast(`🏪 "${n}" adicionada!`,'success');}
+function addStore(){const n=document.getElementById('newStore').value.trim();if(!n)return;if(cfg.stores.includes(n)){toast('Loja já cadastrada','error');return;}cfg.stores.push(n);document.getElementById('newStore').value='';saveCfg();renderStores();renderTaxasConfig();updateStoreSelect();toast(`🏪 "${n}" adicionada!`,'success');}
 function rmStore(i){
   const nome=cfg.stores[i]; if(nome===undefined)return;
   const antes=cfg.stores.slice();
-  cfg.stores.splice(i,1);saveCfg();renderStores();updateStoreSelect();
+  cfg.stores.splice(i,1);saveCfg();renderStores();renderTaxasConfig();updateStoreSelect();
+  /* A tabela de taxas da loja fica guardada: se o desfazer trouxer a loja
+     de volta, os valores voltam com ela. */
   comDesfazer(`🏪 "${nome}" removida`, ()=>{
-    cfg.stores=antes;saveCfg();renderStores();updateStoreSelect();toast('↩️ Loja de volta','success');
+    cfg.stores=antes;saveCfg();renderStores();renderTaxasConfig();updateStoreSelect();toast('↩️ Loja de volta','success');
   });
 }
 function updateStoreSelect(){const sel=document.getElementById('fStore');const cur=sel.value;sel.innerHTML='<option value="">— Sem loja específica —</option>'+cfg.stores.map(s=>`<option value="${s}">${s}</option>`).join('');sel.value=cur;}
@@ -4388,16 +4502,18 @@ async function acceptPending(key){
   s.status='confirmed'; s._order=stops.length; s.done=false; s._addedDate=new Date().toLocaleDateString('pt-BR');
   s._trackKey=key;
   stops.push(s);
-  // Auto-taxa ARITANA
-  if((s.store||'').toUpperCase()==='ARITANA'&&!s.value){
-    const match=detectarTaxaAritana(s.address||'');
-    if(match){s.value=match.taxa;toast('💰 Taxa ARITANA: R$ '+match.taxa+' — '+match.bairro,'success');}
-  }
-  // Auto-taxa KS por cidade
-  if((s.store||'').toUpperCase()==='KS'&&!s.value){
-    const _kscode=resolveCityCode(s.city||s.cityId||'');
-    const _kstaxa=KS_TAXAS_BY_CITY[_kscode];
-    if(_kstaxa){s.value=_kstaxa;toast('💰 Taxa KS: R$ '+_kstaxa+' — '+cityName(_kscode),'success');}
+  /* Taxa pela cidade. O pedido chega do pedido.html sempre com value 0 —
+     a loja não define quanto você cobra —, então é aqui que ela entra. */
+  if(!s.value){
+    const {taxa,origem}=taxaDaCidade(s.store||'',s.city);
+    if(taxa){
+      s.value=taxa;
+      toast('💰 Taxa '+origem+': '+fmtMoney(taxa)+' — '+cityName(s.city),'success');
+    }else{
+      /* Sem taxa entra zerada e some no fechamento do dia. Avisa em vez
+         de deixar passar calada. */
+      avisarTaxaZero(s);
+    }
   }
   saveStops();
   await updateTracking(key,'aceito',{name:s.name||'',address:s.address||'',store:s.store||''});

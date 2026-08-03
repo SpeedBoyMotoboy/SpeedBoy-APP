@@ -18,11 +18,11 @@ import { trecho, lerApp, criarPlacar } from './_util.mjs';
 const { ok, fim } = criarPlacar();
 const src = lerApp('index.html');
 
-// ── 1. As sete seções dobram, e pelo mesmo mecanismo ─────────
+// ── 1. Toda seção dobra, e pelo mesmo mecanismo ──────────────
 /* Antes, "Links das Lojas" dobrava com uma função própria e estilos
    inline, e as outras seis não dobravam. */
 {
-  const SECOES = ['lojas', 'rapidas', 'links', 'sync', 'fatura', 'backup', 'perigo'];
+  const SECOES = ['lojas', 'taxas', 'rapidas', 'links', 'sync', 'fatura', 'backup', 'perigo'];
   const faltando = SECOES.filter(s =>
     !new RegExp(`aria-controls="cfg-${s}"`).test(src) || !new RegExp(`id="cfg-${s}"`).test(src));
   ok(faltando.length === 0,

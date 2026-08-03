@@ -28,6 +28,7 @@ Ou individualmente:
 | `fechamento.mjs` | histórico do dia e contagem de entregas (veja abaixo) |
 | `nucleo.mjs` | `speedboy-core.js` — sobretudo: nenhum bairro se perdeu (veja abaixo) |
 | `desfazer.mjs` | desfazer e confirmação (veja abaixo) |
+| `config.mjs` | Config dobrável e primeiro uso (veja abaixo) |
 | `lint.mjs` | guarda de regressão (veja abaixo) |
 | `smoke.mjs` | o app inteiro num navegador real |
 
@@ -61,6 +62,24 @@ não compartilha referência com o array vivo (senão o "antes" muda com o
 "depois"); nenhum `confirm()` do navegador sobrou; toda ação destrutiva oferece
 desfazer **ou** pede confirmação; e a confirmação resolve com "não" quando
 fechada por fora, para não deixar a promessa pendurada.
+
+## `config.mjs` — a sala não troca em um toque
+
+O botão "🔄 Novo" ficava ao lado de "📋 Copiar", mesmo tamanho e mesmo estilo,
+sem confirmação nenhuma. Trocar o código **desconecta o outro celular em
+silêncio**: os dois continuam funcionando, gravando em salas diferentes, sem
+erro nenhum na tela — as listas simplesmente param de conversar.
+
+O teste exige confirmação marcada como destrutiva, com a consequência escrita,
+mais desfazer que volta ao código anterior (e que não é oferecido quando não há
+sala anterior, porque não faria nada).
+
+Cobre também a rolagem e o primeiro uso: as sete seções dobram pelo mesmo
+mecanismo, com `<button>` e `aria-expanded` — o que se usa todo dia começa
+aberto, o resto fechado, e a Sincronização abre sozinha quando não há sala.
+E o código da sala passa a existir **antes** de a Config ser aberta: ele só
+nascia dentro de `loadConfig()`, e num aparelho recém-instalado ninguém abriu a
+Config ainda.
 
 ## `nucleo.mjs` — nenhum bairro pode sumir
 
@@ -138,6 +157,10 @@ Sobe um servidor estático na raiz e abre as páginas num Chromium. Verifica:
   saiu, e tocar em Desfazer devolve a parada **e apaga a lápide junto**
 - a confirmação de apagar histórico abre dentro do app com os números reais, e
   fechá-la pelo botão voltar **não** executa a ação
+- a Config cabe em pouco mais de uma tela (875px; eram 1899px), cada seção
+  fechada mostra um resumo do que tem dentro, e abrir uma guarda o estado
+- um aparelho zerado mostra o campo do código da sala na **primeira** tela, com
+  o próprio código já gerado; código malformado é recusado com aviso
 
 Erros de rede (Firebase, fontes do Google) são esperados em ambiente isolado e
 ficam filtrados — o teste só reprova por erro de código.

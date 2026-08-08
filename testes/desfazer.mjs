@@ -98,12 +98,14 @@ function montar(paradas = []) {
    e não cabe botão. Por isso o desfazer não podia ser um toast. */
 {
   const src = lerApp('index.html');
+  // Os estilos do app saíram do <style> do index.html para o speedboy-app.css
+  const css = lerApp('speedboy-app.css');
 
-  const toastCss = /\.toast\{([^}]*)\}/.exec(src);
+  const toastCss = /\.toast\{([^}]*)\}/.exec(css);
   ok(!!toastCss && /pointer-events:\s*none/.test(toastCss[1]),
     'o toast continua sem receber toque (é aviso, não ação)');
 
-  const snackCss = /\.snack\.show\{([^}]*)\}/.exec(src);
+  const snackCss = /\.snack\.show\{([^}]*)\}/.exec(css);
   ok(!!snackCss && /pointer-events:\s*auto/.test(snackCss[1]),
     'a barra de desfazer recebe toque quando visível');
 

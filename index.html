@@ -17,480 +17,9 @@
      Antes cada arquivo declarava o proprio :root, com os mesmos nomes e
      valores diferentes. -->
 <link rel="stylesheet" href="speedboy.css">
-<style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;overscroll-behavior-x:none;}
-body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height:100vh;}
-
-/* HEADER */
-.header{background:var(--bg);padding:14px 16px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;}
-.logo{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;letter-spacing:-1px;color:var(--accent);}
-.logo span{color:var(--text);}
-.header-right{display:flex;align-items:center;gap:8px;}
-.badge-count{background:var(--accent);color:#000;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:12px;padding:3px 9px;border-radius:20px;}
-.badge-count.full{background:var(--red);color:#fff;}
-.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:background .3s;}
-.sync-dot.synced{background:var(--green);}
-.sync-dot.syncing{background:var(--accent);animation:pulse .8s infinite;}
-.sync-dot.error{background:var(--red);}
-.sync-dot.offline{background:var(--muted);}
-.sync-dot.pending{background:var(--accent2);}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-#syncRow{display:none;align-items:center;gap:5px;}
-#syncRow.visible{display:flex;}
-.sync-label{font-size:10px;font-weight:600;color:var(--muted);}
-
-/* ══ MODO FULL ══
-   O interruptor fica no cabeçalho, visível de qualquer tela: o dia vira
-   "muita demanda" no meio do expediente, e procurar isso na Config custa
-   três toques justamente na hora em que ninguém tem três toques de
-   sobra. Apagado quando desligado, aceso quando ligado. */
-.btn-full{background:transparent;border:1.5px solid var(--border);color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:12px;letter-spacing:.5px;padding:4px 10px;border-radius:20px;cursor:pointer;line-height:1.3;}
-.btn-full.on{background:var(--accent2);border-color:var(--accent2);color:#fff;}
-.full-bar{display:none;margin:10px 14px 0;background:rgba(255,107,0,.1);border:1px solid var(--accent2);border-radius:var(--radius);padding:10px 12px;align-items:center;gap:10px;}
-.full-bar.visible{display:flex;}
-.full-bar-txt{flex:1;min-width:0;font-size:12px;color:var(--text);line-height:1.5;}
-.full-bar-txt b{color:var(--accent2);}
-.full-bar-btn{background:var(--accent2);color:#fff;border:none;border-radius:9px;padding:9px 12px;font-weight:800;font-size:12px;cursor:pointer;flex-shrink:0;}
-
-/* ══ REPASSES (aba do modo FULL) ══ */
-.rp-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;}
-.rp-card.tem-problema{border-color:var(--red);}
-.rp-head{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;}
-.rp-nome{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.rp-meta{font-size:11px;color:var(--muted);margin-top:2px;}
-.rp-prog{flex-shrink:0;text-align:right;}
-.rp-prog-val{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--green);}
-.rp-prog-lbl{font-size:9px;font-weight:700;letter-spacing:.6px;color:var(--muted);text-transform:uppercase;}
-.rp-body{display:none;border-top:1px solid var(--border);background:var(--card2);padding:6px 14px 12px;}
-.rp-card.aberto .rp-body{display:block;}
-.rp-item{padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;}
-.rp-item:last-child{border-bottom:none;}
-.rp-item-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
-.rp-item-nome{font-weight:600;}
-.rp-item-sub{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.5;}
-.rp-sel{font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;flex-shrink:0;}
-.rp-sel.ok{background:rgba(0,230,118,.15);color:var(--green);}
-.rp-sel.prob{background:rgba(255,82,82,.15);color:var(--red);}
-.rp-sel.wait{background:rgba(127,127,127,.15);color:var(--muted);}
-.rp-acts{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap;}
-.rp-acts .sc-btn{flex:1;min-width:90px;}
-.rp-prova{margin-top:7px;border:1px solid var(--border);border-radius:8px;max-width:100%;display:block;cursor:pointer;}
-.rp-vazio{color:var(--muted);text-align:center;padding:26px 16px;font-size:13px;line-height:1.7;}
-.rp-opt{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:13px;cursor:pointer;}
-.rp-opt input{width:20px;height:20px;accent-color:var(--accent);flex-shrink:0;cursor:pointer;}
-/* Quem entregou, quando e quem recebeu — a linha que o fechamento passou
-   a precisar quando as entregas deixaram de ser todas do próprio dono. */
-.fstop-quem{font-size:12px;color:var(--muted);line-height:1.6;display:flex;flex-wrap:wrap;gap:4px 10px;}
-.fstop-quem b{color:var(--accent2);font-weight:700;}
-
-/* BOTTOM NAV */
-/* env(safe-area-inset-bottom): sem isto a barra fica embaixo da faixa do
-   iPhone e do gesto do Android, e o último item vira quase intocável. */
-.bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--card);border-top:1px solid var(--border);display:flex;z-index:100;padding-bottom:env(safe-area-inset-bottom);}
-.nav-btn{flex:1;padding:14px 8px 12px;background:none;border:none;color:var(--muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-family:'Barlow',sans-serif;font-size:11px;font-weight:700;letter-spacing:.3px;transition:color .15s;min-height:60px;}
-.nav-btn:active{background:rgba(127,127,127,.12);}
-.nav-btn.active{color:var(--accent);}
-.nav-btn .icon{font-size:20px;line-height:1;}
-.nav-btn.hidden{display:none;}
-/* Bolinha no item Repasses quando algum motoboy relatou problema */
-.nav-btn .alerta{position:absolute;transform:translate(14px,-14px);width:9px;height:9px;border-radius:50%;background:var(--red);}
-.nav-btn{position:relative;}
-
-/* SCREENS */
-.screen{display:none;flex:1;flex-direction:column;overflow-y:auto;padding-bottom:calc(70px + env(safe-area-inset-bottom));}
-.screen.active{display:flex;animation:fadeIn .18s ease;}
-@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
-
-/* ══ HOME ══ */
-.home-top{display:flex;gap:10px;padding:14px 14px 6px;}
-.btn-add{flex:1;background:var(--accent);color:#000;border:none;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;padding:13px 16px;border-radius:var(--radius);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:transform .1s;}
-.btn-add:active{transform:scale(.97);}
-.btn-cfg-icon{background:var(--card);border:none;color:var(--text);padding:13px 14px;border-radius:var(--radius);cursor:pointer;font-size:18px;}
-
-
-/* PENDING */
-.pending-section{padding:0 14px 6px;display:none;}
-.pending-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
-.pending-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;color:var(--accent);display:flex;align-items:center;gap:6px;}
-.pending-badge{background:var(--red);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;}
-.pending-card{background:var(--card);border:1px solid var(--accent);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;}
-.pending-info{flex:1;min-width:0;}
-.pending-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.pending-addr{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
-.pending-store{font-size:10px;font-weight:700;color:var(--accent);letter-spacing:.5px;text-transform:uppercase;margin-top:3px;}
-.btn-accept{background:var(--green);color:#000;border:none;border-radius:9px;padding:14px 16px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px;cursor:pointer;flex-shrink:0;}
-.btn-quick-done{background:var(--green);color:#000;border:none;border-radius:9px;padding:12px 14px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;cursor:pointer;width:100%;margin-top:8px;}
-
-.btn-reject{background:var(--card2);color:var(--red);border:1px solid var(--red);border-radius:9px;padding:14px 16px;font-size:13px;cursor:pointer;flex-shrink:0;margin-right:5px;}
-
-/* FILTER BAR */
-.filter-wrap{padding:0 14px 8px;display:none;}
-.filter-wrap.visible{display:block;}
-.filter-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;}
-.filter-row::-webkit-scrollbar{display:none;}
-.filter-chip{flex-shrink:0;padding:6px 12px;border-radius:20px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;}
-.filter-chip.on{background:var(--accent);border-color:var(--accent);color:#000;}
-.filter-chip.city{border-color:var(--blue);}
-.filter-chip.city.on{background:var(--blue);border-color:var(--blue);color:#fff;}
-.filter-chip.type{border-color:var(--green);}
-.filter-chip.type.on{background:var(--green);border-color:var(--green);color:#000;}
-.filter-section-lbl{font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--muted);text-transform:uppercase;margin:8px 0 4px;}
-
-/* SORT BAR */
-.sort-bar{display:none;gap:7px;padding:0 14px 8px;align-items:center;}
-.sort-bar.visible{display:flex;}
-.sort-label{font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;}
-.btn-sort{flex:1;background:var(--card);border:1px solid var(--border);color:var(--muted);font-family:'Barlow',sans-serif;font-weight:600;font-size:12px;padding:8px 6px;border-radius:9px;cursor:pointer;text-align:center;transition:all .15s;}
-.btn-sort.on{border-color:var(--accent);color:var(--accent);}
-
-/* STOPS LIST */
-.stops-list{flex:1;padding:6px 14px 140px;}
-.store-label{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:6px 0 2px;color:var(--muted);display:flex;align-items:center;gap:6px;}
-.store-label::after{content:'';flex:1;height:1px;background:var(--border);}
-.stop-card{background:var(--card);border-radius:var(--radius);margin-bottom:8px;border:1px solid var(--border);overflow:hidden;transition:border-color .2s;}
-.stop-card.done{opacity:.45;}
-.stop-card.expanded{border-color:var(--accent);}
-.stop-header{display:flex;align-items:center;gap:10px;padding:14px 14px 12px;cursor:pointer;position:relative;}
-.stop-header-next{border:3px solid var(--green);background:rgba(0,230,118,.08);}
-.stop-num{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--accent);min-width:24px;}
-.stop-info{flex:1;min-width:0;}
-.stop-name{font-weight:600;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.stop-addr{font-size:15px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
-.stop-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;}
-.stop-val{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;color:var(--green);}
-.stop-val.unpaid{color:var(--accent);}
-.stop-dot{width:8px;height:8px;border-radius:50%;background:var(--border);}
-.stop-card.done .stop-dot{background:var(--green);}
-.stop-detail{display:none;background:var(--card2);border-top:1px solid var(--border);padding:12px;}
-.stop-card.expanded .stop-detail{display:block;}
-.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
-.detail-chip{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:15px;line-height:1.4;display:flex;flex-direction:column;gap:2px;}
-.detail-chip-lbl{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
-.detail-chip.full{grid-column:1/-1;}
-.paid-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;}
-.paid-badge.yes{background:rgba(0,230,118,.15);color:var(--green);border:1px solid var(--green);}
-.paid-badge.no{background:rgba(245,197,24,.1);color:var(--accent);border:1px solid var(--accent);}
-.stop-actions{display:none;padding:10px 12px 12px;flex-direction:column;gap:7px;background:var(--card2);border-top:1px solid var(--border);}
-.stop-card.expanded .stop-actions{display:flex;}
-.act-row{display:grid;gap:6px;}
-.act-row-3{grid-template-columns:1fr 1fr 1fr;}
-.act-row-2{grid-template-columns:1fr 1fr;}
-.btn-act-sec{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:9px;padding:12px 8px;font-family:'Barlow',sans-serif;font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;}
-.btn-act-sec:active{transform:scale(.95);}
-.btn-act{flex:1;min-width:calc(50% - 4px);padding:16px 12px;border-radius:9px;border:none;font-family:'Barlow',sans-serif;font-weight:700;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:all .1s;}
-.btn-act:active{transform:scale(.95);filter:brightness(1.15);}
-.ba-wpp{background:#25d366;color:#fff;}
-.ba-maps{background:#4285f4;color:#fff;}
-.ba-done{background:var(--card2);color:var(--green);border:1px solid var(--green);}
-.ba-paid{background:var(--card2);color:var(--accent);border:1px solid var(--accent);}
-.ba-paid.received{color:var(--green);border-color:var(--green);}
-.ba-edit{background:var(--card2);color:var(--muted);border:1px solid var(--border);}
-.ba-del{background:var(--card2);color:var(--red);border:1px solid var(--red);}
-
-/* ROUTE BAR */
-.route-bar{position:fixed;bottom:58px;left:50%;transform:translateX(-50%);width:100%;max-width:480px;padding:8px 14px;z-index:99;pointer-events:none;}
-.btn-route{width:100%;pointer-events:all;background:linear-gradient(135deg,#1a73e8,#4285f4);color:#fff;border:none;border-radius:var(--radius);font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:19px;padding:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 18px rgba(66,133,244,.4);transition:transform .1s;}
-.btn-route:active{transform:scale(.98);}
-.btn-route:disabled{opacity:.4;cursor:not-allowed;box-shadow:none;}
-
-/* EMPTY */
-.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;gap:10px;text-align:center;}
-.empty-icon{font-size:56px;}
-.empty-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:22px;color:var(--muted);}
-.empty-sub{font-size:13px;color:var(--muted);opacity:.6;max-width:230px;line-height:1.5;}
-
-/* ══ ADD/EDIT ══ */
-.form-screen{padding:14px;overflow-y:auto;padding-bottom:30px;}
-.screen-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:21px;margin-bottom:14px;display:flex;align-items:center;gap:10px;}
-.back-btn{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0;}
-.paste-box{position:relative;}
-.paste-area{width:100%;background:var(--card);border:2px dashed var(--border);border-radius:var(--radius);padding:14px 38px 14px 14px;font-size:13px;color:var(--text);min-height:90px;resize:none;font-family:'Barlow',sans-serif;line-height:1.5;outline:none;transition:border-color .2s;}
-.paste-area:focus{border-color:var(--accent);}
-.paste-area::placeholder{color:var(--muted);}
-/* Excecoes ao alvo minimo de 48px do speedboy.css.
-   .btn-clear e um circulo de 26px dentro do campo: esticar so deforma.
-   #themeToggleBtn fica no cabecalho, que aparece em todas as telas —
-   22px a mais ali custam altura util em cada tela, por um botao raro. */
-.btn-clear,#themeToggleBtn{min-height:0;}
-.btn-clear{position:absolute;top:9px;right:9px;background:var(--card2);border:none;color:var(--muted);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;}
-.btn-parse{width:100%;margin-top:10px;background:var(--accent);color:#000;border:none;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;padding:13px;border-radius:var(--radius);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;}
-.free-badge{background:#1a2a1a;border:1px solid var(--green);color:var(--green);font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;}
-.divider{display:flex;align-items:center;gap:10px;margin:16px 0 14px;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:1px;}
-.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
-.field{margin-bottom:12px;}
-.flabel{font-size:10px;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:5px;}
-.finput{width:100%;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:11px 13px;font-size:14px;font-family:'Barlow',sans-serif;outline:none;transition:border-color .2s;}
-.finput:focus{border-color:var(--accent);}
-.finput::placeholder{color:var(--muted);}
-.fselect{width:100%;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:11px 13px;font-size:14px;font-family:'Barlow',sans-serif;outline:none;appearance:none;cursor:pointer;}
-.fselect:focus{border-color:var(--accent);}
-.frow{display:flex;gap:10px;}
-.frow .field{flex:1;}
-.toggle-row{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;cursor:pointer;}
-.toggle-track{width:36px;height:20px;background:var(--border);border-radius:10px;position:relative;transition:background .2s;flex-shrink:0;}
-.toggle-track::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;background:#fff;border-radius:50%;transition:transform .2s;}
-#fPaid:checked + .toggle-track{background:var(--green);}
-#fPaid:checked + .toggle-track::after{transform:translateX(16px);}
-#fPaid{display:none;}
-.toggle-lbl{font-size:13px;color:var(--muted);}
-.btn-save{width:100%;margin-top:10px;background:var(--green);color:#000;border:none;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;padding:13px;border-radius:var(--radius);cursor:pointer;}
-
-/* ══ WPP MODAL ══ */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:flex-end;justify-content:center;z-index:300;backdrop-filter:blur(4px);}
-.modal-overlay.hidden{display:none;}
-.modal-sheet{background:var(--card);border-radius:20px 20px 0 0;padding:20px 16px 36px;width:100%;max-width:480px;animation:slideUp .25s ease;}
-@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-.modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;}
-.modal-name{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:18px;color:var(--green);}
-.modal-close{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;}
-.modal-phone{font-size:12px;color:var(--muted);margin-bottom:14px;}
-.wpp-btn{width:100%;background:var(--card2);border:1px solid var(--border);color:var(--text);text-align:left;padding:13px 14px;border-radius:11px;margin-bottom:8px;cursor:pointer;font-family:'Barlow',sans-serif;font-size:13px;line-height:1.4;transition:border-color .15s;}
-.wpp-btn:active{border-color:var(--green);}
-.wpp-tag{display:block;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:3px;}
-.wpp-custom{display:flex;gap:8px;margin-top:4px;}
-.wpp-input{flex:1;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:11px 12px;font-size:13px;font-family:'Barlow',sans-serif;outline:none;}
-.wpp-input:focus{border-color:var(--green);}
-.btn-wpp-send{background:#25d366;color:#fff;border:none;border-radius:10px;padding:11px 14px;font-weight:700;font-size:13px;cursor:pointer;}
-
-/* ══ FINANCE ══ */
-.finance-body{padding:14px;overflow-y:auto;padding-bottom:80px;}
-.section-title{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--text);margin-bottom:14px;}
-.meta-row{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;border:1px solid var(--border);}
-.meta-lbl{font-size:12px;color:var(--muted);flex:1;}
-.meta-inp{background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 10px;font-size:14px;font-family:'Barlow Condensed',sans-serif;font-weight:700;width:90px;outline:none;text-align:right;}
-.meta-bar-wrap{height:8px;background:var(--card2);border-radius:4px;margin:-10px 0 16px;overflow:hidden;}
-.meta-bar{height:100%;border-radius:4px;background:var(--accent);transition:width .4s;}
-.sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
-.sum-card{background:var(--card);border-radius:var(--radius);padding:14px;border:1px solid var(--border);}
-.sum-card.ac{border-color:var(--accent);}
-.sum-card.gr{border-color:var(--green);}
-.sum-lbl{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
-.sum-val{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:24px;line-height:1;}
-.sum-val.ac{color:var(--accent);}
-.sum-val.gr{color:var(--green);}
-.sum-sub{font-size:11px;color:var(--muted);margin-top:4px;}
-.chart-box{background:var(--card);border-radius:var(--radius);padding:14px;margin-bottom:16px;border:1px solid var(--border);}
-.chart-lbl{font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;}
-.store-break{background:var(--card);border-radius:var(--radius);padding:14px;margin-bottom:16px;border:1px solid var(--border);}
-.break-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);}
-.break-row:last-child{border-bottom:none;}
-.break-name{font-weight:600;font-size:13px;}
-.break-val{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;color:var(--green);}
-.break-cnt{font-size:11px;color:var(--muted);}
-
-/* ══ FECHAMENTO — DIAS ══ */
-.fday{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;}
-.fday-h{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;gap:8px;}
-.fday-left{display:flex;flex-direction:column;gap:2px;min-width:0;}
-.fday-date{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;}
-.fday-meta{font-size:13px;color:var(--muted);}
-.fday-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;}
-.fday-val{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;}
-.fday-list{display:none;border-top:1px solid var(--border);}
-.fday.open .fday-list{display:block;}
-.fstop{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);}
-.fstop:last-child{border-bottom:none;}
-.fstop-info{flex:1;min-width:0;}
-.fstop-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.fstop-store{font-size:12px;color:#ff6b00;font-weight:600;}
-.fstop-val{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;flex-shrink:0;}
-.fsec-title{font-size:11px;font-weight:800;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin:16px 0 8px;padding:0 2px;}
-
-/* ══ REPORT ══ */
-.report-body{padding:14px;overflow-y:auto;padding-bottom:80px;}
-.period-tabs{display:flex;gap:8px;margin-bottom:16px;}
-.period-tab{flex:1;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;color:var(--muted);cursor:pointer;text-align:center;transition:all .15s;}
-.period-tab.on{background:var(--accent);color:#000;border-color:var(--accent);}
-.report-card{background:var(--card);border-radius:var(--radius);padding:14px;margin-bottom:14px;border:1px solid var(--border);}
-.report-title{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:19px;color:var(--accent);margin-bottom:3px;}
-.report-sub{font-size:11px;color:var(--muted);margin-bottom:12px;}
-.rstat-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;}
-.rstat{flex:1;background:var(--card2);border-radius:10px;padding:10px 12px;}
-.rstat-lbl{font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
-.rstat-val{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;}
-.rstat-val.ac{color:var(--accent);}
-.rstat-val.gr{color:var(--green);}
-.rtable{width:100%;border-collapse:collapse;font-size:11px;margin-top:8px;}
-.rtable th{background:var(--card2);color:var(--muted);padding:7px 8px;text-align:left;font-weight:700;font-size:10px;text-transform:uppercase;}
-.rtable td{padding:7px 8px;border-bottom:1px solid var(--border);color:var(--text);}
-.rtable tr:last-child td{border-bottom:none;}
-/* ══ STORE CARDS (fechamento) ══ */
-.sc{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;}
-.sc-name{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;margin-bottom:2px;}
-.sc-sub{font-size:13px;color:var(--muted);margin-bottom:8px;}
-.sc-bar-wrap{background:var(--card2);border-radius:4px;height:6px;margin-bottom:6px;overflow:hidden;}
-.sc-bar{height:6px;border-radius:4px;background:var(--green);transition:width .4s;}
-.sc-amounts{font-size:13px;color:var(--muted);margin-bottom:10px;}
-.sc-row1{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;}
-.sc-row2{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
-.sc-btn{background:transparent;border:1px solid rgba(245,197,24,.4);color:var(--accent);border-radius:8px;padding:9px 4px;font-family:'Barlow',sans-serif;font-weight:700;font-size:13px;cursor:pointer;text-align:center;transition:opacity .1s;}
-.sc-btn:active{opacity:.7;}
-.sc-btn.green{border-color:rgba(0,230,118,.4);color:var(--green);}
-.sc-btn.wpp{border-color:rgba(37,211,102,.4);color:#25d366;}
-.sc-btn.blue{border-color:rgba(59,130,246,.45);color:var(--blue);}
-.sc-btn.paid{background:rgba(0,230,118,.1);border-color:var(--green);color:var(--green);}
-.rstat-row-3{grid-template-columns:1fr 1fr 1fr!important;}
-.btn-pdf{width:100%;background:linear-gradient(135deg,#c0392b,#e74c3c);color:#fff;border:none;border-radius:var(--radius);font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:19px;padding:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 16px rgba(255,61,61,.3);margin-bottom:8px;transition:transform .1s;}
-.btn-pdf:active{transform:scale(.98);}
-.btn-share{width:100%;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;padding:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;}
-.no-data{text-align:center;padding:30px;color:var(--muted);font-size:13px;}
-
-/* ══ LINKS ══ */
-.links-body{padding:14px;overflow-y:auto;padding-bottom:80px;}
-.link-card{background:var(--card);border-radius:var(--radius);padding:14px;margin-bottom:12px;border:1px solid var(--border);}
-.link-name{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;margin-bottom:4px;}
-.link-date{font-size:11px;color:var(--muted);}
-.link-url{font-size:11px;color:var(--blue);word-break:break-all;background:var(--card2);padding:8px 10px;border-radius:8px;margin:8px 0;line-height:1.5;}
-.link-acts{display:flex;gap:8px;}
-.btn-copy-link{flex:1;background:var(--blue);color:#fff;border:none;border-radius:9px;padding:9px;font-family:'Barlow',sans-serif;font-weight:600;font-size:13px;cursor:pointer;}
-.btn-wpp-link{flex:1;background:#25d366;color:#fff;border:none;border-radius:9px;padding:9px;font-family:'Barlow',sans-serif;font-weight:600;font-size:13px;cursor:pointer;}
-.btn-del-link{background:var(--card2);color:var(--red);border:1px solid var(--red);border-radius:9px;padding:9px 11px;font-size:13px;cursor:pointer;}
-.btn-new-link{width:100%;background:var(--accent);color:#000;border:none;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;padding:13px;border-radius:var(--radius);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px;}
-.links-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px;line-height:1.6;}
-
-
-
-/* ══ CONFIG ══ */
-.config-body{padding:14px;overflow-y:auto;padding-bottom:80px;}
-.cfg-section{margin-bottom:22px;}
-.cfg-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
-.info-box{background:var(--card);border-radius:var(--radius);padding:12px;font-size:12px;color:var(--muted);line-height:1.6;border-left:3px solid var(--green);margin-bottom:10px;}
-.info-box.warn{border-color:var(--red);color:#e0e0e0;}
-.info-link{color:var(--accent);text-decoration:none;}
-.btn-gps{background:var(--card2);border:1px solid var(--border);color:var(--text);font-size:11px;padding:5px 9px;border-radius:6px;cursor:pointer;}
-.stores-list{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px;}
-.store-chip{background:var(--card2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:13px;display:flex;align-items:center;gap:6px;}
-.store-chip-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0;}
-.store-add-row{display:flex;gap:8px;}
-.btn-store-add{background:var(--accent);color:#000;border:none;border-radius:10px;padding:11px 14px;font-weight:700;font-size:13px;cursor:pointer;}
-.fb-textarea{width:100%;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 12px;font-size:12px;font-family:'Barlow',sans-serif;line-height:1.6;outline:none;resize:none;min-height:120px;}
-.fb-textarea:focus{border-color:var(--accent);}
-.room-box{background:var(--card2);border-radius:10px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;margin-top:10px;}
-.room-code{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;letter-spacing:3px;color:var(--accent);}
-.room-btns{display:flex;flex-direction:column;gap:6px;align-items:flex-end;}
-.btn-room{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;}
-.fb-join-row{display:flex;gap:8px;margin-top:10px;}
-.fb-join-row .finput{flex:1;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:2px;}
-.btn-join{background:var(--accent);color:#000;border:none;border-radius:10px;padding:11px 14px;font-weight:700;font-size:13px;cursor:pointer;}
-.fb-status{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);}
-.btn-cfg-save{width:100%;background:var(--accent);color:#000;border:none;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;padding:13px;border-radius:var(--radius);cursor:pointer;margin-top:8px;}
-.backup-row{display:flex;gap:8px;margin-bottom:20px;}
-.btn-backup{flex:1;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:11px;font-family:'Barlow',sans-serif;font-weight:600;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
-.danger-btn{width:100%;background:transparent;border:1px solid var(--red);color:var(--red);border-radius:var(--radius);padding:11px;font-family:'Barlow',sans-serif;font-weight:600;font-size:13px;cursor:pointer;margin-bottom:8px;}
-.danger-btn.gray{border-color:var(--border);color:var(--muted);}
-
-/* NOTIFY */
-.notify-bar{background:rgba(245,197,24,.08);border:1px solid rgba(245,197,24,.2);border-radius:10px;padding:10px 14px;margin:0 14px 8px;display:flex;align-items:center;gap:10px;cursor:pointer;}
-.notify-bar.hidden{display:none;}
-.notify-bar.denied{background:rgba(255,61,61,.08);border-color:rgba(255,61,61,.35);}
-.notify-bar-text{font-size:12px;color:var(--muted);flex:1;line-height:1.4;}
-.notify-status{font-size:11px;font-weight:700;color:var(--red);border:1px solid rgba(255,61,61,.5);border-radius:20px;padding:3px 10px;white-space:nowrap;font-family:'Barlow Condensed',sans-serif;}
-.notify-status.hidden{display:none;}
-.btn-allow-notify{background:var(--accent);color:#000;border:none;border-radius:7px;padding:6px 12px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;}
-
-/* FAIXA DE ATUALIZAÇÃO — mesma linguagem da .notify-bar, mas fora das
-   telas, logo abaixo do cabeçalho, para aparecer em qualquer aba. */
-.update-bar{background:rgba(0,230,118,.1);border:1px solid rgba(0,230,118,.35);border-radius:10px;padding:10px 14px;margin:8px 14px 0;display:flex;align-items:center;gap:10px;}
-.update-bar.hidden{display:none;}
-.update-bar-text{font-size:12px;color:var(--text);flex:1;line-height:1.4;}
-.btn-update{background:var(--green);color:#000;border:none;border-radius:7px;padding:8px 14px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap;min-height:36px;}
-.btn-update:disabled{opacity:.6;cursor:default;}
-.notify-steps{list-style:none;padding:0;margin:4px 0 0;counter-reset:step;}
-.notify-steps li{position:relative;padding:9px 0 9px 34px;font-size:13px;color:var(--text);line-height:1.45;border-bottom:1px solid var(--border);}
-.notify-steps li:last-child{border-bottom:none;}
-.notify-steps li::before{counter-increment:step;content:counter(step);position:absolute;left:0;top:8px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#000;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;}
-.notify-help-note{font-size:12px;color:var(--muted);margin:12px 0 2px;line-height:1.5;}
-.btn-notify-test{width:100%;margin-top:14px;background:var(--green);color:#000;border:none;border-radius:10px;padding:12px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;cursor:pointer;}
-
-/* DUAL VALUE CARD */
-.stop-product-val{font-size:11px;color:var(--muted);margin-top:2px;}
-.stop-product-val span{color:var(--accent);font-weight:700;}
-
-/* ══ FORM CLASSES (match HTML) ══ */
-.field-group{margin-bottom:12px;}
-.field-label{font-size:10px;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:5px;}
-.field-input{width:100%;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:11px 13px;font-size:14px;font-family:'Barlow',sans-serif;outline:none;transition:border-color .2s;appearance:none;}
-.field-input:focus{border-color:var(--accent);}
-.field-input::placeholder{color:var(--muted);}
-.field-row{display:flex;gap:10px;}
-.field-row .field-group{flex:1;}
-.sec-divider{display:flex;align-items:center;gap:10px;margin:16px 0 14px;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:1px;}
-.sec-divider::before,.sec-divider::after{content:'';flex:1;height:1px;background:var(--border);}
-.money-input-wrap{position:relative;}
-.money-prefix{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;font-weight:600;pointer-events:none;}
-.money-input-wrap .field-input{padding-left:38px;}
-.req{color:var(--red);font-weight:900;}
-
-/* BAIRRO SEARCH */
-.bairro-wrap{position:relative;}
-.bairro-list{display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1.5px solid var(--accent);border-top:none;border-radius:0 0 12px 12px;max-height:180px;overflow-y:auto;z-index:50;}
-.bairro-list.show{display:block;}
-.bairro-item{padding:10px 14px;cursor:pointer;font-size:13px;color:var(--text);border-bottom:1px solid var(--border);}
-.bairro-item:active{background:var(--accent);color:#000;}
-.bairro-item:last-child{border-bottom:none;}
-
-/* TOAST */
-.toast{position:fixed;top:70px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--card2);border:1px solid var(--border);color:var(--text);padding:9px 18px;border-radius:30px;font-size:13px;font-weight:600;z-index:400;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;}
-.quick-fab{position:fixed;bottom:84px;right:16px;z-index:50;width:50px;height:50px;border-radius:25px;background:var(--accent);border:none;font-size:22px;cursor:pointer;box-shadow:0 4px 14px rgba(245,197,24,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s;-webkit-tap-highlight-color:transparent;}
-.quick-fab:active{transform:scale(.92);}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-.toast.success{border-color:var(--green);color:var(--green);}
-.toast.error{border-color:var(--red);color:var(--red);}
-
-/* CONFIG DOBRÁVEL
-   A tela tinha 1899px de conteúdo — 2,7 telas de rolagem — com tudo
-   sempre aberto. O que se toca uma vez na vida (dados da fatura, 412px)
-   ocupava o mesmo espaço do que se toca todo dia. */
-.cfg-cab{width:100%;background:none;border:none;padding:0;margin:0;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;color:inherit;text-align:left;font:inherit;min-height:0;}
-.cfg-cab .cfg-title{margin:0;flex:1;}
-.cfg-seta{font-size:15px;color:var(--muted);transition:transform var(--rapido);flex-shrink:0;}
-.cfg-cab[aria-expanded="true"] .cfg-seta{transform:rotate(180deg);}
-.cfg-corpo{padding-top:12px;}
-.cfg-cab[aria-expanded="false"]+.cfg-corpo{display:none;}
-/* Resumo de uma linha: dá para saber o que tem dentro sem abrir. */
-.cfg-resumo{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%;}
-.cfg-cab[aria-expanded="true"] .cfg-resumo{display:none;}
-
-/* PRIMEIRO USO
-   Quem abre o app num aparelho novo via uma lista vazia e nada mais. Para
-   entrar na sala de outro aparelho tinha de achar o campo do código, que
-   fica a 1116px do topo da Config — 1,6 tela abaixo. */
-.bemvindo{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--radius);padding:16px 14px;margin:12px;}
-.bemvindo-tit{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:19px;color:var(--accent);margin-bottom:6px;}
-.bemvindo-txt{font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:14px;}
-.bemvindo-ou{display:flex;align-items:center;gap:10px;margin:14px 0 12px;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:1px;}
-.bemvindo-ou::before,.bemvindo-ou::after{content:'';flex:1;height:1px;background:var(--border);}
-.bemvindo-row{display:flex;gap:8px;}
-.bemvindo-row .finput{flex:1;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;text-transform:uppercase;}
-.bemvindo-btn{background:var(--accent);border:none;color:#000;border-radius:12px;padding:0 18px;font-size:14px;font-weight:800;cursor:pointer;flex-shrink:0;}
-.bemvindo-sec{width:100%;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;}
-
-/* DESFAZER
-   Barra separada do toast, e por dois motivos: o toast tem
-   pointer-events:none (não recebe toque) e white-space:nowrap (não cabe
-   botão). Fica embaixo, acima da barra de navegação, onde o polegar
-   alcança sem atravessar a tela. */
-.snack{position:fixed;left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));max-width:456px;margin:0 auto;background:var(--card2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--radius);padding:10px 10px 10px 14px;display:flex;align-items:center;gap:10px;z-index:420;opacity:0;transform:translateY(12px);transition:opacity var(--normal),transform var(--normal);pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.45);}
-.snack.show{opacity:1;transform:translateY(0);pointer-events:auto;}
-.snack-msg{flex:1;font-size:13px;font-weight:600;color:var(--text);line-height:1.35;}
-.snack-btn{background:var(--accent);border:none;color:#000;border-radius:9px;padding:0 16px;min-height:40px;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;}
-
-/* CONFIRMAÇÃO
-   O confirm() do navegador não deixa dizer o que se perde, trava a thread
-   e no Android abre um diálogo do sistema que não parece parte do app. */
-/* O .modal-name é verde para todos os modais. Verde numa confirmação de
-   apagar lê como "pode seguir" — exatamente o contrário do que a tela quer
-   dizer. Em ação destrutiva o título acompanha o botão. */
-#confirmTitulo.perigo{color:var(--red);}
-.confirm-texto{font-size:14px;color:var(--text);line-height:1.5;margin:10px 0 6px;}
-.confirm-detalhe{font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:16px;}
-.confirm-acoes{display:flex;gap:8px;}
-.confirm-acoes button{flex:1;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;padding:12px 8px;}
-.confirm-nao{background:var(--card2);border:1px solid var(--border);color:var(--text);}
-.confirm-sim{background:var(--green);border:none;color:#000;}
-.confirm-sim.perigo{background:var(--red);color:#fff;}
-</style>
+<!-- Estilos só deste app. Saíram de um <style> de 472 linhas aqui dentro;
+     a ordem importa: speedboy.css declara os tokens que este usa. -->
+<link rel="stylesheet" href="speedboy-app.css">
 </head>
 <body>
 
@@ -1163,15 +692,97 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
   <button type="button" class="nav-btn"        id="nav-cfg"     onclick="goNav('configScreen','nav-cfg')"><span class="icon">⚙️</span>Config</button>
 </nav>
 
-<!-- Padrão único de fatura (schema speedboy.fatura/v1) — compartilhado com fatura.html -->
+<!-- ═══════════════════════════════════════════════════════════════
+     ARQUIVOS EXTERNOS — o que NÃO está aqui dentro
+
+       speedboy.css          paleta e escalas, comuns às quatro páginas
+       speedboy-app.css      estilos só deste app (saíram de um <style>
+                             de 472 linhas que ficava aqui)
+       speedboy-core.js      dinheiro, telefone, cidades/bairros, tema
+       speedboy-graficos.js  os cinco gráficos de canvas
+       speedboy-firebase.js  configuração do Firebase e login anônimo
+       fatura-padrao.js      layout de fatura e de fechamento em PDF
+
+     A ordem importa: speedboy.css declara os tokens que o
+     speedboy-app.css usa, e os .js definem funções que o script abaixo
+     chama pelo nome, sem prefixo.
+     ═══════════════════════════════════════════════════════════════ -->
 <script src="speedboy-firebase.js"></script>
 <script src="speedboy-core.js"></script>
+<script src="speedboy-graficos.js"></script>
+<!-- Padrão único de fatura (schema speedboy.fatura/v1) — compartilhado com fatura.html -->
 <script src="fatura-padrao.js"></script>
 
 <script>
 'use strict';
+/* ═══════════════════════════════════════════════════════════════
+   ÍNDICE DAS SEÇÕES
+
+   Este script é grande porque o app não tem build: o HTML vai cru para o
+   GitHub Pages, e não há empacotador para juntar módulos. O que dá para
+   ter é ordem e um índice — procure por "§ 26" para cair no fechamento.
+
+   As seções seguem a ordem de uso: primeiro o que sustenta o app, depois
+   cada tela na sequência em que aparece na barra de baixo, e por último o
+   que roda em segundo plano.
+
+     FUNDAÇÃO
+       § 1   Rede de segurança de erros
+       § 2   Configuração embutida (opcional)
+       § 3   Persistência, migração e backup automático
+       § 4   Estado do app  ← stops, history, cfg vivem aqui
+       § 5   Agrupamento da lista
+       § 6   Apoio: dinheiro, data, escape, aviso
+       § 7   Identidade e merge das paradas  ← a base da sincronização
+       § 8   Desfazer
+       § 9   Confirmação
+       § 10  Navegação e histórico do navegador
+
+     TELA DE ENTREGAS
+       § 11  Primeiro uso
+       § 12  Inicial: lista de paradas
+       § 13  Formulário da parada: cidades e bairros
+       § 14  Taxa automática: KS, por cidade
+       § 15  Taxa automática: Aritana, por endereço
+       § 16  Lojas rápidas (adição em um toque)
+       § 17  Rota: abrir no mapa
+       § 18  Rota otimizada: Nominatim + OSRM
+       § 19  Ordenação (apoio)
+       § 20  WhatsApp: mensagens prontas ao cliente
+       § 21  Importar lista colada
+
+     GANHOS E FECHAMENTO
+       § 22  Ganhos
+       § 23  Despesas
+       § 24  Resumo do dia por motoboy
+       § 25  Histórico: acesso direto
+       § 26  Fechamento
+       § 27  Fatura: padrão único (speedboy.fatura/v1)
+       § 28  Link de conferência da fatura
+
+     MODO FULL
+       § 29  Modo FULL  ← o interruptor e o que ele muda
+       § 30  Repassar entregas
+       § 31  Aba Repasses: o que está na rua, ao vivo
+
+     CONFIGURAÇÃO
+       § 32  Links das lojas
+       § 33  Configurações: seções dobráveis
+       § 34  Configurações: ler e gravar
+       § 35  Firebase: conexão, sala e sincronização
+       § 36  Backup: exportar, importar, restaurar
+       § 37  Limpar: dia e histórico
+
+     SEGUNDO PLANO
+       § 38  Virada do dia
+       § 39  Tema claro / escuro
+       § 40  Instalar na tela inicial
+       § 41  Notificações
+       § 42  Atualização do app
+       § 43  Partida (as chamadas do fim do arquivo)
+   ═══════════════════════════════════════════════════════════════ */
 // ═══════════════════════════════════════════════════════
-//  REDE DE SEGURANÇA DE ERROS
+//  § 1 — REDE DE SEGURANÇA DE ERROS
 //  O app roda na rua, em cima da moto. Uma exceção solta não
 //  pode deixar tela branca sem explicação — avisa e segue.
 // ═══════════════════════════════════════════════════════
@@ -1198,7 +809,7 @@ window.addEventListener('unhandledrejection', function(ev){
 });
 
 // ═══════════════════════════════════════════════════════
-//  CONFIGURAÇÃO EMBUTIDA (opcional)
+//  § 2 — CONFIGURAÇÃO EMBUTIDA (opcional)
 //  Preencha abaixo para ocultar Firebase das configurações.
 //  Deixe null/''/0 para usar o formulário normal.
 // ═══════════════════════════════════════════════════════
@@ -1207,7 +818,7 @@ const EMBEDDED_FB_CONFIG = window.SPEEDBOY_FIREBASE_CONFIG;
 const EMBEDDED_ROOM      = '';     // sala preenchida automaticamente via localStorage
 
 // ═══════════════════════════════════════════════════════
-//  PERSISTÊNCIA SEGURA, MIGRAÇÃO E BACKUP AUTOMÁTICO
+//  § 3 — PERSISTÊNCIA, MIGRAÇÃO E BACKUP AUTOMÁTICO
 // ═══════════════════════════════════════════════════════
 var SB_SCHEMA_VERSION = 2;
 var SB_BACKUP_DAYS    = 7;
@@ -1289,7 +900,7 @@ sbMigrate();
 sbAutoBackup();
 
 // ═══════════════════════════════════════════════════════
-//  STATE
+//  § 4 — ESTADO DO APP
 // ═══════════════════════════════════════════════════════
 let stops   = sbRead('sb_stops',   []);
 let history = sbRead('sb_history', []);
@@ -1304,7 +915,7 @@ if (!cfg.origin) cfg.origin = 'R. São Lucas, 52 - Jacaraípe, Serra - ES';
 let wppStop     = null;
 
 // ══════════════════════════════════════
-//  AGRUPAMENTO
+//  § 5 — AGRUPAMENTO DA LISTA
 // ══════════════════════════════════════
 var groupByMode = 'status';
 
@@ -1331,10 +942,10 @@ let fbListener  = null;
 let pendingData = {};
 
 // ═══════════════════════════════════════════════════════
-//  UTILS
+//  § 6 — APOIO — dinheiro, data, escape, aviso
 // ═══════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════
-//  IDENTIDADE E MERGE DAS PARADAS
+//  § 7 — IDENTIDADE E MERGE DAS PARADAS
 //
 //  Antes, sincronizar era "quem escreveu por último venceu": o push
 //  gravava o array inteiro e o listener fazia `stops = remote`. Se ele
@@ -1518,7 +1129,7 @@ function toast(msg,type=''){
 }
 
 // ═══════════════════════════════════════════════════════
-//  DESFAZER
+//  § 8 — DESFAZER
 // ═══════════════════════════════════════════════════════
 /* Por que desfazer no lugar de mais um confirm():
 
@@ -1592,7 +1203,7 @@ function restaurarDia(r){
 }
 
 // ═══════════════════════════════════════════════════════
-//  CONFIRMAÇÃO
+//  § 9 — CONFIRMAÇÃO
 // ═══════════════════════════════════════════════════════
 /* Substitui o confirm() do navegador nas ações em massa. Três ganhos
    concretos: dá para dizer O QUE se perde (contado, não "TODO o
@@ -1627,7 +1238,7 @@ function responderConfirmacao(sim){
 }
 
 // ═══════════════════════════════════════════════════════
-//  NAVEGAÇÃO
+//  § 10 — NAVEGAÇÃO E HISTÓRICO DO NAVEGADOR
 //
 //  Antes a navegação era só mostrar/esconder <div class="screen">, sem
 //  passar pelo histórico do navegador. O resultado: o botão voltar do
@@ -1826,7 +1437,7 @@ function resetForm(){
   setPaidBtnState('fProductPaidBtn','fProductPaid',false);
 }
 // ═══════════════════════════════════════════════════════
-//  PRIMEIRO USO
+//  § 11 — PRIMEIRO USO
 // ═══════════════════════════════════════════════════════
 /* Quem abria o app num aparelho novo via "Nenhuma parada ainda" e nada
    mais. Para ver a lista compartilhada era preciso entrar na sala do
@@ -1881,7 +1492,7 @@ function comecarDoZero(){
 }
 
 // ═══════════════════════════════════════════════════════
-//  HOME / STOPS
+//  § 12 — INICIAL — lista de paradas
 // ═══════════════════════════════════════════════════════
 function renderHome(){
   const list  = document.getElementById('stopsList');
@@ -2196,7 +1807,7 @@ function saveCustomBairros(cb){ SpeedBoy.saveCustomBairros(cb); }
 function addCustomBairro(city,bairro){ return SpeedBoy.addCustomBairro(city,bairro); }
 
 // ═══════════════════════════════════════════════════════
-//  BAIRROS POR CIDADE
+//  § 13 — FORMULÁRIO DA PARADA — cidades e bairros
 // ═══════════════════════════════════════════════════════
 // CIDADE_BAIRROS vem do speedboy-core.js. O app usava {codigo:[bairros]} e o
 // pedido.html usava {codigo:{nome,bairros}}; as listas divergiram em 93
@@ -2279,10 +1890,10 @@ function resolveCityCode(val){
 }
 function cityName(code){ return CITY_MAP[code]||code||''; }
 
-// ═══════════════ KS AUTO-TAXA POR CIDADE ═══════════════
+// ── § 14 — TAXA AUTOMÁTICA: KS, por cidade
 const KS_TAXAS_BY_CITY = { VIX:25, SRR:35, CCA:35, VV:35 };
 
-// ═══════════════ ARITANA AUTO-TAXA ═══════════════
+// ── § 15 — TAXA AUTOMÁTICA: Aritana, por endereço
 const ARITANA_TAXAS = {
   "araçás":20,"argolas":20,"aribiri":20,"ataíde":20,"boa vista":20,"brisamar":20,"cavalieri":20,"centro":20,"chácara do conde":20,"cocal":20,"coqueiral de itaparica":20,"cristóvão colombo":20,"darly santos":20,"divino espírito santo":20,"dom joão batista":20,"garoto":20,"glória":20,"guaranhuns":20,"ibes":20,"ilha da conceição":20,"ilha das flores":20,"ilha dos ayres":20,"ilha dos bentos":20,"itaparica":20,"itapuã":20,"jaburuna":20,"jardim asteca":20,"jardim colorado":20,"jardim guadalajara":20,"jardim guaranhuns":20,"jockey de itaparica":20,"nossa senhora da penha":20,"nova itaparica":20,"novo méxico":20,"olaria":20,"paul":20,"pedra dos búzios":20,"pontal das garças":20,"praia da costa":20,"praia das gaivotas":20,"praia de itaparica":20,"primeiro de maio":20,"residencial coqueiral":20,"sagrada família":20,"santa inês":20,"santa mônica":20,"santa mônica popular":20,"santa rita":20,"santos dumont":20,"soteco":20,"vila batista":20,"vila garrido":20,"vila guaranhuns":20,"vila nova":20,"vista da penha":20,"zumbi dos palmares":20,
   "aeroporto":25,"alecrim":25,"alto boa vista":25,"alto lage":25,"alvorada":25,"alzira ramos":25,"andorinhas":25,"antônio honório":25,"bandeirantes":25,"barro vermelho":25,"bela aurora":25,"bela vista":25,"bento ferreira":25,"boa sorte":25,"bonfim":25,"campo belo":25,"castelo branco":25,"caçaroca":25,"chácaras união":25,"cobi de baixo":25,"cobi de cima":25,"cobilândia":25,"consolação":25,"cruzamento":25,"da penha":25,"de lourdes":25,"enseada do suá":25,"expedito":25,"forte são joão":25,"fradinhos":25,"goiabeiras":25,"gurigica":25,"horto":25,"ilha de santa maria":25,"ilha do boi":25,"ilha do frade":25,"industrial":25,"itacibá":25,"itapemirim":25,"itaquari":25,"itararé":25,"jabour":25,"jardim américa":25,"jardim botânico":25,"jardim campo grande":25,"jardim marilândia":25,"jardim da penha":25,"jardim de alah":25,"jardim do vale":25,"jesus de nazareth":25,"joana d'arc":25,"jucutuquara":25,"maracanã":25,"maria ortiz":25,"maruípe":25,"mata da praia":25,"monte belo":25,"morada de camburi":25,"nazareth":25,"nova américa":25,"padre gabriel":25,"planalto":25,"pontal de camburi":25,"praia do canto":25,"praia do suá":25,"república":25,"rio marinho":25,"romão":25,"santa cecília":25,"santa clara":25,"santa helena":25,"santa luíza":25,"santa lúcia":25,"santa paula":25,"segurança do lar":25,"solon borges":25,"sotelândia":25,"sotema":25,"são benedito":25,"são conrado":25,"são cristóvão":25,"são torquato":25,"tabuazeiro":25,"vale encantado":25,"vale esperança":25,"valparaíso":25,"vasco da gama":25,"vila isabel":25,"vista linda":25,"vista mar":25,
@@ -2331,7 +1942,7 @@ function autoTaxaKS(){
   toast('🛵 Taxa KS: R$ '+taxa+' — '+cityName(code),'success');
 }
 
-// ═══════════════ QUICK STORES ═══════════════
+// ── § 16 — LOJAS RÁPIDAS (adição em um toque)
 function getQuickStores(){
   try{
     const raw=JSON.parse(localStorage.getItem('sb_quick_stores')||'[]');
@@ -2667,7 +2278,7 @@ function saveStop(){
 }
 
 // ═══════════════════════════════════════════════════════
-//  ROUTE
+//  § 17 — ROTA — abrir no mapa
 // ═══════════════════════════════════════════════════════
 function buildMapsUrl(addrs,originOverride){
   const clean=addrs.filter(a=>a&&a.trim());
@@ -2698,7 +2309,7 @@ async function openRoute(){
 function openMaps(addr){ window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`,'_blank'); }
 
 // ═══════════════════════════════════════════════════════
-//  ROTA OTIMIZADA (TSP Nearest Neighbor + Nominatim + Haversine)
+//  § 18 — ROTA OTIMIZADA — Nominatim + OSRM
 // ═══════════════════════════════════════════════════════
 function haversine(a,b){
   const R=6371,toR=x=>x*Math.PI/180;
@@ -2848,12 +2459,12 @@ async function optimizeAndOpenRoute(){
 }
 
 // ═══════════════════════════════════════════════════════
-//  SORT (helper)
+//  § 19 — ORDENAÇÃO (apoio)
 // ═══════════════════════════════════════════════════════
 function region(addr){ if(!addr)return'zzz'; const p=addr.split(',').map(x=>x.trim()).filter(Boolean); return(p.length>=3?(p[2]+(p[3]||'')):p[1]||addr.substring(0,15)).toLowerCase(); }
 
 // ═══════════════════════════════════════════════════════
-//  WHATSAPP QUICK MESSAGES
+//  § 20 — WHATSAPP — mensagens prontas ao cliente
 // ═══════════════════════════════════════════════════════
 const QM={
   caminho:   'Olá, {nome}. Sou o motoboy da {loja}e estou a caminho com a sua {tipo}. Por gentileza, fique atenta à chegada, pois estarei aí em breve. Obrigado.',
@@ -2887,7 +2498,7 @@ function sendQ(type){
 function sendCustomWpp(){ if(!wppStop)return; const msg=document.getElementById('wppCustom').value.trim(); if(!msg){toast('Digite uma mensagem','error');return;} window.open(`https://wa.me/55${wppStop.phone}?text=${encodeURIComponent(msg)}`,'_blank'); closeWpp(); }
 
 // ═══════════════════════════════════════════════════════
-//  PARSER
+//  § 21 — IMPORTAR LISTA COLADA
 // ═══════════════════════════════════════════════════════
 function smartParse(text){
   const r={name:'',address:'',complement:'',phone:'',notes:''};
@@ -2943,7 +2554,7 @@ async function doParse(){
 }
 
 // ═══════════════════════════════════════════════════════
-//  FINANCE
+//  § 22 — GANHOS
 // ═══════════════════════════════════════════════════════
 function renderFinance(){
   const todayStr=new Date().toLocaleDateString('pt-BR');
@@ -3071,7 +2682,7 @@ function updateMeta(){ cfg.meta=parseFloat(document.getElementById('metaInp').va
 function updateMetaWeek(){ cfg.metaWeek=parseFloat(document.getElementById('metaWeekInp').value)||0; saveCfg(); renderFinance(); }
 
 // ═══════════════════════════════════════════════════════
-//  DESPESAS
+//  § 23 — DESPESAS
 // ═══════════════════════════════════════════════════════
 function getExpenses(){try{return JSON.parse(localStorage.getItem('sb_expenses')||'[]');}catch(e){return [];}}
 function saveExpenses(arr){localStorage.setItem('sb_expenses',JSON.stringify(arr));}
@@ -3142,7 +2753,7 @@ function renderExpenses(todayExps){
 }
 
 // ═══════════════════════════════════════════════════════
-//  BREAKDOWN MOTOBOY (repass history)
+//  § 24 — RESUMO DO DIA POR MOTOBOY
 // ═══════════════════════════════════════════════════════
 function getRepassHistory(){try{return JSON.parse(localStorage.getItem('sb_repass_history')||'[]');}catch(e){return [];}}
 
@@ -3166,118 +2777,11 @@ function renderMotoboyBreak(){
 }
 
 
-function drawDonut(storeMap){
-  const canvas=document.getElementById('donutChart');
-  if(!canvas)return;
-  const entries=Object.entries(storeMap).filter(([,v])=>v.t>0);
-  const ctx=canvas.getContext('2d');
-  const dpr=window.devicePixelRatio||1;
-  const W=canvas.parentElement.clientWidth-28, H=200;
-  if(W<=0)return;
-  canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.width=W+'px';canvas.style.height=H+'px';
-  ctx.scale(dpr,dpr);ctx.clearRect(0,0,W,H);
-  if(!entries.length){ctx.fillStyle='#555';ctx.font='500 13px Barlow';ctx.textAlign='center';ctx.fillText('Sem dados',W/2,H/2);return;}
-  const total=entries.reduce((a,[,v])=>a+v.t,0);
-  const colors=['#f5c518','#00e676','#3b82f6','#ff6b00','#e74c3c','#9b59b6','#1abc9c','#e67e22','#2ecc71','#e91e63'];
-  const cx=W/2, cy=90, r=70, rInner=42;
-  let angle=-Math.PI/2;
-  entries.forEach(([name,v],i)=>{
-    const slice=v.t/total*Math.PI*2;
-    const color=colors[i%colors.length];
-    ctx.beginPath();ctx.moveTo(cx+Math.cos(angle)*rInner,cy+Math.sin(angle)*rInner);
-    ctx.arc(cx,cy,r,angle,angle+slice);
-    const endOuter=angle+slice;
-    ctx.lineTo(cx+Math.cos(endOuter)*rInner,cy+Math.sin(endOuter)*rInner);
-    ctx.arc(cx,cy,rInner,angle+slice,angle,true);
-    ctx.closePath();ctx.fillStyle=color;ctx.fill();
-    angle+=slice;
-  });
-  // Center text
-  ctx.fillStyle='#f0f0f0';ctx.font='800 16px "Barlow Condensed"';ctx.textAlign='center';ctx.fillText(fmtMoney(total),cx,cy-2);
-  ctx.fillStyle='#888';ctx.font='500 10px Barlow';ctx.fillText('TOTAL',cx,cy+12);
-  // Legend
-  let ly=H-28;const lx=8;const colW=Math.floor(W/2);
-  entries.forEach(([name,v],i)=>{
-    const col=i%2, row=Math.floor(i/2);
-    const x=lx+col*colW, y=ly+row*16;
-    if(y>H-4)return;
-    ctx.fillStyle=colors[i%colors.length];ctx.fillRect(x,y-6,8,8);
-    ctx.fillStyle='#ccc';ctx.font='600 10px Barlow';ctx.textAlign='left';
-    const pct=Math.round(v.t/total*100);
-    ctx.fillText(name+' '+pct+'%',x+12,y+1);
-  });
-}
-
-
-function drawChart(flatStops){
-  const canvas=document.getElementById('chart');
-  if(!canvas)return;
-  const ctx=canvas.getContext('2d');
-  const dpr=window.devicePixelRatio||1, W=canvas.parentElement.clientWidth-28, H=140;
-  if(W<=0)return;
-  canvas.width=W*dpr; canvas.height=H*dpr; canvas.style.width=W+'px'; canvas.style.height=H+'px';
-  ctx.scale(dpr,dpr);
-  const days=[];
-  for(let i=6;i>=0;i--){
-    const d=new Date(); d.setDate(d.getDate()-i);
-    const dateStr=d.toLocaleDateString('pt-BR');
-    const lbl=d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-    const dayStops=(flatStops||[]).filter(s=>s._effDate===dateStr);
-    const rec=dayStops.filter(s=>s.paid).reduce((a,s)=>a+parseMoney(s.value),0);
-    const pend=dayStops.filter(s=>!s.paid).reduce((a,s)=>a+parseMoney(s.value),0);
-    days.push({lbl,v:rec+pend,rec,pend});
-  }
-  const mx=Math.max(...days.map(d=>d.v),1);
-  const pL=6,pR=6,pT=10,pB=28,bw=Math.floor((W-pL-pR)/7)-4,bA=H-pT-pB;
-  ctx.clearRect(0,0,W,H);
-  days.forEach((d,i)=>{
-    const x=pL+i*((W-pL-pR)/7)+2, isT=i===6;
-    const bhRec=Math.max(0,d.rec/mx*bA), bhPend=Math.max(0,d.pend/mx*bA);
-    const yRec=pT+bA-bhRec, yPend=yRec-bhPend;
-    // Barra recebido (verde)
-    if(bhRec>0){ctx.fillStyle=isT?'rgba(0,230,118,.9)':'rgba(0,230,118,.4)';ctx.beginPath();ctx.roundRect(x,yRec,bw,bhRec,isT?[0,0,4,4]:[0,0,3,3]);ctx.fill();}
-    // Barra a receber (amarelo)
-    if(bhPend>0){ctx.fillStyle=isT?'rgba(245,197,24,.9)':'rgba(245,197,24,.3)';ctx.beginPath();ctx.roundRect(x,yPend,bw,bhPend,isT?[4,4,0,0]:[3,3,0,0]);ctx.fill();}
-    if(d.v>0){ctx.fillStyle=isT?'#f5c518':'#666';ctx.font=`${isT?600:500} 10px Barlow`;ctx.textAlign='center';ctx.fillText('R$'+d.v.toFixed(0),x+bw/2,(yPend||yRec)-3);}
-    ctx.fillStyle=isT?'#f0f0f0':'#555';ctx.font=`${isT?700:500} 10px Barlow`;ctx.textAlign='center';ctx.fillText(d.lbl,x+bw/2,H-6);
-  });
-}
-
-// Helper: draw 7-day bar chart to offscreen canvas for PDF
-function drawChartOffscreen(flatStops,w,h){
-  const canvas=document.createElement('canvas');
-  const dpr=2;
-  canvas.width=w*dpr; canvas.height=h*dpr;
-  const ctx=canvas.getContext('2d');
-  ctx.scale(dpr,dpr);
-  const days=[];
-  for(let i=6;i>=0;i--){
-    const d=new Date(); d.setDate(d.getDate()-i);
-    const dateStr=d.toLocaleDateString('pt-BR');
-    const lbl=d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-    const dayStops=(flatStops||[]).filter(s=>s._effDate===dateStr);
-    const rec=dayStops.filter(s=>s.paid).reduce((a,s)=>a+parseMoney(s.value),0);
-    const pend=dayStops.filter(s=>!s.paid).reduce((a,s)=>a+parseMoney(s.value),0);
-    days.push({lbl,v:rec+pend,rec,pend});
-  }
-  const mx=Math.max(...days.map(d=>d.v),1);
-  const pL=6,pR=6,pT=10,pB=22,bw=Math.floor((w-pL-pR)/7)-4,bA=h-pT-pB;
-  ctx.clearRect(0,0,w,h);
-  ctx.fillStyle='#0e0e14';ctx.fillRect(0,0,w,h);
-  days.forEach((d,i)=>{
-    const x=pL+i*((w-pL-pR)/7)+2;
-    const bhRec=Math.max(0,d.rec/mx*bA),bhPend=Math.max(0,d.pend/mx*bA);
-    const yRec=pT+bA-bhRec,yPend=yRec-bhPend;
-    if(bhRec>0){ctx.fillStyle='rgba(0,230,118,.7)';ctx.fillRect(x,yRec,bw,bhRec);}
-    if(bhPend>0){ctx.fillStyle='rgba(245,197,24,.7)';ctx.fillRect(x,yPend,bw,bhPend);}
-    if(d.v>0){ctx.fillStyle='#aaa';ctx.font='bold 9px sans-serif';ctx.textAlign='center';ctx.fillText('R$'+d.v.toFixed(0),x+bw/2,(yPend||yRec)-2);}
-    ctx.fillStyle='#888';ctx.font='9px sans-serif';ctx.textAlign='center';ctx.fillText(d.lbl,x+bw/2,h-4);
-  });
-  return canvas;
-}
+/* drawDonut e drawChart vivem em speedboy-graficos.js: recebem os
+   dados já apurados e desenham no canvas da tela. */
 
 // ═══════════════════════════════════════════════════════
-//  HISTORY (funções de acesso direto, renderização em renderReport)
+//  § 25 — HISTÓRICO — acesso direto
 // ═══════════════════════════════════════════════════════
 function markStoreReceived(storeName){
   history.forEach(day=>day.stops.forEach(s=>{if(s.store===storeName)s.paid=true;}));
@@ -3318,7 +2822,7 @@ function saveToHistory(date){
 }
 
 // ═══════════════════════════════════════════════════════
-//  REPORT
+//  § 26 — FECHAMENTO
 // ═══════════════════════════════════════════════════════
 function setPeriod(p){
   reportPeriod=p;
@@ -3624,67 +3128,9 @@ function _renderSearch(q){
   }).join('');
 }
 
-// Helper: render chart to canvas and return base64 PNG
-function chartToImage(canvas){
-  try{ return canvas.toDataURL('image/png'); }catch(e){ return null; }
-}
-
-// Helper: draw city distribution chart on offscreen canvas
-function drawCityChart(allStops, w, h){
-  const canvas=document.createElement('canvas');
-  canvas.width=w*2; canvas.height=h*2; canvas.style.width=w+'px'; canvas.style.height=h+'px';
-  const ctx=canvas.getContext('2d');
-  ctx.scale(2,2);
-  const cityMap={};
-  allStops.forEach(s=>{const city=cityName(resolveCityCode(s.city||s.cityId))||'Outro';if(!cityMap[city])cityMap[city]=0;cityMap[city]++;});
-  const entries=Object.entries(cityMap).sort((a,b)=>b[1]-a[1]);
-  const total=entries.reduce((a,[,v])=>a+v,0);
-  if(!total){return null;}
-  const colors=['#f5c518','#00e676','#3b82f6','#ff6b00','#e74c3c','#9b59b6'];
-  let angle=-Math.PI/2;
-  const cx=w/2,cy=h/2-10,r=Math.min(cx,cy)-20;
-  if(r<=0){return null;}
-  entries.forEach(([name,v],i)=>{
-    const slice=v/total*Math.PI*2;
-    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,angle,angle+slice);ctx.closePath();
-    ctx.fillStyle=colors[i%colors.length];ctx.fill();
-    ctx.strokeStyle='#000';ctx.lineWidth=1;ctx.stroke();
-    angle+=slice;
-  });
-  // Legend
-  let lx=4,ly=h-entries.length*14-4;
-  entries.forEach(([name,v],i)=>{
-    ctx.fillStyle=colors[i%colors.length];ctx.fillRect(lx,ly+(i*14),10,10);
-    ctx.fillStyle='#ccc';ctx.font='600 9px sans-serif';ctx.textAlign='left';
-    ctx.fillText(`${name}: ${v} (${Math.round(v/total*100)}%)`,lx+14,ly+(i*14)+9);
-  });
-  return canvas;
-}
-
-// Helper: draw top stores chart on offscreen canvas
-function drawTopStoresChart(sm, w, h){
-  const canvas=document.createElement('canvas');
-  canvas.width=w*2; canvas.height=h*2; canvas.style.width=w+'px'; canvas.style.height=h+'px';
-  const ctx=canvas.getContext('2d');
-  ctx.scale(2,2);
-  const entries=Object.entries(sm).sort((a,b)=>b[1].t-a[1].t).slice(0,6);
-  if(!entries.length)return null;
-  const mx=entries[0][1].t||1;
-  const bh=Math.floor((h-20)/entries.length)-6;
-  const lw=80,barArea=w-lw-18;
-  ctx.clearRect(0,0,w,h);
-  entries.forEach(([name,v],i)=>{
-    const y=10+i*(bh+6);
-    const bwFill=Math.max(4,v.t/mx*barArea);
-    ctx.fillStyle='rgba(245,197,24,.25)';ctx.fillRect(lw,y,barArea,bh);
-    ctx.fillStyle='#f5c518';ctx.fillRect(lw,y,bwFill,bh);
-    ctx.fillStyle='#ccc';ctx.font='600 9px sans-serif';ctx.textAlign='right';
-    ctx.fillText(name.substring(0,14),lw-4,y+bh/2+4);
-    ctx.fillStyle='#000';ctx.font='700 9px sans-serif';ctx.textAlign='left';
-    ctx.fillText(fmtMoney(v.t),lw+bwFill+3,y+bh/2+4);
-  });
-  return canvas;
-}
+/* Os gráficos do PDF vivem em speedboy-graficos.js: drawCityChart,
+   drawTopStoresChart e chartToImage desenham fora da tela e devolvem
+   PNG para o genPDF logo abaixo. */
 
 // Fechamento do período — mesmo padrão visual das faturas,
 // trocando os resumos para POR LOJA / POR CIDADE.
@@ -3759,7 +3205,7 @@ function abrirFaturaPersonalizada(storeName, modo){
 }
 
 // ═══════════════════════════════════════════════════════
-//  FATURA — PADRÃO ÚNICO (schema speedboy.fatura/v1)
+//  § 27 — FATURA — padrão único (speedboy.fatura/v1)
 //  Layout renderizado por fatura-padrao.js (SBFatura),
 //  o mesmo usado na página de conferência do cliente.
 // ═══════════════════════════════════════════════════════
@@ -3894,7 +3340,7 @@ async function genFaturaLoja(storeName, periodo, btnEl, opts={}){
 }
 
 // ═══════════════════════════════════════════════════════
-//  LINK DE CONFERÊNCIA PARA O CLIENTE
+//  § 28 — LINK DE CONFERÊNCIA DA FATURA
 //  Publica a fatura (mesmo padrão) e devolve um link em que
 //  a loja confere item a item e baixa o PDF por conta própria.
 // ═══════════════════════════════════════════════════════
@@ -3976,7 +3422,7 @@ function cobrancaWppLoja(storeName){
 }
 
 /* ═══════════════════════════════════════════════════════
-   MODO FULL
+   § 29 — MODO FULL
 
    Dia de muita demanda muda o que o app precisa ser. Fora do FULL quem
    entrega é quem usa o app: não há repasse para acompanhar, ninguém
@@ -4082,7 +3528,7 @@ function setStorePhone(i, valor){
 }
 
 // ═══════════════════════════════════════════════════════
-//  REPASSAR ENTREGAS
+//  § 30 — REPASSAR ENTREGAS
 // ═══════════════════════════════════════════════════════
 function goRepass(){
   goNav('repassScreen','');
@@ -4222,7 +3668,7 @@ function shareRepassWpp(){
 }
 
 /* ═══════════════════════════════════════════════════════
-   ABA REPASSES — o que está na rua, ao vivo
+   § 31 — ABA REPASSES — o que está na rua, ao vivo
 
    Antes do FULL, gerar o link era o fim da linha: o app não voltava a
    olhar para o repasse. O motoboy marcava entregue no painel dele e essa
@@ -4520,7 +3966,7 @@ function fecharProva(){ fecharModal('provaModal'); }
 document.getElementById('provaModal').addEventListener('click',e=>{if(e.target===e.currentTarget)fecharProva();});
 
 // ═══════════════════════════════════════════════════════
-//  LINKS GENERATOR
+//  § 32 — LINKS DAS LOJAS
 // ═══════════════════════════════════════════════════════
 function getLinks(){ const l=sbRead('sb_links',[]); return Array.isArray(l)?l:[]; }
 function saveLinks(l){ localStorage.setItem('sb_links',JSON.stringify(l)); }
@@ -4549,7 +3995,7 @@ function genLink(){
 }
 
 // ═══════════════════════════════════════════════════════
-//  CONFIG DOBRÁVEL
+//  § 33 — CONFIGURAÇÕES — seções dobráveis
 // ═══════════════════════════════════════════════════════
 /* Antes só "Links das Lojas" dobrava, com uma função própria e estilos
    inline. As outras seis ficavam sempre abertas: 1899px de conteúdo,
@@ -4633,7 +4079,7 @@ function delLink(i){
 
 
 // ═══════════════════════════════════════════════════════
-//  CONFIG
+//  § 34 — CONFIGURAÇÕES — ler e gravar
 // ═══════════════════════════════════════════════════════
 function loadConfig(){
   document.getElementById('cfgOrigin').value=cfg.origin||'';
@@ -4734,7 +4180,7 @@ function updateStoreSelect(){const sel=document.getElementById('fStore');const c
 function getGPS(){const btn=document.querySelector('.btn-gps');if(!navigator.geolocation){toast('GPS não suportado','error');return;}btn.textContent='⏳...';navigator.geolocation.getCurrentPosition(async pos=>{try{const res=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);const data=await res.json();document.getElementById('cfgOrigin').value=data.display_name||`${pos.coords.latitude}, ${pos.coords.longitude}`;toast('📍 Capturado!','success');}catch(e){document.getElementById('cfgOrigin').value=`${pos.coords.latitude}, ${pos.coords.longitude}`;}btn.textContent='📍 GPS';},()=>{btn.textContent='📍 GPS';toast('Permita acesso ao GPS','error');});}
 
 // ═══════════════════════════════════════════════════════
-//  FIREBASE
+//  § 35 — FIREBASE — conexão, sala e sincronização
 // ═══════════════════════════════════════════════════════
 const _CLASSES_SYNC={synced:'synced',syncing:'syncing',error:'error',offline:'offline',pending:'pending'};
 function setSyncUI(status,label){
@@ -5265,7 +4711,7 @@ function startLocationWatch(){
 }
 
 // ═══════════════════════════════════════════════════════
-//  BACKUP
+//  § 36 — BACKUP — exportar, importar, restaurar
 // ═══════════════════════════════════════════════════════
 // ── Cópias automáticas (uma por dia, últimos 7 dias) ──
 function renderAutoBackups(){
@@ -5346,7 +4792,7 @@ function importBackup(file){
 }
 
 // ═══════════════════════════════════════════════════════
-//  CLEAR
+//  § 37 — LIMPAR — dia e histórico
 // ═══════════════════════════════════════════════════════
 /* Ação em massa: aqui a confirmação ganha do desfazer, porque o estrago é
    grande. Mas ela precisa DIZER o estrago — "Apagar todas as paradas de
@@ -5415,7 +4861,7 @@ function deduplicateStops(){
 }
 
 // ═══════════════════════════════════════════════════════
-//  NEW DAY CHECK
+//  § 38 — VIRADA DO DIA
 // ═══════════════════════════════════════════════════════
 function checkNewDay(){
   const last=localStorage.getItem('sb_last_date');
@@ -5438,7 +4884,7 @@ function checkNewDay(){
 
 
 // ══════════════════════════════════════
-//  TEMA CLARO / ESCURO / NOTURNO
+//  § 39 — TEMA CLARO / ESCURO
 // ══════════════════════════════════════
 function toggleTheme() {
   var isLight = document.body.classList.toggle('light');
@@ -5456,7 +4902,7 @@ window.addEventListener('DOMContentLoaded', function(){
 });
 
 /* ══════════════════════════════════════
-   INSTALAR NA TELA INICIAL
+   § 40 — INSTALAR NA TELA INICIAL
 
    O app já era um PWA completo — manifesto, ícones, service worker, abre
    offline — mas nunca CONVIDAVA ninguém a instalar. Sem convite, o
@@ -5532,7 +4978,7 @@ function dispensarInstalar(){
 }
 
 // ══════════════════════════════════════
-//  NOTIFICAÇÕES
+//  § 41 — NOTIFICAÇÕES
 // ══════════════════════════════════════
 function checkNotifyPermission() {
   const bar = document.getElementById('notifyBar');
@@ -5642,7 +5088,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  ATUALIZAÇÃO DO APP
+//  § 42 — ATUALIZAÇÃO DO APP
 //  Antes, um service worker novo assumia sozinho e a página recarregava
 //  no ato — inclusive no meio do preenchimento de uma parada, perdendo o
 //  que estava digitado. Agora o SW novo espera, aparece a faixa, e a
@@ -5774,14 +5220,20 @@ async function initFirebase(){
   if(ok&&room){ startSync(room); setTimeout(()=>loadHistoryFromFirebase(room),800); }
 }
 
-checkNewDay();
+// ═══════════════════════════════════════════════════════
+//  § 43 — PARTIDA
+//  A ordem aqui é a única parte do arquivo em que a ordem das linhas
+//  muda o comportamento — o resto são declarações de função, que o
+//  JavaScript iça para o topo. Mexa com cuidado.
+// ═══════════════════════════════════════════════════════
+checkNewDay();          // virou o dia? arquiva o de ontem antes de desenhar
 updateStoreSelect();
 /* Antes de renderHome e de navPelaURL: a aba Repasses precisa existir na
    barra antes de alguém poder cair nela por #repasses. */
 aplicarModoFull();
 renderHome();
-navPelaURL();          // respeita #ganhos, #fechamento etc. e firma o estado inicial
-initFirebase();
+navPelaURL();           // respeita #ganhos, #fechamento etc. e firma o estado inicial
+initFirebase();         // conecta, entra na sala e liga os ouvintes
 checkNotifyPermission();
 atualizarBarraInstalar();
 // Restaura tema

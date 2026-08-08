@@ -15,7 +15,7 @@
    conteúdo dos arquivos — não edite à mão.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION = '20260808-aedd3d31';                       // gerado por scripts/bump-versao.mjs
+const VERSION = '20260808-ed20c0d9';                       // gerado por scripts/bump-versao.mjs
 const CACHE   = 'speedboy-' + VERSION;
 
 // Casca do app: o que precisa estar disponível para abrir offline.
@@ -31,7 +31,9 @@ const SHELL = [
   './manifest-motoboy.json',
   './speedboy-firebase.js',
   './speedboy-core.js',
+  './speedboy-graficos.js',
   './speedboy.css',
+  './speedboy-app.css',
   './fatura-padrao.js',
   './fatura.html',
   './offline.html',

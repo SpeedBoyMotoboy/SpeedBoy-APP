@@ -60,7 +60,8 @@ const src = lerApp('index.html');
   for (const secao of ['lojas', 'rapidas', 'full', 'links', 'sync', 'fatura', 'backup']) {
     ok(resumo.includes(`'${secao}'`), `a seção "${secao}" mostra um resumo quando fechada`);
   }
-  ok(/\.cfg-cab\[aria-expanded="true"\]\s+\.cfg-resumo\s*\{[^}]*display:\s*none/.test(src),
+  // Estilos do app: speedboy-app.css desde que saíram do <style> do index
+  ok(/\.cfg-cab\[aria-expanded="true"\]\s+\.cfg-resumo\s*\{[^}]*display:\s*none/.test(lerApp('speedboy-app.css')),
     'o resumo some quando a seção está aberta (a informação já está à vista)');
 }
 

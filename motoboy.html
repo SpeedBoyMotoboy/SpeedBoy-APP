@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SPEEDBOY — Entregas</title>
+<!-- Instalável na tela inicial: o motoboy passa o dia nesta página e abrir
+     pelo navegador custa achar a aba certa entre as outras. Manifesto
+     próprio, separado do app de quem despacha. -->
+<link rel="manifest" href="./manifest-motoboy.json">
+<meta name="theme-color" content="#f5c518">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Entregas">
+<link rel="icon" type="image/png" sizes="192x192" href="./icones/icone-192.png">
+<link rel="apple-touch-icon" href="./icones/icone-180.png">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
@@ -31,6 +42,14 @@ body{max-width:480px;margin:0 auto;padding-bottom:130px;}
 .summary-val.ac{color:var(--accent);}
 .summary-val.gr{color:var(--green);}
 .summary-val.rd{color:var(--red);}
+/* ── Instalar na tela inicial ── */
+.barra-instalar{display:none;align-items:flex-start;gap:10px;margin:14px 16px 0;background:rgba(245,197,24,.1);border:1px solid var(--accent);border-radius:var(--radius);padding:11px 13px;}
+.barra-instalar.visible{display:flex;}
+.bi-txt{flex:1;min-width:0;font-size:12.5px;line-height:1.5;}
+.bi-btn{background:var(--accent);color:#000;border:none;border-radius:9px;padding:9px 13px;font-weight:800;font-size:12.5px;cursor:pointer;flex-shrink:0;}
+.bi-x{background:none;border:none;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;padding:0 2px;line-height:1;}
+/* Lista servida do cache, sem sinal */
+.aviso-cache{margin:14px 16px 0;background:rgba(127,127,127,.12);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--muted);line-height:1.5;}
 .tools{display:flex;gap:8px;padding:0 16px 12px;}
 .btn-tool{flex:1;padding:13px 8px;border-radius:11px;border:1.5px solid var(--accent);background:rgba(245,197,24,.12);color:var(--accent);font-family:'Barlow',sans-serif;font-weight:800;font-size:13px;cursor:pointer;}
 .btn-tool:disabled{opacity:.5;}
@@ -107,7 +126,17 @@ body{max-width:480px;margin:0 auto;padding-bottom:130px;}
   <div class="spinner"></div>
   <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--accent);">Carregando entregas...</div>
 </div>
+<div class="barra-instalar" id="barraInstalar">
+  <div class="bi-txt">📲 Instale o app na tela inicial — abre sem procurar a aba, e funciona sem sinal.
+    <div id="ajudaInstalar" style="display:none;">
+      <div id="ajudaInstalarTexto" style="margin-top:6px;font-size:12px;color:var(--muted);line-height:1.5;"></div>
+    </div>
+  </div>
+  <button type="button" class="bi-btn" onclick="instalarApp()">Instalar</button>
+  <button type="button" class="bi-x" onclick="dispensarInstalar()" aria-label="Dispensar">✕</button>
+</div>
 <div id="mainWrap" style="display:none;">
+  <div class="aviso-cache" id="avisoCache" style="display:none;">📴 Sem sinal — esta é a lista da última vez que o app conectou. O que você marcar é enviado quando o sinal voltar.</div>
   <div class="summary" id="summaryBar"></div>
   <div class="tools">
     <button type="button" class="btn-tool" id="btnOtimizar" onclick="otimizarRota()">⚡ Otimizar rota</button>
@@ -179,16 +208,53 @@ body{max-width:480px;margin:0 auto;padding-bottom:130px;}
 // Definida em speedboy-firebase.js, compartilhada com index/pedido/fatura
 var FIREBASE_CONFIG = window.SPEEDBOY_FIREBASE_CONFIG;
 var params=new URLSearchParams(window.location.search);
-var ROOM=(params.get('room')||'').toUpperCase();
-var REPASS_ID=params.get('id')||'';
+
+/* Instalado na tela inicial, o ícone abre `motoboy.html` SEM parâmetros —
+   o manifesto precisa de um start_url fixo e o id do repasse muda todo dia.
+   Por isso o último repasse aberto fica guardado: o ícone cai direto na
+   lista de hoje, e o link novo do WhatsApp simplesmente substitui o
+   guardado quando chega. */
+var CHAVE_ULTIMO='sb_moto_ultimo';
+
+function ultimoRepasse(){
+  try{ return JSON.parse(localStorage.getItem(CHAVE_ULTIMO)||'null'); }catch(e){ return null; }
+}
+function guardarRepasse(room,id){
+  try{ localStorage.setItem(CHAVE_ULTIMO,JSON.stringify({room:room,id:id})); }catch(e){}
+}
+
+var _daURL=!!(params.get('room')&&params.get('id'));
+var _ultimo=_daURL?null:(ultimoRepasse()||{});
+var ROOM=(params.get('room')||_ultimo.room||'').toUpperCase();
+var REPASS_ID=params.get('id')||_ultimo.id||'';
 var db=null;
 var repassData=null;
 var _salvando=false;
 
+// Última lista recebida, por repasse. É o que faz o painel abrir sem sinal.
+function chaveCache(){ return 'sb_moto_cache_'+ROOM+'_'+REPASS_ID; }
+function guardarCache(dados){
+  try{ localStorage.setItem(chaveCache(),JSON.stringify(dados)); }catch(e){}
+}
+function lerCache(){
+  try{ return JSON.parse(localStorage.getItem(chaveCache())||'null'); }catch(e){ return null; }
+}
+
 function init(){
   if(!ROOM||!REPASS_ID){showError();return;}
-  try{firebase.initializeApp(FIREBASE_CONFIG);db=firebase.database();}catch(e){showError();return;}
+  guardarRepasse(ROOM,REPASS_ID);
   SpeedBoy.aplicarTema('sb_moto_theme','themeBtn',ROTULOS_TEMA);
+  prepararInstalacao();
+
+  /* A lista guardada entra na tela ANTES de falar com o servidor. Sem sinal
+     no meio da rua, o motoboy continua com os endereços do dia em vez de um
+     spinner eterno — e o Firebase enfileira as confirmações até voltar. */
+  var cache=lerCache();
+  if(cache) aplicarRepasse(cache,true);
+
+  try{firebase.initializeApp(FIREBASE_CONFIG);db=firebase.database();}
+  catch(e){ if(!cache) showError(); return; }
+
   // As regras do banco exigem sessão autenticada; só lê depois do login.
   // Best-effort enquanto as regras antigas (permissivas) estiverem publicadas.
   window.speedboyLoginAnonimo()
@@ -196,24 +262,91 @@ function init(){
     .then(function(){ ouvirRepasse(); });
 }
 
+function aplicarRepasse(dados,doCache){
+  repassData=dados;
+  document.getElementById('loadingWrap').style.display='none';
+  document.getElementById('mainWrap').style.display='block';
+  document.getElementById('motoName').textContent=repassData.motoboy||'Motoboy';
+  document.title='SPEEDBOY — '+(repassData.motoboy||'Entregas');
+  document.getElementById('avisoCache').style.display=doCache?'':'none';
+  renderStops();
+}
+
 function ouvirRepasse(){
   var ref=db.ref('rooms/'+ROOM+'/repass/'+REPASS_ID);
   ref.on('value',function(snap){
     var raw=snap.val();
-    if(!raw){showError();return;}
+    // Sem dado no servidor: se temos cache, ele continua valendo na tela
+    if(!raw){ if(!repassData) showError(); return; }
     /* Enquanto uma escrita nossa está em voo, o snapshot que volta é o
        estado ANTERIOR — aplicá-lo apagaria da tela a confirmação que o
        motoboy acabou de dar. */
     if(_salvando)return;
     try{
-      repassData=typeof raw==='string'?JSON.parse(raw):raw;
-      document.getElementById('loadingWrap').style.display='none';
-      document.getElementById('mainWrap').style.display='block';
-      document.getElementById('motoName').textContent=repassData.motoboy||'Motoboy';
-      document.title='SPEEDBOY — '+(repassData.motoboy||'Entregas');
-      renderStops();
-    }catch(e){console.error(e);showError();}
+      var dados=typeof raw==='string'?JSON.parse(raw):raw;
+      guardarCache(dados);
+      aplicarRepasse(dados,false);
+    }catch(e){console.error(e); if(!repassData) showError();}
+  },function(e){
+    console.warn('sem acesso ao repasse:',e);
+    if(!repassData) showError();
   });
+}
+
+/* ── INSTALAR NA TELA INICIAL ──────────────────────────────
+   O Android manda um beforeinstallprompt e dá para abrir o diálogo nativo.
+   O iPhone não tem esse evento: lá o caminho é Compartilhar → Adicionar à
+   Tela de Início, e o único jeito honesto é escrever isso na tela. */
+var _promptInstalar=null;
+
+window.addEventListener('beforeinstallprompt',function(e){
+  e.preventDefault();
+  _promptInstalar=e;
+  var b=document.getElementById('barraInstalar');
+  if(b&&!jaInstalado()) b.classList.add('visible');
+});
+window.addEventListener('appinstalled',function(){
+  _promptInstalar=null;
+  var b=document.getElementById('barraInstalar');
+  if(b) b.classList.remove('visible');
+  showToast('📲 App instalado!','success');
+});
+
+function jaInstalado(){
+  return window.matchMedia('(display-mode: standalone)').matches ||
+         window.navigator.standalone === true ||
+         localStorage.getItem('sb_moto_instalar_nao')==='1';
+}
+function ehIOS(){
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+         (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+}
+
+function prepararInstalacao(){
+  var b=document.getElementById('barraInstalar');
+  if(!b||jaInstalado())return;
+  // No iPhone o botão não abre diálogo nenhum — só ensina o caminho
+  if(ehIOS()) b.classList.add('visible');
+}
+
+function instalarApp(){
+  if(_promptInstalar){
+    _promptInstalar.prompt();
+    _promptInstalar.userChoice.then(function(r){
+      if(r&&r.outcome==='accepted') document.getElementById('barraInstalar').classList.remove('visible');
+      _promptInstalar=null;
+    });
+    return;
+  }
+  // Sem prompt nativo (iPhone, ou navegador que não suporta): explica
+  document.getElementById('ajudaInstalar').style.display='';
+  document.getElementById('ajudaInstalarTexto').innerHTML = ehIOS()
+    ? 'No iPhone: toque em <strong>Compartilhar</strong> (o quadrado com a seta para cima), desça e escolha <strong>Adicionar à Tela de Início</strong>.'
+    : 'No menu do navegador (⋮), escolha <strong>Instalar aplicativo</strong> ou <strong>Adicionar à tela inicial</strong>.';
+}
+function dispensarInstalar(){
+  try{ localStorage.setItem('sb_moto_instalar_nao','1'); }catch(e){}
+  document.getElementById('barraInstalar').classList.remove('visible');
 }
 
 // Taxas escondidas: o painel mostra endereço, telefone, janela de horário e
@@ -802,6 +935,18 @@ function showToast(msg,type){
   t.className='toast show'+(type?' '+type:'');
   clearTimeout(_toastTimer);
   _toastTimer=setTimeout(function(){t.className='toast';},3500);
+}
+
+/* Mesmo service worker do app (um só pode controlar este caminho). Ele
+   serve a casca do cache, que é o que permite abrir instalado e sem sinal.
+   Aqui não há faixa de "nova versão": quem decide a hora de trocar é o
+   painel de quem despacha, e o motoboy não pode ter a página recarregada
+   no meio de uma confirmação. */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'})
+      .catch(function(e){ console.warn('service worker não registrou:',e); });
+  });
 }
 
 window.addEventListener('load',init);

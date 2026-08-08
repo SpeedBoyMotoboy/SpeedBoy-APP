@@ -164,6 +164,8 @@ body.light .theme-toggle{background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.15)
 .modal-btn{flex:1;padding:14px;border-radius:12px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:18px;cursor:pointer;border:none;}
 .modal-btn.confirm{background:var(--accent);color:#000;}
 .modal-btn.cancel{background:var(--card2);color:var(--muted);border:1px solid var(--border);}
+/* Hora, quem recebeu e comprovante da entrega finalizada */
+.entrega-det{font-size:12px;color:var(--muted);line-height:1.6;margin-top:5px;}
 
 /* TOAST */
 .toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--card2);border:1px solid var(--border);color:var(--text);padding:10px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:600;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;max-width:92vw;text-align:center;}
@@ -691,6 +693,7 @@ function enviarPedido(newStops) {
           '<strong>' + typeIcon + ' ' + (i+1) + '. ' + s.name + '</strong>' + dateStr + '<br>' +
           '<span style="font-size:11px;color:var(--muted)">' + s.address + timeStr + valStr + '</span><br>' +
           '<span class="status-badge status-pending" id="badge_' + key + '">⏳ Aguardando confirmação</span>' +
+          '<div id="det_' + key + '"></div>' +
           (editBtn || cancelBtn ? '<div style="display:flex;gap:8px;margin-top:8px;" id="act_' + key + '">' + editBtn + cancelBtn + '</div>' : '') +
           '</div>';
       }).join('');
@@ -716,12 +719,14 @@ function enviarPedido(newStops) {
 //  enquanto a entrega NÃO foi finalizada (entregue)
 // ═══════════════════════════════════════════════════
 var _trackStatus = {}; // key -> status do motoboy
+var _trackInfo   = {}; // key -> { deliveredBy, deliveredAt, receivedBy, proofId }
 function statusInfo(st) {
   switch (st) {
     case 'aceito':   return { cls:'aceito',   txt:'✅ Aceito pelo motoboy', done:false };
     case 'acaminho': return { cls:'acaminho', txt:'🛵 A caminho',           done:false };
     case 'entregue': return { cls:'entregue', txt:'✅ Entregue',            done:true  };
     case 'recusado': return { cls:'recusado', txt:'❌ Recusado',            done:true  };
+    case 'problema': return { cls:'acaminho', txt:'⚠️ Problema na entrega', done:false };
     default:         return { cls:'pending',  txt:'⏳ Aguardando confirmação', done:false };
   }
 }
@@ -734,22 +739,95 @@ function listenTracking() {
   db.ref('rooms/' + ROOM + '/tracking').on('value', function(snap) {
     var data = snap.val() || {};
     _trackStatus = {};
+    _trackInfo   = {};
     Object.keys(data).forEach(function(k) {
       var raw = data[k], t;
       try { t = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch(e) { t = {}; }
       _trackStatus[k] = (t && t.status) || '';
+      _trackInfo[k]   = t || {};
     });
     applyTrackingToSuccess();
     markFinalizedInHistory();
   });
 }
+
+/* "Entregue" sozinho não responde o que a loja liga para perguntar: a que
+   horas chegou, com quem ficou e se há comprovante. Estes três dados vêm
+   do painel do motoboy e chegam aqui pelo /tracking. */
+function horaEntrega(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  if (isNaN(d)) return '';
+  var hoje = new Date().toDateString() === d.toDateString();
+  return (hoje ? '' : d.toLocaleDateString('pt-BR') + ' ') +
+         d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+}
+
+function detalheEntrega(key) {
+  var t = _trackInfo[key] || {};
+  if (_trackStatus[key] !== 'entregue') return '';
+  var partes = [];
+  var h = horaEntrega(t.deliveredAt);
+  if (h) partes.push('⏰ ' + escapar(h));
+  if (t.receivedBy)  partes.push('✋ Recebido por ' + escapar(t.receivedBy));
+  if (t.deliveredBy) partes.push('🏍️ ' + escapar(t.deliveredBy));
+  var foto = t.proofId
+    ? '<button type="button" class="client-req-btn edit-btn" style="margin-top:6px;" ' +
+      'onclick="window.verComprovante(\'' + escapar(String(t.proofId).replace(/[^\w-]/g, '')) + '\')">📷 Ver comprovante</button>'
+    : '';
+  if (!partes.length && !foto) return '';
+  return '<div class="entrega-det">' + partes.join(' · ') + '</div>' + foto;
+}
+
 function applyTrackingToSuccess() {
   Object.keys(_trackStatus).forEach(function(key) {
     var info = statusInfo(_trackStatus[key]);
     var badge = document.getElementById('badge_' + key);
     if (badge) { badge.className = 'status-badge status-' + info.cls; badge.textContent = info.txt; }
+    var det = document.getElementById('det_' + key);
+    if (det) det.innerHTML = detalheEntrega(key);
     if (info.done) { var act = document.getElementById('act_' + key); if (act) act.remove(); }
   });
+}
+
+/* O comprovante mora em /proofs e é baixado só quando a loja pede para
+   ver — a foto tem centenas de KB e ninguém precisa dela para saber que a
+   entrega chegou. */
+window.verComprovante = function(proofId) {
+  var modal = document.getElementById('provaModal');
+  var corpo = document.getElementById('provaCorpo');
+  corpo.textContent = 'Carregando...';
+  modal.style.display = 'flex';
+  if (!db || !ROOM) { corpo.textContent = 'Sem conexão para buscar o comprovante.'; return; }
+  // once('value') e não get(): existe em toda versão do SDK compat
+  db.ref('rooms/' + ROOM + '/proofs/' + proofId).once('value').then(function(snap) {
+    var dado = snap.val();
+    if (!dado || String(dado).indexOf('data:image/') !== 0) {
+      corpo.textContent = 'Comprovante não disponível.';
+      return;
+    }
+    corpo.innerHTML = '';
+    var img = document.createElement('img');
+    img.src = dado;
+    img.alt = 'Comprovante da entrega';
+    img.style.cssText = 'max-width:100%;border-radius:12px;border:1px solid var(--border);';
+    corpo.appendChild(img);
+  }).catch(function(e) {
+    console.error('comprovante:', e);
+    corpo.textContent = 'Não foi possível carregar o comprovante.';
+  });
+};
+window.fecharComprovante = function() {
+  document.getElementById('provaModal').style.display = 'none';
+  document.getElementById('provaCorpo').textContent = '';
+};
+
+/* Quem recebeu e quem entregou são digitados pelo motoboy — texto de
+   terceiro entrando no HTML da página da loja. */
+function escapar(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 function markFinalizedInHistory() {
   var hist = getClientHistory();
@@ -971,9 +1049,12 @@ function renderClientHistory() {
             '<button type="button" class="client-req-btn cancel-btn" onclick="window.histCancel(' + hi + ',' + i + ')">❌ Cancelar</button>' +
           '</div>'
         : '';
+      // Hora, quem recebeu e comprovante também no histórico: é onde a loja
+      // volta dias depois para conferir uma entrega antiga.
+      var det = s.key ? detalheEntrega(s.key) : '';
       return '<div style="margin-top:8px' + (s.cancelled?';opacity:.55':'') + '">' +
         type + ' ' + (i+1) + '. <strong>' + s.name + '</strong> — ' + (s.city||'') +
-        (s.deliveryDate?' · 📅 '+s.deliveryDate:'') + refStr + badge +
+        (s.deliveryDate?' · 📅 '+s.deliveryDate:'') + refStr + badge + det +
         '</div>' + actions;
     }).join('');
     return '<div class="hist-item"><div class="hist-item-name">📅 ' + entry.date + ' às ' + entry.time + '</div><div class="hist-item-info">' + stopsHtml + '</div></div>';
@@ -1083,6 +1164,16 @@ window.addEventListener('load', init);
 </script>
 
 <!-- MODAL EDITAR ENTREGA -->
+<div class="modal-overlay" id="provaModal" onclick="if(event.target===this)window.fecharComprovante()">
+  <div class="modal-box">
+    <div class="modal-title">📷 Comprovante da entrega</div>
+    <div id="provaCorpo" style="font-size:13px;color:var(--muted);text-align:center;"></div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn cancel" onclick="window.fecharComprovante()">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="editModal" onclick="if(event.target===this)window.closeEditModal()">
   <div class="modal-box">
     <div class="modal-title">✏️ Editar entrega</div>

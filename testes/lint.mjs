@@ -254,26 +254,68 @@ for (const arq of PAGINAS) {
    absoluta quebra em qualquer outro domínio), arquivo presente, PNG de
    verdade e com a dimensão que o manifest promete. */
 {
-  const man = JSON.parse(fs.readFileSync(path.join(RAIZ, 'manifest.json'), 'utf8'));
+  /* Dois manifestos: o do app de quem despacha e o do painel do motoboy.
+     As mesmas regras valem para os dois — é o mesmo Android lendo. */
+  const MANIFESTOS = ['manifest.json', 'manifest-motoboy.json'];
+  const starts = new Set();
 
-  const remotos = man.icons.filter(i => /^https?:/i.test(i.src));
-  ok(remotos.length === 0,
-    'manifest.json: nenhum ícone por URL absoluta' +
-    (remotos.length ? ` — ${remotos.map(i => i.src).join(', ')}` : ''));
+  for (const nome of MANIFESTOS) {
+    const man = JSON.parse(fs.readFileSync(path.join(RAIZ, nome), 'utf8'));
 
-  ok(man.icons.some(i => String(i.purpose || '').includes('maskable')),
-    'manifest.json: existe ícone maskable (o Android recorta em formato próprio)');
+    const remotos = man.icons.filter(i => /^https?:/i.test(i.src));
+    ok(remotos.length === 0,
+      `${nome}: nenhum ícone por URL absoluta` +
+      (remotos.length ? ` — ${remotos.map(i => i.src).join(', ')}` : ''));
 
-  for (const icone of man.icons) {
-    const arq = path.join(RAIZ, icone.src.replace(/^\.\//, ''));
-    if (!fs.existsSync(arq)) { ok(false, `manifest.json: ${icone.src} não existe`); continue; }
-    const buf = fs.readFileSync(arq);
-    const assinatura = buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-    // Largura e altura vivem no IHDR, sempre nos bytes 16..24 de um PNG.
-    const larg = buf.readUInt32BE(16), alt = buf.readUInt32BE(20);
-    const pedido = Number(String(icone.sizes).split('x')[0]);
-    ok(assinatura && larg === pedido && alt === pedido,
-      `${icone.src}: PNG ${pedido}x${pedido} de verdade (tem ${larg}x${alt})`);
+    ok(man.icons.some(i => String(i.purpose || '').includes('maskable')),
+      `${nome}: existe ícone maskable (o Android recorta em formato próprio)`);
+
+    for (const icone of man.icons) {
+      const arq = path.join(RAIZ, icone.src.replace(/^\.\//, ''));
+      if (!fs.existsSync(arq)) { ok(false, `${nome}: ${icone.src} não existe`); continue; }
+      const buf = fs.readFileSync(arq);
+      const assinatura = buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      // Largura e altura vivem no IHDR, sempre nos bytes 16..24 de um PNG.
+      const larg = buf.readUInt32BE(16), alt = buf.readUInt32BE(20);
+      const pedido = Number(String(icone.sizes).split('x')[0]);
+      ok(assinatura && larg === pedido && alt === pedido,
+        `${nome} · ${icone.src}: PNG ${pedido}x${pedido} de verdade (tem ${larg}x${alt})`);
+    }
+
+    /* O start_url é a identidade do app instalado quando não há `id`. Dois
+       manifestos com o mesmo start_url viram o MESMO aplicativo para o
+       Android: instalar o painel do motoboy substituiria o app de quem
+       despacha no aparelho, em silêncio. */
+    ok(!starts.has(man.start_url),
+      `${nome}: start_url próprio (${man.start_url}) — start_url repetido faz um app substituir o outro`);
+    starts.add(man.start_url);
+
+    const alvo = path.join(RAIZ, String(man.start_url).replace(/^\.\//, ''));
+    ok(fs.existsSync(alvo), `${nome}: start_url aponta para um arquivo que existe`);
+  }
+
+  // Instalado, o app precisa da casca no cache — senão abre em branco offline
+  {
+    const sw = fs.readFileSync(path.join(RAIZ, 'sw.js'), 'utf8');
+    const shell = sw.slice(sw.indexOf('const SHELL'), sw.indexOf('];', sw.indexOf('const SHELL')));
+    for (const arq of ['index.html', 'motoboy.html', 'manifest.json', 'manifest-motoboy.json']) {
+      ok(shell.includes(arq), `sw.js: ${arq} está na casca cacheada (o app instalado abre sem sinal)`);
+    }
+  }
+
+  // Convite para instalar: sem ele o navegador só oferece num menu escondido
+  {
+    for (const [arq, fn] of [['index.html', 'instalarApp'], ['motoboy.html', 'instalarApp']]) {
+      const src = lerApp(arq);
+      ok(src.includes('beforeinstallprompt'), `${arq}: captura o beforeinstallprompt do Android`);
+      ok(new RegExp(`function ${fn}\\(`).test(src), `${arq}: tem o botão de instalar`);
+      /* iPhone não dispara beforeinstallprompt. Sem um caminho escrito, o
+         botão simplesmente não faria nada em todo iOS. */
+      ok(/Adicionar à Tela de Início/.test(src),
+        `${arq}: ensina o caminho do iPhone (lá não existe diálogo nativo)`);
+    }
+    ok(/rel="manifest" href="\.\/manifest-motoboy\.json"/.test(lerApp('motoboy.html')),
+      'motoboy.html: aponta para o manifesto próprio, não para o do app principal');
   }
 
   // O apple-touch-icon é lido do HTML, não do manifest.

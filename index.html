@@ -570,6 +570,13 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 
 <!-- ══ HOME ══ -->
 <div class="screen active" id="homeScreen">
+  <!-- Instalar na tela inicial. Aparece só quando dá para instalar de
+       verdade, e uma vez dispensada não volta. -->
+  <div class="notify-bar hidden" id="instalarBar">
+    <div class="notify-bar-text" id="instalarTexto">📲 Instale o SpeedBoy na tela inicial — abre como aplicativo e funciona sem sinal.</div>
+    <button type="button" class="btn-allow-notify" onclick="instalarApp()">Instalar</button>
+    <button type="button" onclick="dispensarInstalar()" aria-label="Dispensar" style="background:none;border:none;color:var(--muted);font-size:17px;cursor:pointer;padding:0 2px;line-height:1;">✕</button>
+  </div>
   <div class="notify-bar hidden" id="notifyBar" onclick="onNotifyBar()">
     <div class="notify-bar-text" id="notifyBarText">🔔 Ative as notificações para ser avisado de novos pedidos</div>
     <span class="notify-status hidden" id="notifyStatus">Permissão negada</span>
@@ -1132,7 +1139,15 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
     </div>
     <div style="margin-top:22px;padding-top:16px;border-top:1px solid var(--border);text-align:center;">
       <div id="appVersao" style="font-size:11px;color:var(--muted);letter-spacing:.5px;">versão —</div>
-      <button type="button" onclick="forcarAtualizacao()" style="margin-top:8px;background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;padding:8px 12px;min-height:36px;">Forçar atualização do app</button>
+      <!-- Instalar também aqui, e não só na faixa da inicial: quem dispensou
+           a faixa uma vez precisa de um lugar fixo para instalar depois.
+           Na MESMA linha do "forçar atualização" de propósito — a Config
+           precisa continuar cabendo em pouco mais de uma tela. -->
+      <div style="display:flex;gap:8px;justify-content:center;align-items:center;margin-top:8px;">
+        <button type="button" id="btnInstalarCfg" onclick="instalarApp()" style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:700;text-decoration:underline;cursor:pointer;padding:8px 10px;min-height:36px;">📲 Instalar o app</button>
+        <button type="button" onclick="forcarAtualizacao()" style="background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;padding:8px 10px;min-height:36px;">Forçar atualização</button>
+      </div>
+      <div id="instalarAjudaCfg" style="display:none;font-size:12px;color:var(--muted);line-height:1.6;text-align:left;margin-top:6px;"></div>
     </div>
   </div>
 </div>
@@ -2138,12 +2153,20 @@ function updateHistStopValue(di,si,rawVal){
 }
 
 function togDone(i){
-  stops[i].done=!stops[i].done;
+  const s=stops[i];
+  s.done=!s.done;
   // Registra a data em que foi finalizada — entra no fechamento por essa data
-  if(stops[i].done) stops[i]._doneDate=new Date().toLocaleDateString('pt-BR');
-  else delete stops[i]._doneDate;
+  if(s.done){
+    s._doneDate=new Date().toLocaleDateString('pt-BR');
+    // Entrega feita pelo próprio dono: a hora é agora e não há motoboy a
+    // creditar. A loja precisa da hora do mesmo jeito.
+    if(!s.deliveredAt) s.deliveredAt=new Date().toISOString();
+  }else{
+    delete s._doneDate;
+    ['deliveredAt','deliveredBy','receivedBy','proofId'].forEach(k=>{ delete s[k]; });
+  }
   saveStops(); renderHome();
-  if(stops[i]._trackKey) updateTracking(stops[i]._trackKey, stops[i].done?'entregue':'aceito');
+  if(s._trackKey) updateTracking(s._trackKey, s.done?'entregue':'aceito', null, dadosParaLoja(s));
 }
 
 function togPaid(i)        { stops[i].paid=!stops[i].paid; saveStops(); renderHome(); }
@@ -4260,6 +4283,10 @@ function listenRepasses(){
 function aplicarConfirmacoesRepasse(){
   const porId=new Map(stops.map(s=>[idDaParada(s),s]));
   let mudou=false, novasEntregas=0;
+  /* A loja também espera resposta. Sem esta lista, a confirmação do motoboy
+     parava no app: quem pediu a entrega pelo link continuava vendo
+     "aguardando" e ligava para perguntar. */
+  const avisarLoja=[];
   Object.entries(repassesData).forEach(([rpId,rp])=>{
     if(!rp||!Array.isArray(rp.deliveries))return;
     rp.deliveries.forEach(d=>{
@@ -4294,10 +4321,17 @@ function aplicarConfirmacoesRepasse(){
         if(alvo[k]!==v){ alvo[k]=v; mudou=true; }
       });
       if(alvo._repassId!==rpId){ alvo._repassId=rpId; mudou=true; }
+      /* Entrega que veio de um link de loja tem _trackKey. Toda vez que o
+         estado dela muda, a loja é avisada — inclusive quando o motoboy
+         reabre, para ela não ficar com um "entregue" que foi desfeito. */
+      if(alvo._trackKey) avisarLoja.push(alvo);
     });
   });
   if(!mudou)return;
   saveStops();
+  avisarLoja.forEach(s=>{
+    updateTracking(s._trackKey, s.done?'entregue':(s.problema?'problema':'aceito'), null, dadosParaLoja(s));
+  });
   if(_telaAtual==='homeScreen') renderHome();
   if(_telaAtual==='reportScreen') renderReport();
   if(novasEntregas){
@@ -4630,6 +4664,7 @@ function loadConfig(){
   renderLinks();
   renderAutoBackups();
   mostrarVersaoApp();
+  atualizarBarraInstalar();
   aplicarDobras();
   atualizarResumosCfg();
 }
@@ -5178,15 +5213,41 @@ async function rmClientRequest(reqId){
   try{const room=localStorage.getItem('sb_room_code')||'';const{ref:r,remove}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');await remove(r(fbDb,'rooms/'+room+'/client_requests/'+reqId));}catch(e){sbLogError('remover solicitação do cliente',e);}
 }
 
-async function updateTracking(key,status,stopInfo=null){
+/* O que a loja vê da entrega que ela pediu.
+
+   Antes daqui só viajava o status ("entregue"), e a loja ficava com a
+   metade menos útil da resposta: sabia QUE chegou, não a que horas nem
+   com quem ficou. Quando quem entrega é um terceiro, é justamente isso
+   que ela liga para perguntar.
+
+   O comprovante vai por referência (proofId), não embutido: o caminho
+   /tracking tem teto de 8 KB nas regras do banco, e a loja só baixa a
+   foto se tocar para ver. */
+async function updateTracking(key,status,stopInfo=null,entrega=null){
   if(!fbDb)return;
   try{
     const room=localStorage.getItem('sb_room_code')||'';
     const {ref:r,set:s}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
     const data={status,updatedAt:new Date().toISOString()};
     if(stopInfo)data.info=stopInfo;
+    if(entrega){
+      ['deliveredBy','deliveredAt','receivedBy','proofId'].forEach(k=>{
+        if(entrega[k]) data[k]=entrega[k];
+      });
+    }
     await s(r(fbDb,'rooms/'+room+'/tracking/'+key),JSON.stringify(data));
   }catch(e){console.error('tracking error:',e);}
+}
+
+// Dados da entrega que a loja pode ver. Só o que ela precisa para não
+// precisar ligar — nada de taxa nem de quanto o motoboy recebeu.
+function dadosParaLoja(s){
+  return {
+    deliveredBy: s.deliveredBy || '',
+    deliveredAt: s.deliveredAt || '',
+    receivedBy:  s.receivedBy  || '',
+    proofId:     s.proofId     || ''
+  };
 }
 
 let _locWatchId=null;
@@ -5393,6 +5454,82 @@ window.addEventListener('DOMContentLoaded', function(){
     if(btn) btn.textContent = '🌙';
   }
 });
+
+/* ══════════════════════════════════════
+   INSTALAR NA TELA INICIAL
+
+   O app já era um PWA completo — manifesto, ícones, service worker, abre
+   offline — mas nunca CONVIDAVA ninguém a instalar. Sem convite, o
+   navegador só oferece a instalação num menu escondido, e o resultado é
+   usar tudo pela aba do Chrome: sem ícone, sem tela cheia, e disputando
+   memória com as outras vinte abas.
+
+   O Android manda `beforeinstallprompt` e dá para abrir o diálogo nativo.
+   O iPhone não tem esse evento — lá o caminho é Compartilhar → Adicionar à
+   Tela de Início, e o único jeito honesto é escrever isso na tela.
+   ══════════════════════════════════════ */
+let _promptInstalar = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _promptInstalar = e;
+  atualizarBarraInstalar();
+});
+window.addEventListener('appinstalled', () => {
+  _promptInstalar = null;
+  const b = document.getElementById('instalarBar');
+  if (b) b.classList.add('hidden');
+  toast('📲 App instalado!','success');
+});
+
+function appJaInstalado(){
+  return window.matchMedia('(display-mode: standalone)').matches ||
+         window.navigator.standalone === true;
+}
+function ehIOS(){
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function instalarDispensado(){ return localStorage.getItem('sb_instalar_nao') === '1'; }
+
+function atualizarBarraInstalar(){
+  const b = document.getElementById('instalarBar');
+  if (!b) return;
+  // Já instalado, ou dispensado: nada a oferecer
+  const podeOferecer = !appJaInstalado() && !instalarDispensado() && (!!_promptInstalar || ehIOS());
+  b.classList.toggle('hidden', !podeOferecer);
+  const btnCfg = document.getElementById('btnInstalarCfg');
+  if (btnCfg) btnCfg.style.display = appJaInstalado() ? 'none' : '';
+}
+
+function textoComoInstalar(){
+  return ehIOS()
+    ? 'No iPhone: toque em <strong>Compartilhar</strong> (o quadrado com a seta para cima), desça a lista e escolha <strong>Adicionar à Tela de Início</strong>.'
+    : 'No menu do navegador (⋮), escolha <strong>Instalar aplicativo</strong> ou <strong>Adicionar à tela inicial</strong>.';
+}
+
+function instalarApp(){
+  if (appJaInstalado()) { toast('O app já está instalado neste aparelho','success'); return; }
+  if (_promptInstalar) {
+    _promptInstalar.prompt();
+    _promptInstalar.userChoice.then(r => {
+      if (r && r.outcome === 'accepted') document.getElementById('instalarBar').classList.add('hidden');
+      _promptInstalar = null;
+    }).catch(()=>{});
+    return;
+  }
+  /* Sem prompt nativo. Acontece no iPhone sempre, e no Android quando o
+     evento já foi consumido — em vez de um botão que não faz nada, mostra
+     o caminho. */
+  const naCfg = _telaAtual === 'configScreen';
+  const alvo = document.getElementById(naCfg ? 'instalarAjudaCfg' : 'instalarTexto');
+  if (alvo) { alvo.innerHTML = textoComoInstalar(); alvo.style.display = ''; }
+}
+
+function dispensarInstalar(){
+  try { localStorage.setItem('sb_instalar_nao','1'); } catch(e) {}
+  document.getElementById('instalarBar').classList.add('hidden');
+}
 
 // ══════════════════════════════════════
 //  NOTIFICAÇÕES
@@ -5646,6 +5783,7 @@ renderHome();
 navPelaURL();          // respeita #ganhos, #fechamento etc. e firma o estado inicial
 initFirebase();
 checkNotifyPermission();
+atualizarBarraInstalar();
 // Restaura tema
 if(localStorage.getItem('sb_theme')==='light'){
   document.body.classList.add('light');

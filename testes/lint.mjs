@@ -11,7 +11,8 @@ import { execFileSync } from 'child_process';
 import { RAIZ, lerApp, criarPlacar } from './_util.mjs';
 
 const { ok, fim } = criarPlacar();
-const PAGINAS = ['index.html', 'pedido.html', 'motoboy.html', 'fatura.html', 'offline.html'];
+const PAGINAS = ['index.html', 'pedido.html', 'motoboy.html', 'fatura.html', 'offline.html',
+                 'captacao/admin.html', 'captacao/cadastro.html'];
 
 // ── 1. Todo <button> precisa de type ──────────────────────────
 // Sem type, um botão dentro de <form> vira submit e recarrega a página.
@@ -174,7 +175,8 @@ for (const arq of PAGINAS) {
       const blocos = [...lerApp(arq).matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
         .map(m => m[1]).filter(b => b.trim());
       blocos.forEach((b, i) => {
-        const f = path.join(tmp, `${arq}.${i}.js`);
+        // arq pode conter '/' (captacao/admin.html) — achata para nome de arquivo
+        const f = path.join(tmp, `${arq.replace(/[/\\]/g, '_')}.${i}.js`);
         fs.writeFileSync(f, b);
         try {
           execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' });

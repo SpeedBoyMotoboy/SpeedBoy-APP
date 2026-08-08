@@ -43,6 +43,33 @@
           "$item": { ".validate": "newData.isString() && newData.val().length <= 524288" }
         },
 
+        "captacao": {
+          "convites": {
+            "$convite": {
+              ".validate": "newData.hasChildren(['criado_em'])",
+              "criado_em":  { ".validate": "newData.isNumber()" },
+              "usado":      { ".validate": "newData.isBoolean()" },
+              "usado_em":   { ".validate": "newData.isNumber()" },
+              "motoboy_id": { ".validate": "newData.isString() && newData.val().length <= 64" },
+              "$outro": { ".validate": false }
+            }
+          },
+          "motoboys_parceiros": {
+            "$motoboy": {
+              ".validate": "newData.hasChildren(['nome','telefone','status'])",
+              "nome":        { ".validate": "newData.isString() && newData.val().length <= 80" },
+              "telefone":    { ".validate": "newData.isString() && newData.val().length <= 15" },
+              "status":      { ".validate": "newData.val() == 'convidado' || newData.val() == 'aprovado' || newData.val() == 'recusado'" },
+              "convite_id":  { ".validate": "newData.isString() && newData.val().length <= 64" },
+              "criado_em":   { ".validate": "newData.isNumber()" },
+              "aprovado_em": { ".validate": "newData.isNumber()" },
+              "recusado_em": { ".validate": "newData.isNumber()" },
+              "$outro": { ".validate": false }
+            }
+          },
+          "$outro": { ".validate": false }
+        },
+
         "$desconhecido": { ".validate": false }
       }
     }

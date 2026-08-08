@@ -16,7 +16,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;}
-body{max-width:480px;margin:0 auto;padding-bottom:30px;}
+body{max-width:480px;margin:0 auto;padding-bottom:130px;}
 .hero{position:relative;overflow:hidden;padding:28px 20px 22px;background:linear-gradient(160deg,#0d0d14 0%,#1a1220 60%,#0d0d14 100%);border-bottom:1px solid var(--border);text-align:center;}
 .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(245,197,24,.12) 0%,transparent 65%);pointer-events:none;}
 .hero-logo{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:36px;letter-spacing:-2px;color:var(--accent);position:relative;}
@@ -30,9 +30,15 @@ body{max-width:480px;margin:0 auto;padding-bottom:30px;}
 .summary-val{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;}
 .summary-val.ac{color:var(--accent);}
 .summary-val.gr{color:var(--green);}
+.summary-val.rd{color:var(--red);}
+.tools{display:flex;gap:8px;padding:0 16px 12px;}
+.btn-tool{flex:1;padding:13px 8px;border-radius:11px;border:1.5px solid var(--accent);background:rgba(245,197,24,.12);color:var(--accent);font-family:'Barlow',sans-serif;font-weight:800;font-size:13px;cursor:pointer;}
+.btn-tool:disabled{opacity:.5;}
 .stops-wrap{padding:0 16px;}
 .stop-card{background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border);margin-bottom:10px;overflow:hidden;transition:border-color .2s,opacity .2s;}
 .stop-card.done{opacity:.5;border-color:var(--green);}
+.stop-card.problema{border-color:var(--red);}
+.stop-card.proxima{border-color:var(--accent);box-shadow:0 0 0 1px rgba(245,197,24,.35);}
 .stop-hdr{display:flex;align-items:center;gap:10px;padding:14px;cursor:pointer;}
 .stop-num{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#000;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .stop-info{flex:1;min-width:0;}
@@ -43,18 +49,50 @@ body{max-width:480px;margin:0 auto;padding-bottom:30px;}
 .stop-detail{display:none;padding:0 14px 14px;font-size:13px;line-height:1.8;background:var(--card2);border-top:1px solid var(--border);}
 .stop-card.expanded .stop-detail{display:block;}
 .stop-detail strong{color:var(--muted);font-size:10px;letter-spacing:.5px;}
-.stop-actions{display:none;padding:0 14px 14px;gap:8px;}
+.stop-actions{display:none;padding:0 14px 14px;gap:8px;flex-wrap:wrap;}
 .stop-card.expanded .stop-actions{display:flex;}
-.btn-act{flex:1;padding:14px;border-radius:10px;border:none;font-family:'Barlow',sans-serif;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;}
+.btn-act{flex:1;min-width:100px;padding:14px;border-radius:10px;border:none;font-family:'Barlow',sans-serif;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;}
 .btn-act:active{transform:scale(.95);}
+.aviso-prob{margin:0 14px 12px;background:rgba(255,82,82,.12);border:1px solid var(--red);border-radius:10px;padding:9px 11px;font-size:12px;color:var(--red);line-height:1.5;}
+/* ── Próxima parada: uma rota por vez ──
+   A rota inteira aberta de uma vez só serve para planejar. Na rua, o que
+   funciona é o próximo endereço no navegador — e só ele. */
+.proxima-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--card);border-top:1.5px solid var(--accent);padding:11px 14px calc(11px + env(safe-area-inset-bottom));z-index:200;display:none;}
+.proxima-bar.visible{display:block;}
+.proxima-lbl{font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--muted);text-transform:uppercase;}
+.proxima-nome{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.proxima-addr{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:8px;}
+.proxima-btns{display:flex;gap:8px;}
+.btn-nav{flex:1;padding:13px;border-radius:10px;border:none;font-weight:800;font-size:14px;cursor:pointer;color:#fff;}
+.btn-waze{background:#33ccff;color:#001a26;}
+.btn-gmaps{background:#4285f4;}
+/* ── Modais ── */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:flex-end;justify-content:center;z-index:400;backdrop-filter:blur(4px);}
+.modal.hidden{display:none;}
+.modal-sheet{background:var(--card);border-radius:20px 20px 0 0;padding:18px 16px 34px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;}
+.modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+.modal-titulo{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:19px;color:var(--accent);}
+.modal-x{background:none;border:none;color:var(--muted);font-size:23px;cursor:pointer;}
+.modal-sub{font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5;}
+.mot-btn{width:100%;text-align:left;background:var(--card2);border:1px solid var(--border);border-radius:11px;padding:13px 14px;margin-bottom:7px;color:var(--text);font-family:'Barlow',sans-serif;font-size:14px;font-weight:600;cursor:pointer;line-height:1.4;}
+.mot-btn:active{border-color:var(--accent);}
+.mot-btn small{display:block;font-weight:400;color:var(--muted);font-size:12px;margin-top:2px;}
+.campo{width:100%;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:12px 13px;font-size:15px;font-family:'Barlow',sans-serif;outline:none;margin-bottom:10px;}
+.campo:focus{border-color:var(--accent);}
+.rotulo{font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;margin-bottom:5px;}
+.btn-confirmar{width:100%;background:var(--green);color:#000;border:none;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;padding:14px;border-radius:12px;cursor:pointer;}
+.btn-confirmar:disabled{opacity:.5;}
+.btn-foto{width:100%;background:rgba(59,130,246,.14);border:1.5px dashed var(--blue);color:var(--blue);border-radius:12px;padding:16px;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:10px;display:block;text-align:center;}
+.previa{width:100%;border-radius:10px;border:1px solid var(--border);margin-bottom:10px;display:block;}
 .loading-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:16px;}
 .spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
 .error-wrap{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;padding:40px 24px;text-align:center;}
 .error-wrap.show{display:flex;}
-.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--card2);border:1px solid var(--border);color:var(--text);padding:10px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:600;opacity:0;transition:all .25s;pointer-events:none;}
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--card2);border:1px solid var(--border);color:var(--text);padding:10px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:600;opacity:0;transition:all .25s;pointer-events:none;max-width:92%;text-align:center;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 .toast.success{border-color:var(--green);color:var(--green);}
+.toast.error{border-color:var(--red);color:var(--red);}
 </style>
 </head>
 <body>
@@ -71,6 +109,9 @@ body{max-width:480px;margin:0 auto;padding-bottom:30px;}
 </div>
 <div id="mainWrap" style="display:none;">
   <div class="summary" id="summaryBar"></div>
+  <div class="tools">
+    <button type="button" class="btn-tool" id="btnOtimizar" onclick="otimizarRota()">⚡ Otimizar rota</button>
+  </div>
   <div class="stops-wrap" id="stopsWrap"></div>
 </div>
 <div id="errorWrap" class="error-wrap">
@@ -78,6 +119,61 @@ body{max-width:480px;margin:0 auto;padding-bottom:30px;}
   <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;color:var(--red);margin-bottom:10px;">Link inválido</div>
   <div style="font-size:13px;color:var(--muted);line-height:1.6;max-width:260px;">Peça um novo link para o Luan.</div>
 </div>
+
+<!-- ══ PRÓXIMA PARADA (uma rota por vez) ══ -->
+<div class="proxima-bar" id="proximaBar">
+  <div class="proxima-lbl">Próxima parada · <span id="proximaPos"></span></div>
+  <div class="proxima-nome" id="proximaNome"></div>
+  <div class="proxima-addr" id="proximaAddr"></div>
+  <div class="proxima-btns">
+    <button type="button" class="btn-nav btn-waze"  onclick="navegarProxima('waze')">🚗 Waze</button>
+    <button type="button" class="btn-nav btn-gmaps" onclick="navegarProxima('gmaps')">🗺️ Google Maps</button>
+  </div>
+</div>
+
+<!-- ══ PROBLEMA NA ENTREGA ══ -->
+<div class="modal hidden" id="probModal">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <div class="modal-titulo">⚠️ Problema na entrega</div>
+      <button type="button" class="modal-x" onclick="fecharProb()">✕</button>
+    </div>
+    <div class="modal-sub" id="probSub"></div>
+    <div id="probLista"></div>
+    <div id="probDetalhe" style="display:none;">
+      <div class="rotulo">O que aconteceu</div>
+      <textarea class="campo" id="probTexto" rows="3" placeholder="Escreva para a loja..."></textarea>
+      <button type="button" class="btn-confirmar" style="background:#25d366;" onclick="enviarProblema()">💬 Enviar para a loja</button>
+      <button type="button" class="mot-btn" style="margin-top:8px;text-align:center;" onclick="voltarProbLista()">← Escolher outro motivo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CONFIRMAR ENTREGA ══ -->
+<div class="modal hidden" id="entregaModal">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <div class="modal-titulo" style="color:var(--green);">✅ Confirmar entrega</div>
+      <button type="button" class="modal-x" onclick="fecharEntrega()">✕</button>
+    </div>
+    <div class="modal-sub" id="entregaSub"></div>
+    <div id="campoRecebedor">
+      <div class="rotulo">Quem recebeu</div>
+      <input class="campo" id="entregaRecebedor" placeholder="Nome de quem recebeu" maxlength="60" oninput="validarEntrega()" />
+    </div>
+    <div id="campoFoto">
+      <div class="rotulo">Comprovante</div>
+      <label class="btn-foto" id="fotoLabel">📷 Tirar foto (com data, hora e local)
+        <input type="file" accept="image/*" capture="environment" onchange="carregarFoto(this)" style="display:none" />
+      </label>
+      <img class="previa" id="fotoPrevia" alt="Prévia do comprovante" style="display:none;" />
+    </div>
+    <button type="button" class="btn-confirmar" id="btnConfirmarEntrega" onclick="confirmarEntrega()">✅ Marcar como entregue</button>
+  </div>
+</div>
+
+<canvas id="canvasFoto" style="display:none;"></canvas>
+
 <script>
 'use strict';
 // Definida em speedboy-firebase.js, compartilhada com index/pedido/fatura
@@ -87,6 +183,7 @@ var ROOM=(params.get('room')||'').toUpperCase();
 var REPASS_ID=params.get('id')||'';
 var db=null;
 var repassData=null;
+var _salvando=false;
 
 function init(){
   if(!ROOM||!REPASS_ID){showError();return;}
@@ -104,6 +201,10 @@ function ouvirRepasse(){
   ref.on('value',function(snap){
     var raw=snap.val();
     if(!raw){showError();return;}
+    /* Enquanto uma escrita nossa está em voo, o snapshot que volta é o
+       estado ANTERIOR — aplicá-lo apagaria da tela a confirmação que o
+       motoboy acabou de dar. */
+    if(_salvando)return;
     try{
       repassData=typeof raw==='string'?JSON.parse(raw):raw;
       document.getElementById('loadingWrap').style.display='none';
@@ -115,48 +216,531 @@ function ouvirRepasse(){
   });
 }
 
+// Taxas escondidas: o painel mostra endereço, telefone, janela de horário e
+// observação — tudo menos quanto a loja pagou pela entrega.
+function ocultarTaxa(){ return !!(repassData && repassData.hideTaxa); }
+
 function renderStops(){
   if(!repassData||!repassData.deliveries)return;
   var items=repassData.deliveries;
-  var total=0,doneCount=0;
-  items.forEach(function(s){total+=(s.taxa||0);if(s.done)doneCount++;});
+  var total=0,doneCount=0,probCount=0;
+  items.forEach(function(s){
+    total+=(s.taxa||0);
+    if(s.done)doneCount++;
+    else if(s.problem)probCount++;
+  });
+  var restantes=items.length-doneCount;
+  var terceiro=ocultarTaxa()
+    ? '<div class="summary-item"><div class="summary-lbl">'+(probCount?'Travadas':'Faltam')+'</div><div class="summary-val '+(probCount?'rd':'ac')+'">'+(probCount||restantes)+'</div></div>'
+    : '<div class="summary-item"><div class="summary-lbl">Ganho</div><div class="summary-val gr">R$ '+total.toFixed(2).replace('.',',')+'</div></div>';
   document.getElementById('summaryBar').innerHTML=
     '<div class="summary-item"><div class="summary-lbl">Entregas</div><div class="summary-val ac">'+items.length+'</div></div>'+
     '<div class="summary-item"><div class="summary-lbl">Feitas</div><div class="summary-val gr">'+doneCount+'/'+items.length+'</div></div>'+
-    '<div class="summary-item"><div class="summary-lbl">Ganho</div><div class="summary-val gr">R$ '+total.toFixed(2).replace('.',',')+'</div></div>';
+    terceiro;
+
   var wrap=document.getElementById('stopsWrap');
+  var prox=indiceProxima();
   wrap.innerHTML=items.map(function(s,i){
-    var taxaStr=s.taxa>0?'R$ '+s.taxa.toFixed(2).replace('.',','):'';
+    var taxaStr=(!ocultarTaxa()&&s.taxa>0)?'R$ '+s.taxa.toFixed(2).replace('.',','):'';
     var tags=[s.serviceType==='retirada'?'📦':s.serviceType==='troca'?'🔄':'🛵',s.city||'',s.deliveryDate||''].filter(Boolean).join(' · ');
-    var doneClass=s.done?' done':'';
-    return '<div class="stop-card'+doneClass+'" id="mc'+i+'" onclick="toggleMCard('+i+')">'+
+    var classes='stop-card'+(s.done?' done':'')+(s.problem&&!s.done?' problema':'')+(i===prox?' proxima':'');
+    var avisoProb=(s.problem&&!s.done)
+      ? '<div class="aviso-prob">⚠️ <strong>'+esc(s.problem.titulo||'Problema')+'</strong>'+
+        (s.problem.at?' · '+esc(hora(s.problem.at)):'')+
+        (s.problem.detalhe?'<br>💬 '+esc(s.problem.detalhe):'')+'</div>'
+      : '';
+    var avisoOk=(s.done&&(s.receivedBy||s.doneAt))
+      ? '<div class="aviso-prob" style="background:rgba(0,230,118,.1);border-color:var(--green);color:var(--green);">✅ '+
+        (s.doneAt?esc(hora(s.doneAt)):'')+(s.receivedBy?' · Recebido por '+esc(s.receivedBy):'')+'</div>'
+      : '';
+    return '<div class="'+classes+'" id="mc'+i+'" onclick="toggleMCard('+i+')">'+
       '<div class="stop-hdr">'+
         '<div class="stop-num">'+(i+1)+'</div>'+
         '<div class="stop-info">'+
-          '<div class="stop-name">'+(s.name||'Sem nome')+'</div>'+
-          '<div class="stop-addr">'+(s.address||'')+'</div>'+
-          (tags?'<div class="stop-tags">'+tags+'</div>':'')+
+          '<div class="stop-name">'+esc(s.name||'Sem nome')+'</div>'+
+          '<div class="stop-addr">'+esc(s.address||'')+'</div>'+
+          (tags?'<div class="stop-tags">'+esc(tags)+'</div>':'')+
         '</div>'+
         (taxaStr?'<div class="stop-taxa">'+taxaStr+'</div>':'')+
       '</div>'+
+      avisoProb+avisoOk+
       '<div class="stop-detail">'+
-        (s.phone?'<div><strong>TEL </strong>'+fmtPhone(s.phone)+'</div>':'')+
-        (s.complement?'<div><strong>COMPL </strong>'+s.complement+'</div>':'')+
-        (s.reference?'<div><strong>REF </strong>'+s.reference+'</div>':'')+
-        ((s.timeFrom||s.timeTo)?'<div><strong>HORÁRIO </strong>⏰ '+(s.timeFrom||'?')+' até '+(s.timeTo||'?')+'</div>':'')+
-        (s.store?'<div><strong>LOJA </strong>🏪 '+s.store+'</div>':'')+
-        (s.notes?'<div><strong>OBS </strong>'+s.notes+'</div>':'')+
+        (s.phone?'<div><strong>TEL </strong>'+esc(fmtPhone(s.phone))+'</div>':'')+
+        (s.complement?'<div><strong>COMPL </strong>'+esc(s.complement)+'</div>':'')+
+        (s.reference?'<div><strong>REF </strong>'+esc(s.reference)+'</div>':'')+
+        (s.neighborhood?'<div><strong>BAIRRO </strong>'+esc(s.neighborhood)+'</div>':'')+
+        ((s.timeFrom||s.timeTo)?'<div><strong>HORÁRIO </strong>⏰ '+esc(s.timeFrom||'?')+' até '+esc(s.timeTo||'?')+'</div>':'')+
+        (s.store?'<div><strong>LOJA </strong>🏪 '+esc(s.store)+'</div>':'')+
+        (s.notes?'<div><strong>OBS </strong>'+esc(s.notes)+'</div>':'')+
         (s.productValue>0?'<div><strong>COBRAR </strong>R$ '+s.productValue.toFixed(2).replace('.',',')+' '+(s.productPaid?'✅ pago':'💰 a cobrar')+'</div>':'')+
       '</div>'+
       '<div class="stop-actions" onclick="event.stopPropagation()">'+
-        '<button type="button" class="btn-act" onclick="openMaps('+i+')" style="background:#4285f4;color:#fff;">🗺️ Navegar</button>'+
-        (s.phone?'<button type="button" class="btn-act" onclick="openWpp('+i+')" style="background:#25d366;color:#fff;">💬 WhatsApp</button>':'')+
-        '<button type="button" class="btn-act" onclick="toggleDone('+i+')" style="background:'+(s.done?'var(--card2);color:var(--muted);border:1px solid var(--border)':'var(--green);color:#000')+';">'+(s.done?'↩️ Reabrir':'✅ Entregue')+'</button>'+
+        '<button type="button" class="btn-act" onclick="navegarParada('+i+',\'waze\')" style="background:#33ccff;color:#001a26;">🚗 Waze</button>'+
+        '<button type="button" class="btn-act" onclick="navegarParada('+i+',\'gmaps\')" style="background:#4285f4;color:#fff;">🗺️ Maps</button>'+
+        (s.phone?'<button type="button" class="btn-act" onclick="openWpp('+i+')" style="background:#25d366;color:#fff;">💬 Cliente</button>':'')+
+        '<button type="button" class="btn-act" onclick="abrirProb('+i+')" style="background:rgba(255,82,82,.15);color:var(--red);border:1px solid var(--red);">⚠️ Problema</button>'+
+        '<button type="button" class="btn-act" onclick="toggleDone('+i+')" style="flex-basis:100%;background:'+(s.done?'var(--card2);color:var(--muted);border:1px solid var(--border)':'var(--green);color:#000')+';">'+(s.done?'↩️ Reabrir':'✅ Entregue')+'</button>'+
       '</div>'+
     '</div>';
   }).join('');
+  renderProxima();
 }
 
+// ── PRÓXIMA PARADA ──────────────────────────────────────
+function indiceProxima(){
+  if(!repassData||!repassData.deliveries)return -1;
+  for(var i=0;i<repassData.deliveries.length;i++){
+    if(!repassData.deliveries[i].done)return i;
+  }
+  return -1;
+}
+
+function renderProxima(){
+  var bar=document.getElementById('proximaBar');
+  var i=indiceProxima();
+  if(i<0){bar.classList.remove('visible');return;}
+  var s=repassData.deliveries[i];
+  var feitas=repassData.deliveries.filter(function(d){return d.done;}).length;
+  document.getElementById('proximaPos').textContent=(feitas+1)+' de '+repassData.deliveries.length;
+  document.getElementById('proximaNome').textContent=s.name||'Sem nome';
+  document.getElementById('proximaAddr').textContent=[s.address,s.complement].filter(Boolean).join(' · ');
+  bar.classList.add('visible');
+}
+
+function navegarProxima(app){
+  var i=indiceProxima();
+  if(i<0){showToast('Nenhuma parada pendente','');return;}
+  navegarParada(i,app);
+}
+
+/* Um destino por vez, de propósito. Rota com dez paradas abertas de uma vez
+   só serve para planejar; na rua o que se usa é o próximo endereço — e o
+   Waze nem aceita paradas intermediárias por link. */
+function navegarParada(i,app){
+  var s=repassData.deliveries[i];
+  if(!s)return;
+  var alvo=[s.address,s.complement].filter(Boolean).join(', ');
+  var url;
+  if(app==='waze'){
+    url=s._lat&&s._lng
+      ? 'https://waze.com/ul?ll='+s._lat+','+s._lng+'&navigate=yes'
+      : 'https://waze.com/ul?q='+encodeURIComponent(alvo)+'&navigate=yes';
+  }else{
+    url=s._lat&&s._lng
+      ? 'https://www.google.com/maps/dir/?api=1&destination='+s._lat+','+s._lng+'&travelmode=driving'
+      : 'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(alvo)+'&travelmode=driving';
+  }
+  window.open(url,'_blank');
+}
+
+// ── ROTA OTIMIZADA ──────────────────────────────────────
+/* Mesmo caminho do app: Nominatim para achar as coordenadas, OSRM para
+   ordenar. Se qualquer um falhar, a lista fica como está — reordenar por
+   palpite seria pior que não reordenar. As coordenadas ficam guardadas na
+   parada e servem depois para abrir o Waze no ponto exato, sem depender de
+   ele interpretar o endereço escrito. */
+function geoCache(){
+  try{return JSON.parse(localStorage.getItem('sb_moto_geocache')||'{}');}catch(e){return {};}
+}
+function salvarGeoCache(c){
+  try{localStorage.setItem('sb_moto_geocache',JSON.stringify(c));}catch(e){}
+}
+
+function geocodificar(endereco){
+  var cache=geoCache();
+  if(cache[endereco])return Promise.resolve(cache[endereco]);
+  var url='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q='+encodeURIComponent(endereco);
+  return fetch(url).then(function(r){return r.ok?r.json():null;}).then(function(d){
+    if(!d||!d.length)return null;
+    var c={lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon)};
+    var atual=geoCache(); atual[endereco]=c; salvarGeoCache(atual);
+    return c;
+  }).catch(function(){return null;});
+}
+
+function posicaoAtual(){
+  return new Promise(function(res){
+    if(!navigator.geolocation){res(null);return;}
+    navigator.geolocation.getCurrentPosition(
+      function(p){res({lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy});},
+      function(){res(null);},
+      {enableHighAccuracy:true,timeout:8000,maximumAge:30000}
+    );
+  });
+}
+
+function ordenarPorOsrm(pontos,origem){
+  var pts=(origem?[origem]:[]).concat(pontos.map(function(p){return p._coords;}));
+  if(pts.length<3)return Promise.resolve(null);
+  var coordStr=pts.map(function(c){return c.lng+','+c.lat;}).join(';');
+  var ctrl=new AbortController();
+  var timer=setTimeout(function(){ctrl.abort();},9000);
+  return fetch('https://router.project-osrm.org/trip/v1/driving/'+coordStr+'?roundtrip=false&source=first',
+    {signal:ctrl.signal})
+    .then(function(r){clearTimeout(timer);return r.ok?r.json():null;})
+    .then(function(d){
+      if(!d||d.code!=='Ok'||!d.waypoints)return null;
+      var off=origem?1:0;
+      var ordem=new Array(pontos.length);
+      d.waypoints.forEach(function(wp,idx){
+        var it=idx-off;
+        if(it>=0&&it<pontos.length)ordem[wp.waypoint_index-off]=pontos[it];
+      });
+      return ordem.filter(Boolean);
+    }).catch(function(){clearTimeout(timer);return null;});
+}
+
+function otimizarRota(){
+  if(!repassData||!repassData.deliveries)return;
+  var pendentes=repassData.deliveries.filter(function(s){return !s.done;});
+  if(pendentes.length<2){showToast('Precisa de 2 entregas pendentes','');return;}
+  var btn=document.getElementById('btnOtimizar');
+  btn.disabled=true; btn.textContent='⏳ Calculando...';
+  var origem=null;
+
+  posicaoAtual().then(function(p){
+    origem=p;
+    /* Um endereço por vez, com pausa: o Nominatim corta quem passa de 1/s,
+       e ser cortado quebra a rota para todo mundo. A pausa só existe quando
+       houve chamada de verdade — endereço já no cache não espera nada, e é
+       por isso que otimizar de novo no mesmo dia sai instantâneo.
+       O contador no botão evita a leitura de "travou". */
+    var feitos=0;
+    return pendentes.reduce(function(fila,s){
+      return fila.then(function(){
+        var cache=geoCache();
+        var jaTinha=!!cache[s.address];
+        return geocodificar(s.address).then(function(c){
+          if(c){s._coords=c;s._lat=c.lat;s._lng=c.lng;}
+          btn.textContent='⏳ '+(++feitos)+'/'+pendentes.length;
+          if(jaTinha)return null;
+          return new Promise(function(r){setTimeout(r,1100);});
+        });
+      });
+    }, Promise.resolve());
+  }).then(function(){
+    var comCoord=pendentes.filter(function(s){return s._coords;});
+    var semCoord=pendentes.filter(function(s){return !s._coords;});
+    if(comCoord.length<2){showToast('Não consegui localizar os endereços','error');return null;}
+    return ordenarPorOsrm(comCoord,origem).then(function(ordem){
+      if(!ordem){showToast('Serviço de rota indisponível','error');return null;}
+      var feitas=repassData.deliveries.filter(function(s){return s.done;});
+      repassData.deliveries=ordem.concat(semCoord,feitas);
+      salvarRepasse();
+      renderStops();
+      showToast('⚡ Rota otimizada — siga a ordem da lista','success');
+      return true;
+    });
+  }).catch(function(e){
+    console.error(e); showToast('Erro ao otimizar rota','error');
+  }).then(function(){
+    btn.disabled=false; btn.textContent='⚡ Otimizar rota';
+  });
+}
+
+// ── ENTREGA ─────────────────────────────────────────────
+var _entregaIdx=-1;
+var _fotoDataUrl='';
+
+function toggleDone(i){
+  if(!repassData||!repassData.deliveries)return;
+  var s=repassData.deliveries[i];
+  if(!s)return;
+  if(s.done){
+    // Reabrir: some tudo que a confirmação tinha gravado
+    s.done=false;
+    delete s.doneAt; delete s.receivedBy; delete s.proofId;
+    salvarRepasse(); renderStops();
+    showToast('↩️ Reaberta','success');
+    return;
+  }
+  abrirEntrega(i);
+}
+
+function abrirEntrega(i){
+  _entregaIdx=i; _fotoDataUrl='';
+  var s=repassData.deliveries[i];
+  document.getElementById('entregaSub').textContent=(s.name||'Sem nome')+' · '+(s.address||'');
+  document.getElementById('entregaRecebedor').value='';
+  document.getElementById('campoRecebedor').style.display=repassData.askReceiver?'':'none';
+  document.getElementById('campoFoto').style.display=repassData.askPhoto?'':'none';
+  var previa=document.getElementById('fotoPrevia');
+  previa.style.display='none'; previa.removeAttribute('src');
+  document.getElementById('fotoLabel').innerHTML='📷 Tirar foto (com data, hora e local)<input type="file" accept="image/*" capture="environment" onchange="carregarFoto(this)" style="display:none">';
+  validarEntrega();
+  mostrarModal('entregaModal',true);
+}
+function fecharEntrega(){ mostrarModal('entregaModal',false); _entregaIdx=-1; }
+
+function validarEntrega(){
+  if(!repassData)return;
+  var btn=document.getElementById('btnConfirmarEntrega');
+  var faltaNome=repassData.askReceiver && !document.getElementById('entregaRecebedor').value.trim();
+  var faltaFoto=repassData.askPhoto && !_fotoDataUrl;
+  btn.disabled=!!(faltaNome||faltaFoto);
+  btn.textContent=faltaNome?'Informe quem recebeu':(faltaFoto?'Tire a foto do comprovante':'✅ Marcar como entregue');
+}
+
+/* Foto com carimbo de data, hora e local — o que os aplicativos de
+   "timestamp" fazem. O carimbo é desenhado NA imagem, não guardado ao
+   lado: metadado se perde ao encaminhar pelo WhatsApp, pixel não.
+
+   A imagem é reduzida antes de subir. O comprovante existe para provar
+   que a entrega aconteceu; resolução de câmera de celular inteira só
+   estouraria o limite do banco. */
+function carregarFoto(input){
+  var file=input.files&&input.files[0];
+  if(!file)return;
+  var label=document.getElementById('fotoLabel');
+  label.textContent='⏳ Processando foto...';
+  posicaoAtual().then(function(pos){
+    return carimbarFoto(file,pos);
+  }).then(function(dataUrl){
+    if(!dataUrl){showToast('Não consegui processar a foto','error');label.innerHTML='📷 Tirar foto (com data, hora e local)<input type="file" accept="image/*" capture="environment" onchange="carregarFoto(this)" style="display:none">';return;}
+    _fotoDataUrl=dataUrl;
+    var previa=document.getElementById('fotoPrevia');
+    previa.src=dataUrl; previa.style.display='block';
+    label.innerHTML='🔄 Tirar outra foto<input type="file" accept="image/*" capture="environment" onchange="carregarFoto(this)" style="display:none">';
+    validarEntrega();
+  }).catch(function(e){
+    console.error(e);
+    showToast('Não consegui processar a foto','error');
+    label.innerHTML='📷 Tirar foto (com data, hora e local)<input type="file" accept="image/*" capture="environment" onchange="carregarFoto(this)" style="display:none">';
+  });
+}
+
+function carregarImagem(file){
+  if(window.createImageBitmap){
+    // from-image respeita a orientação do EXIF: sem isso a foto do celular
+    // sobe deitada, e um comprovante de lado não serve de comprovante.
+    return createImageBitmap(file,{imageOrientation:'from-image'})
+      .catch(function(){return createImageBitmap(file);});
+  }
+  return new Promise(function(res,rej){
+    var img=new Image();
+    img.onload=function(){res(img);};
+    img.onerror=rej;
+    img.src=URL.createObjectURL(file);
+  });
+}
+
+function carimbarFoto(file,pos){
+  var s=repassData.deliveries[_entregaIdx]||{};
+  return carregarImagem(file).then(function(img){
+    var LARG=1000;
+    var escala=Math.min(1,LARG/(img.width||LARG));
+    var w=Math.round((img.width||LARG)*escala);
+    var h=Math.round((img.height||LARG)*escala);
+    var cv=document.getElementById('canvasFoto');
+    cv.width=w; cv.height=h;
+    var ctx=cv.getContext('2d');
+    ctx.drawImage(img,0,0,w,h);
+
+    var agora=new Date();
+    var linhas=[
+      '📅 '+agora.toLocaleDateString('pt-BR')+'  ⏰ '+agora.toLocaleTimeString('pt-BR'),
+      pos?('📍 '+pos.lat.toFixed(6)+', '+pos.lng.toFixed(6)+(pos.acc?'  (±'+Math.round(pos.acc)+'m)':''))
+         :'📍 Localização indisponível',
+      '🏠 '+[s.address,s.complement].filter(Boolean).join(', '),
+      '👤 '+(s.name||'')+(s.store?'   🏪 '+s.store:''),
+      '🏍️ '+((repassData&&repassData.motoboy)||'Motoboy')+'   ·   SPEEDBOY'
+    ].filter(function(l){return l.length>3;});
+
+    var fonte=Math.max(13,Math.round(w*0.026));
+    var alturaLinha=Math.round(fonte*1.5);
+    var pad=Math.round(fonte*0.7);
+    var faixa=alturaLinha*linhas.length+pad*2;
+    ctx.fillStyle='rgba(0,0,0,.62)';
+    ctx.fillRect(0,h-faixa,w,faixa);
+    ctx.fillStyle='#f5c518';
+    ctx.fillRect(0,h-faixa,Math.round(w*0.012),faixa);
+    ctx.font='600 '+fonte+'px Barlow, Arial, sans-serif';
+    ctx.textBaseline='top';
+    ctx.fillStyle='#fff';
+    linhas.forEach(function(l,i){
+      ctx.fillText(l, pad+Math.round(w*0.02), h-faixa+pad+i*alturaLinha, w-pad*2);
+    });
+
+    // Qualidade cai até caber no limite do banco (ver database.rules.json)
+    var LIMITE=480000;
+    var q=0.6, url=cv.toDataURL('image/jpeg',q);
+    while(url.length>LIMITE && q>0.28){ q-=0.1; url=cv.toDataURL('image/jpeg',q); }
+    return url.length>LIMITE ? null : url;
+  });
+}
+
+function confirmarEntrega(){
+  var i=_entregaIdx;
+  if(i<0||!repassData.deliveries[i])return;
+  var s=repassData.deliveries[i];
+  var recebedor=document.getElementById('entregaRecebedor').value.trim();
+  if(repassData.askReceiver&&!recebedor){showToast('Informe quem recebeu','error');return;}
+  if(repassData.askPhoto&&!_fotoDataUrl){showToast('Tire a foto do comprovante','error');return;}
+
+  var btn=document.getElementById('btnConfirmarEntrega');
+  btn.disabled=true; btn.textContent='⏳ Enviando...';
+
+  var enviarProva=Promise.resolve('');
+  if(_fotoDataUrl){
+    var proofId='PF-'+Date.now().toString(36).toUpperCase()+Math.random().toString(36).slice(2,6).toUpperCase();
+    enviarProva=db.ref('rooms/'+ROOM+'/proofs/'+proofId).set(_fotoDataUrl)
+      .then(function(){return proofId;})
+      .catch(function(e){
+        console.error('comprovante:',e);
+        showToast('Foto não subiu — entrega registrada mesmo assim','error');
+        return '';
+      });
+  }
+
+  enviarProva.then(function(proofId){
+    s.done=true;
+    s.doneAt=new Date().toISOString();
+    if(recebedor)s.receivedBy=recebedor;
+    if(proofId)s.proofId=proofId;
+    /* Entrega feita encerra o problema que estava aberto nela: o painel de
+       quem despachou não pode continuar marcando alerta vermelho numa
+       parada que já chegou. */
+    delete s.problem;
+    return salvarRepasse();
+  }).then(function(){
+    fecharEntrega();
+    renderStops();
+    showToast('✅ Entrega confirmada!','success');
+  }).catch(function(e){
+    console.error(e); showToast('Erro ao salvar — tente de novo','error');
+  }).then(function(){
+    btn.disabled=false; btn.textContent='✅ Marcar como entregue';
+  });
+}
+
+// ── PROBLEMA NA ENTREGA ─────────────────────────────────
+/* Mensagens prontas. O motoboy parado na porta de um prédio não vai
+   escrever cinco linhas explicando o caso — ou toca em um botão, ou liga
+   para o despachante, ou (o que acontecia) deixa a entrega travada e a
+   loja descobre horas depois.
+
+   Cada mensagem vai com os dados da entrega junto: quem despachou não
+   precisa perguntar "qual entrega?" antes de resolver. */
+var MOTIVOS=[
+  {id:'endereco',   titulo:'Endereço errado ou não localizado',
+   sub:'O endereço não existe, está incompleto ou não bate',
+   corpo:'Não consegui localizar o endereço informado. Podem confirmar o endereço correto (rua, número, complemento e ponto de referência)?'},
+  {id:'semcontato', titulo:'Não consegui contato com o cliente',
+   sub:'Liguei, chamei no WhatsApp e não atendeu',
+   corpo:'Tentei contato com o cliente por ligação e WhatsApp e não obtive resposta. Estou no local. Como devo proceder?'},
+  {id:'portaria',   titulo:'Portaria não aceita a entrega',
+   sub:'Prédio ou condomínio não autoriza deixar',
+   corpo:'A portaria não autoriza receber a entrega e o cliente não desceu nem autorizou a entrada. Preciso de uma orientação para liberar.'},
+  {id:'ausente',    titulo:'Ninguém no local para receber',
+   sub:'Fui até o endereço e não havia ninguém',
+   corpo:'Estive no endereço informado e não havia ninguém para receber. Podemos combinar um novo horário ou outro endereço?'},
+  {id:'mercadoria', titulo:'Mercadoria errada ou faltando',
+   sub:'O que saiu não confere com o pedido',
+   corpo:'A mercadoria que estou levando não confere com o pedido do cliente (item errado, quantidade divergente ou item faltando). Como devo proceder?'},
+  {id:'recusa',     titulo:'Cliente recusou a entrega',
+   sub:'Não quis receber',
+   corpo:'O cliente recusou receber a entrega. Preciso saber se devo retornar com a mercadoria para a loja.'},
+  {id:'pagamento',  titulo:'Problema no pagamento / troco',
+   sub:'Valor a cobrar, troco ou forma de pagamento',
+   corpo:'Houve divergência no pagamento desta entrega (valor a cobrar, troco ou forma de pagamento). Podem confirmar como devo receber?'},
+  {id:'acesso',     titulo:'Local fechado ou sem acesso',
+   sub:'Comércio fechado, rua interditada, sem acesso',
+   corpo:'Não consegui acesso ao local (estabelecimento fechado, via interditada ou entrada bloqueada). Como devo proceder?'},
+  {id:'avaria',     titulo:'Produto danificado no transporte',
+   sub:'Embalagem ou produto avariado',
+   corpo:'O produto apresenta avaria. Preciso de orientação antes de entregar ao cliente.'},
+  {id:'outro',      titulo:'Outro motivo',
+   sub:'Escrever o que aconteceu',
+   corpo:''}
+];
+
+var _probIdx=-1;
+var _probMotivo=null;
+
+function abrirProb(i){
+  _probIdx=i; _probMotivo=null;
+  var s=repassData.deliveries[i];
+  if(!s)return;
+  var contato=s.storePhone?('Vai para '+(s.storeIsPlantao?'o plantão SPEEDBOY':('🏪 '+(s.store||'a loja')))):'Nenhum WhatsApp cadastrado para esta entrega';
+  document.getElementById('probSub').textContent=(s.name||'Sem nome')+' · '+contato;
+  document.getElementById('probLista').innerHTML=MOTIVOS.map(function(m,mi){
+    return '<button type="button" class="mot-btn" onclick="escolherMotivo('+mi+')">'+
+      esc(m.titulo)+'<small>'+esc(m.sub)+'</small></button>';
+  }).join('')+
+  (s.problem?'<button type="button" class="mot-btn" style="text-align:center;color:var(--green);border-color:var(--green);" onclick="resolverProblema()">✅ Problema resolvido</button>':'');
+  document.getElementById('probLista').style.display='';
+  document.getElementById('probDetalhe').style.display='none';
+  mostrarModal('probModal',true);
+}
+function fecharProb(){ mostrarModal('probModal',false); _probIdx=-1; _probMotivo=null; }
+function voltarProbLista(){
+  document.getElementById('probLista').style.display='';
+  document.getElementById('probDetalhe').style.display='none';
+}
+function escolherMotivo(mi){
+  _probMotivo=MOTIVOS[mi];
+  document.getElementById('probTexto').value=_probMotivo.corpo||'';
+  document.getElementById('probLista').style.display='none';
+  document.getElementById('probDetalhe').style.display='';
+  document.getElementById('probTexto').focus();
+}
+
+function textoDoProblema(s,motivo,detalhe){
+  var linhas=[
+    '🏍️ *SPEEDBOY — Problema na entrega*','',
+    '*'+motivo.titulo+'*',
+    detalhe||motivo.corpo||'','',
+    '👤 Cliente: '+(s.name||'—'),
+  ];
+  if(s.phone)        linhas.push('📞 '+fmtPhone(s.phone));
+  if(s.address)      linhas.push('📍 '+s.address);
+  if(s.complement)   linhas.push('🏢 '+s.complement);
+  if(s.reference)    linhas.push('📌 Ref.: '+s.reference);
+  if(s.store)        linhas.push('🏪 Loja: '+s.store);
+  if(s.timeFrom||s.timeTo) linhas.push('⏰ Janela: '+(s.timeFrom||'?')+' até '+(s.timeTo||'?'));
+  if(s.productValue>0) linhas.push('💰 A cobrar: R$ '+s.productValue.toFixed(2).replace('.',','));
+  linhas.push('');
+  linhas.push('🕒 '+new Date().toLocaleString('pt-BR'));
+  linhas.push('🛵 Motoboy: '+((repassData&&repassData.motoboy)||'Motoboy'));
+  return linhas.join('\n');
+}
+
+function enviarProblema(){
+  var i=_probIdx;
+  if(i<0||!_probMotivo)return;
+  var s=repassData.deliveries[i];
+  if(!s)return;
+  var detalhe=document.getElementById('probTexto').value.trim();
+  if(!detalhe){showToast('Escreva o que aconteceu','error');return;}
+
+  /* Registrar ANTES de abrir o WhatsApp. Abrir o WhatsApp tira o navegador
+     da frente, e em muitos celulares a aba volta recarregada — o que ficou
+     por gravar não grava. */
+  s.problem={tipo:_probMotivo.id,titulo:_probMotivo.titulo,detalhe:detalhe,at:new Date().toISOString()};
+  salvarRepasse();
+  renderStops();
+
+  var msg=textoDoProblema(s,_probMotivo,detalhe);
+  var fone=String(s.storePhone||'').replace(/\D/g,'');
+  var url=fone
+    ? 'https://wa.me/'+(fone.length>11?fone:'55'+fone)+'?text='+encodeURIComponent(msg)
+    : 'https://wa.me/?text='+encodeURIComponent(msg);
+  fecharProb();
+  window.open(url,'_blank');
+  showToast(fone?'⚠️ Problema enviado para a loja':'⚠️ Registrado — escolha o contato no WhatsApp','success');
+}
+
+function resolverProblema(){
+  var i=_probIdx;
+  if(i<0||!repassData.deliveries[i])return;
+  delete repassData.deliveries[i].problem;
+  salvarRepasse();
+  fecharProb();
+  renderStops();
+  showToast('✅ Problema encerrado','success');
+}
+
+// ── APOIO ───────────────────────────────────────────────
 function toggleMCard(i){
   var c=document.getElementById('mc'+i);
   var was=c.classList.contains('expanded');
@@ -164,33 +748,44 @@ function toggleMCard(i){
   if(!was)c.classList.add('expanded');
 }
 
-function toggleDone(i){
-  if(!repassData||!repassData.deliveries)return;
-  repassData.deliveries[i].done=!repassData.deliveries[i].done;
-  saveRepass();
-  renderStops();
-  showToast(repassData.deliveries[i].done?'✅ Entregue!':'↩️ Reaberta','success');
-}
-
-function saveRepass(){
-  if(!db||!ROOM||!REPASS_ID||!repassData)return;
-  db.ref('rooms/'+ROOM+'/repass/'+REPASS_ID).set(JSON.stringify(repassData));
-}
-
-function openMaps(i){
-  var s=repassData.deliveries[i];
-  var addr=encodeURIComponent(s.address+(s.complement?', '+s.complement:''));
-  window.open('https://maps.google.com/?q='+addr,'_blank');
+function salvarRepasse(){
+  if(!db||!ROOM||!REPASS_ID||!repassData)return Promise.resolve();
+  /* _coords existe só para calcular a rota; _lat/_lng ficam, porque é o que
+     abre o Waze no ponto exato depois. */
+  var copia=JSON.parse(JSON.stringify(repassData));
+  (copia.deliveries||[]).forEach(function(d){ delete d._coords; });
+  _salvando=true;
+  return db.ref('rooms/'+ROOM+'/repass/'+REPASS_ID).set(JSON.stringify(copia))
+    .catch(function(e){ console.error('salvarRepasse:',e); showToast('Sem sinal — tente de novo','error'); throw e; })
+    .then(function(r){ _salvando=false; return r; }, function(e){ _salvando=false; throw e; });
 }
 
 function openWpp(i){
   var s=repassData.deliveries[i];
-  if(!s.phone)return;
-  var msg='Olá '+(s.name||'')+', estou a caminho com sua entrega! 🛵';
+  if(!s||!s.phone)return;
+  var msg='Olá '+(s.name||'')+', sou o motoboy da '+(s.store?s.store+' ':'')+'e estou a caminho com a sua entrega! 🛵';
   window.open('https://wa.me/55'+s.phone+'?text='+encodeURIComponent(msg),'_blank');
 }
 
 // fmtPhone vem do speedboy-core.js — a versão local quebrava com telefone vazio
+
+// Dados do repasse são digitados por gente (nome do cliente, observação da
+// loja) e viram innerHTML aqui. Mesmo escape do index.html.
+function esc(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function hora(iso){
+  var d=new Date(iso);
+  return isNaN(d)?'':d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+
+function mostrarModal(id,mostrar){
+  document.getElementById(id).classList.toggle('hidden',!mostrar);
+}
+document.getElementById('probModal').addEventListener('click',function(e){if(e.target===e.currentTarget)fecharProb();});
+document.getElementById('entregaModal').addEventListener('click',function(e){if(e.target===e.currentTarget)fecharEntrega();});
 
 function showError(){
   document.getElementById('loadingWrap').style.display='none';
@@ -206,7 +801,7 @@ function showToast(msg,type){
   t.textContent=msg;
   t.className='toast show'+(type?' '+type:'');
   clearTimeout(_toastTimer);
-  _toastTimer=setTimeout(function(){t.className='toast';},3000);
+  _toastTimer=setTimeout(function(){t.className='toast';},3500);
 }
 
 window.addEventListener('load',init);

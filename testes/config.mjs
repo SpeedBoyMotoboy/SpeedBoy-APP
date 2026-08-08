@@ -18,11 +18,12 @@ import { trecho, lerApp, criarPlacar } from './_util.mjs';
 const { ok, fim } = criarPlacar();
 const src = lerApp('index.html');
 
-// ── 1. As sete seções dobram, e pelo mesmo mecanismo ─────────
+// ── 1. Todas as seções dobram, e pelo mesmo mecanismo ────────
 /* Antes, "Links das Lojas" dobrava com uma função própria e estilos
-   inline, e as outras seis não dobravam. */
+   inline, e as outras seis não dobravam. "Modo FULL" entrou depois e
+   segue o mesmo mecanismo — a lista abaixo é o contrato. */
 {
-  const SECOES = ['lojas', 'rapidas', 'links', 'sync', 'fatura', 'backup', 'perigo'];
+  const SECOES = ['lojas', 'rapidas', 'full', 'links', 'sync', 'fatura', 'backup', 'perigo'];
   const faltando = SECOES.filter(s =>
     !new RegExp(`aria-controls="cfg-${s}"`).test(src) || !new RegExp(`id="cfg-${s}"`).test(src));
   ok(faltando.length === 0,
@@ -56,7 +57,7 @@ const src = lerApp('index.html');
 // ── 3. Fechado não pode virar "não sei o que tem lá" ─────────
 {
   const resumo = trecho('function atualizarResumosCfg(){', '\n}', 'index.html');
-  for (const secao of ['lojas', 'rapidas', 'links', 'sync', 'fatura', 'backup']) {
+  for (const secao of ['lojas', 'rapidas', 'full', 'links', 'sync', 'fatura', 'backup']) {
     ok(resumo.includes(`'${secao}'`), `a seção "${secao}" mostra um resumo quando fechada`);
   }
   ok(/\.cfg-cab\[aria-expanded="true"\]\s+\.cfg-resumo\s*\{[^}]*display:\s*none/.test(src),

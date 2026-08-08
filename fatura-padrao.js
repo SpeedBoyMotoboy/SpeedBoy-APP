@@ -99,6 +99,10 @@
         cidade: i.cidade || '',
         tipo: i.tipo || 'Entrega',
         loja: i.loja || '',
+        // Quem entregou. Vazio quando foi o próprio dono — é o caso comum e
+        // não gera resumo. Só o fechamento do período usa (resumo POR MOTOBOY);
+        // a fatura da loja não mostra, não é assunto dela.
+        motoboy: i.motoboy || '',
         valor: parseFloat(i.valor) || 0,
         cancelado: !!i.cancelado
       };

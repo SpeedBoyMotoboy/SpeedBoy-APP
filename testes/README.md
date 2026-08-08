@@ -29,6 +29,7 @@ Ou individualmente:
 | `nucleo.mjs` | `speedboy-core.js` — sobretudo: nenhum bairro se perdeu (veja abaixo) |
 | `desfazer.mjs` | desfazer e confirmação (veja abaixo) |
 | `config.mjs` | Config dobrável e primeiro uso (veja abaixo) |
+| `full.mjs` | modo FULL: repasse, problema na entrega e autoria (veja abaixo) |
 | `lint.mjs` | guarda de regressão (veja abaixo) |
 | `smoke.mjs` | o app inteiro num navegador real |
 
@@ -80,6 +81,33 @@ aberto, o resto fechado, e a Sincronização abre sozinha quando não há sala.
 E o código da sala passa a existir **antes** de a Config ser aberta: ele só
 nascia dentro de `loadConfig()`, e num aparelho recém-instalado ninguém abriu a
 Config ainda.
+
+## `full.mjs` — a entrega que sai da sua mão
+
+O repasse existia antes do modo FULL, mas terminava no link: o app gerava e não
+voltava a olhar. Três buracos concretos, um por bloco de teste:
+
+- o motoboy marcava **entregue** e a informação morria no nó do repasse. Quem
+  despachou continuava vendo pendente, e o dia fechava sem aquela entrega
+- travou na portaria? Não havia para onde mandar o problema. A entrega ficava
+  parada e a loja descobria por telefone, horas depois
+- com terceiro entregando, "foi entregue" deixou de ser resposta: a loja pergunta
+  **quem foi, que horas e com quem ficou** — e o fechamento não tinha nenhuma
+
+O teste mais importante é o do listener de confirmação. Ele dispara a cada toque
+de **qualquer** motoboy; se gravasse sempre, cada snapshot viraria escrita, que
+viraria outro snapshot — ping-pong infinito entre os aparelhos. O teste roda o
+mesmo dado duas vezes e exige **zero** gravação na segunda.
+
+Cobre ainda: `stopId` no repasse (sem ele a confirmação não acha o caminho de
+volta); o WhatsApp da loja com queda para plantão e depois para o telefone da
+fatura, para o motoboy nunca ficar sem destino; as mensagens prontas levando os
+dados da entrega junto (sem isso quem recebe pergunta "qual entrega?" antes de
+resolver); o problema gravado **antes** de abrir o WhatsApp — abrir tira o
+navegador da frente e a aba costuma voltar recarregada; navegação com **um
+destino por link**, o único formato que o Waze aceita; e o limite da foto do
+comprovante batendo com o teto do `database.rules.json`, senão a gravação falha
+depois de o motoboy já ter tirado a foto.
 
 ## `nucleo.mjs` — nenhum bairro pode sumir
 
@@ -139,7 +167,7 @@ Ele já pegou quatro vazamentos reais de escape que passaram na Etapa 1.
 
 Sobe um servidor estático na raiz e abre as páginas num Chromium. Verifica:
 
-- o app carrega sem erro de JavaScript e as 7 telas existem
+- o app carrega sem erro de JavaScript e as 8 telas existem
 - um nome de cliente com `<img src=x onerror=...>` **não** executa nada
 - aspas no nome da loja não quebram o `onclick` do fechamento
 - o backup automático é criado e a restauração devolve as paradas
@@ -161,6 +189,11 @@ Sobe um servidor estático na raiz e abre as páginas num Chromium. Verifica:
   fechada mostra um resumo do que tem dentro, e abrir uma guarda o estado
 - um aparelho zerado mostra o campo do código da sala na **primeira** tela, com
   o próprio código já gerado; código malformado é recusado com aviso
+- a aba Repasses só existe no modo FULL, mostra o andamento e o problema
+  relatado, e desligar o modo estando nela devolve a pessoa para a inicial
+- o painel do motoboy com as taxas escondidas **continua** mostrando
+  complemento, referência, bairro, janela de horário, loja, observação e
+  telefone; nome de cliente com marcação não executa nada
 
 Erros de rede (Firebase, fontes do Google) são esperados em ambiente isolado e
 ficam filtrados — o teste só reprova por erro de código.

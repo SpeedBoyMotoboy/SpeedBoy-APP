@@ -30,6 +30,7 @@ Ou individualmente:
 | `desfazer.mjs` | desfazer e confirmação (veja abaixo) |
 | `config.mjs` | Config dobrável e primeiro uso (veja abaixo) |
 | `full.mjs` | modo FULL: repasse, problema na entrega e autoria (veja abaixo) |
+| `regras.mjs` | as regras do banco cobrem tudo que o app grava (veja abaixo) |
 | `lint.mjs` | guarda de regressão (veja abaixo) |
 | `smoke.mjs` | o app inteiro num navegador real |
 
@@ -108,6 +109,24 @@ navegador da frente e a aba costuma voltar recarregada; navegação com **um
 destino por link**, o único formato que o Waze aceita; e o limite da foto do
 comprovante batendo com o teto do `database.rules.json`, senão a gravação falha
 depois de o motoboy já ter tirado a foto.
+
+## `regras.mjs` — a recusa silenciosa do banco
+
+`$desconhecido: {".validate": false}` recusa caminho não previsto, e é a regra
+mais perigosa do arquivo: a recusa aparece no console do navegador e **não muda
+nada na tela**.
+
+Foi o que aconteceu com `tombs`, o caminho das exclusões — nunca esteve nas
+regras. Publicadas, apagar uma parada num celular pararia de chegar no outro (ela
+voltaria à lista no snapshot seguinte) e o `Promise.all` do `fbPush` rejeitaria em
+toda gravação, deixando o ponto de sincronização travado em "⏳ Aguardando envio"
+para sempre, mesmo com tudo enviado. Nenhum dos dois dá erro visível.
+
+O teste normaliza os caminhos que as quatro páginas usam — eles aparecem
+partidos, `'rooms/' + room + '/stops'` — e exige regra para cada um. Confere
+também que toda regra tem teto de tamanho, que as travas de sessão e de formato
+de sala continuam lá, e que o teto da foto do comprovante bate com o tamanho que
+o `motoboy.html` gera (maior, a foto seria recusada depois de já ter sido tirada).
 
 ## `nucleo.mjs` — nenhum bairro pode sumir
 

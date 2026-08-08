@@ -8,7 +8,11 @@
     "Todos os dados são gravados como string JSON pelo app, por isso a validação",
     "usa newData.isString() com um teto de tamanho para evitar entulho no banco.",
     "proofs guarda a foto do comprovante como data URL JPEG, já reduzida pelo",
-    "motoboy.html; o teto de 512 KB é o mesmo limite que ele respeita ao gerar."
+    "motoboy.html; o teto de 512 KB é o mesmo limite que ele respeita ao gerar.",
+    "ATENÇÃO ao acrescentar caminho: $desconhecido recusa tudo que não estiver",
+    "listado aqui, e a recusa é SILENCIOSA para quem está usando o app. Foi",
+    "assim que tombs (as exclusões) ficou de fora e travaria a sincronização.",
+    "testes/regras.mjs compara esta lista com os caminhos que o app grava."
   ],
 
   "rules": {
@@ -23,6 +27,7 @@
         "stops":    { ".validate": "newData.isString() && newData.val().length <= 1048576" },
         "history":  { ".validate": "newData.isString() && newData.val().length <= 4194304" },
         "location": { ".validate": "newData.isString() && newData.val().length <= 1024" },
+        "tombs":    { ".validate": "newData.isString() && newData.val().length <= 262144" },
 
         "pending": {
           "$item": { ".validate": "newData.isString() && newData.val().length <= 16384" }

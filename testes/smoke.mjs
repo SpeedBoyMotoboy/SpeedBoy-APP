@@ -98,7 +98,7 @@ await secao('index.html carrega e as telas existem', async () => {
   ok(reais.length === 0, 'index.html carrega sem erro de JavaScript' + (reais.length ? '\n     ' + reais.join('\n     ') : ''));
 
   const telas = await page.$$eval('.screen', els => els.map(e => e.id));
-  ok(telas.length === 7, `7 telas presentes (achou ${telas.length}: ${telas.join(', ')})`);
+  ok(telas.length === 8, `8 telas presentes (achou ${telas.length}: ${telas.join(', ')})`);
 
   ok(await page.isVisible('#homeScreen'), 'tela inicial visível ao abrir');
 
@@ -464,7 +464,12 @@ await secao('Config dobrável e primeiro uso', async () => {
     links: document.getElementById('resumo-links').textContent
   }));
   ok(resumos.sync === 'SB-RWZ4', `a Sincronização mostra a sala no cabeçalho (${resumos.sync})`);
-  ok(resumos.lojas === '2 lojas', `Minhas lojas mostra a contagem (${resumos.lojas})`);
+  ok(resumos.lojas.startsWith('2 lojas'), `Minhas lojas mostra a contagem (${resumos.lojas})`);
+  /* Loja sem WhatsApp manda o problema do motoboy para o plantão em vez da
+     própria loja. Isso precisa aparecer com a seção FECHADA — senão só se
+     descobre abrindo, que é justamente o que ninguém faz. */
+  ok(resumos.lojas.includes('2 sem WhatsApp'),
+    `e avisa quantas ainda não têm WhatsApp (${resumos.lojas})`);
   ok(resumos.links === 'nenhuma', `Links mostra que está vazio (${resumos.links})`);
 
   // Dobrar guarda o estado
@@ -514,6 +519,162 @@ await secao('Config dobrável e primeiro uso', async () => {
   });
   ok(entrou.sala === 'SB-A1B2', `o código digitado em minúsculo é aceito (${entrou.sala})`);
   ok(!entrou.cartao, 'depois de entrar, o cartão de boas-vindas não volta');
+
+  await ctx.close();
+});
+
+// ── 7g. Modo FULL: aba de repasses e painel do motoboy ───────
+await secao('Modo FULL num navegador de verdade', async () => {
+  const { page, ctx } = await abrir('/index.html');
+
+  const inicio = await page.evaluate(() => {
+    alternarModoFull(false);
+    return { aba: document.getElementById('nav-repasses').classList.contains('hidden') };
+  });
+  ok(inicio.aba, 'em dia normal a aba Repasses não ocupa lugar na barra');
+
+  const ligado = await page.evaluate(() => {
+    alternarModoFull(true);
+    goNav('repassesScreen', 'nav-repasses');
+    return {
+      visivel: !document.getElementById('nav-repasses').classList.contains('hidden'),
+      tela: document.querySelector('.screen.active').id,
+      vazio: document.getElementById('repassesList').textContent
+    };
+  });
+  ok(ligado.visivel, 'ligar o FULL faz a aba Repasses aparecer');
+  ok(ligado.tela === 'repassesScreen', 'e a aba abre');
+  ok(/Nenhum repasse ativo/.test(ligado.vazio), 'sem repasse, a aba explica o que fazer');
+
+  /* Um repasse em andamento, como chega do Firebase. O nome do motoboy é
+     digitado à mão e vira innerHTML — a mesma porta de XSS do resto. */
+  const emAndamento = await page.evaluate(() => {
+    window.__xss = false;
+    repassesData = { RP1: {
+      motoboy: '<img src=x onerror="window.__xss=true">Carlos',
+      phone: '27999998888', createdAt: new Date().toISOString(),
+      deliveries: [
+        { stopId: 'a', name: 'Ana', address: 'R. 1', taxa: 9, done: true,
+          doneAt: new Date().toISOString(), receivedBy: 'Porteiro João' },
+        { stopId: 'b', name: 'Beto', address: 'R. 2', taxa: 8, done: false,
+          problem: { titulo: 'Portaria não aceita a entrega', detalhe: 'Sem autorização', at: new Date().toISOString() } }
+      ]
+    } };
+    renderRepasses();
+    atualizarBarraFull();
+    const txt = document.getElementById('repassesList').textContent;
+    return {
+      xss: window.__xss,
+      progresso: /1\/2/.test(txt),
+      recebedor: txt.includes('Porteiro João'),
+      problema: txt.includes('Portaria não aceita'),
+      alerta: !!document.querySelector('#nav-repasses .alerta'),
+      barra: document.getElementById('fullBar').classList.contains('visible'),
+      barraTxt: document.getElementById('fullBarTxt').textContent
+    };
+  });
+  ok(!emAndamento.xss, 'nome de motoboy com marcação NÃO executa nada');
+  ok(emAndamento.progresso, 'a aba mostra o andamento (1/2)');
+  ok(emAndamento.recebedor, 'e quem recebeu cada entrega');
+  ok(emAndamento.problema, 'o problema relatado aparece sem precisar abrir nada');
+  ok(emAndamento.alerta, 'a barra inferior ganha a bolinha de alerta');
+  ok(emAndamento.barra && /problema/.test(emAndamento.barraTxt),
+    `a inicial avisa do problema (${emAndamento.barraTxt})`);
+
+  /* Desligar o FULL estando na aba: sem isto a pessoa fica numa tela sem
+     nenhum item aceso na barra, sem caminho de volta. */
+  const desligado = await page.evaluate(() => {
+    goNav('repassesScreen', 'nav-repasses');
+    alternarModoFull(false);
+    return document.querySelector('.screen.active').id;
+  });
+  ok(desligado === 'homeScreen', 'desligar o FULL na aba Repasses devolve para a inicial');
+
+  await ctx.close();
+});
+
+// ── 7h. Painel do motoboy: sem taxa, com todo o resto ────────
+await secao('Painel do motoboy no modo FULL', async () => {
+  /* Sem Firebase no sandbox a página cai na tela de erro, mas as funções
+     de render existem. Injetamos o repasse na mão — é exatamente o que o
+     listener faria — e conferimos o que vai para a tela. */
+  const { page, ctx } = await abrir('/motoboy.html?room=SB-TEST&id=RP1');
+
+  const r = await page.evaluate(() => {
+    window.__xss = false;
+    repassData = {
+      motoboy: 'Carlos', hideTaxa: true, askReceiver: true, askPhoto: false,
+      deliveries: [
+        { name: '<img src=x onerror="window.__xss=true">Ana', address: 'R. das Flores, 10',
+          complement: 'ap 202', reference: 'portão azul', phone: '27999998888',
+          store: 'KS', neighborhood: 'Centro', timeFrom: '14:00', timeTo: '16:00',
+          notes: 'entregar na portaria', taxa: 9, storePhone: '2733334444', done: false },
+        { name: 'Beto', address: 'R. B, 5', taxa: 8, done: true, doneAt: new Date().toISOString(), receivedBy: 'Beto' }
+      ]
+    };
+    document.getElementById('mainWrap').style.display = 'block';
+    renderStops();
+    const wrap = document.getElementById('stopsWrap');
+    return {
+      xss: window.__xss,
+      html: wrap.innerHTML,
+      texto: wrap.textContent,
+      resumo: document.getElementById('summaryBar').textContent,
+      proxima: document.getElementById('proximaBar').classList.contains('visible'),
+      proximaNome: document.getElementById('proximaNome').textContent
+    };
+  });
+
+  ok(!r.xss, 'nome de cliente com marcação NÃO executa nada no painel do motoboy');
+  ok(!/R\$\s*9,00/.test(r.texto), 'com hideTaxa, a taxa da entrega não aparece');
+  ok(!/Ganho/.test(r.resumo), 'e o resumo não mostra o ganho do dia');
+  // ...mas nada do que serve para entregar pode sumir junto
+  for (const [rotulo, valor] of [['complemento', 'ap 202'], ['referência', 'portão azul'],
+                                 ['bairro', 'Centro'], ['janela', '14:00'],
+                                 ['loja', 'KS'], ['observação', 'entregar na portaria'],
+                                 ['telefone', '99999-8888']]) {
+    ok(r.texto.includes(valor), `o painel continua mostrando ${rotulo}`);
+  }
+  ok(/Waze/.test(r.texto) && /Maps/.test(r.texto), 'cada parada abre no Waze ou no Google Maps');
+  ok(/Problema/.test(r.texto), 'e tem o botão de relatar problema');
+  ok(r.proxima && /Ana/.test(r.proximaNome),
+    'a barra fixa aponta a próxima parada pendente, uma por vez');
+
+  // O modal de problema abre com as mensagens prontas
+  const prob = await page.evaluate(() => {
+    abrirProb(0);
+    const t = document.getElementById('probLista').textContent;
+    return { aberto: !document.getElementById('probModal').classList.contains('hidden'), texto: t };
+  });
+  ok(prob.aberto, 'o modal de problema abre');
+  for (const m of ['Endereço errado', 'contato com o cliente', 'Portaria não aceita', 'Mercadoria errada']) {
+    ok(prob.texto.includes(m), `a lista de motivos oferece "${m}"`);
+  }
+
+  // Confirmar entrega exige quem recebeu quando o repasse pede
+  const conf = await page.evaluate(() => {
+    fecharProb();
+    abrirEntrega(0);
+    const antes = document.getElementById('btnConfirmarEntrega').disabled;
+    document.getElementById('entregaRecebedor').value = 'Maria';
+    validarEntrega();
+    return { antes, depois: document.getElementById('btnConfirmarEntrega').disabled };
+  });
+  ok(conf.antes === true, 'sem o nome de quem recebeu, não dá para confirmar');
+  ok(conf.depois === false, 'com o nome preenchido, o botão libera');
+
+  /* Otimizar sem rede: o Nominatim e o OSRM não respondem no sandbox. O que
+     não pode acontecer é o botão ficar preso em "Calculando..." — foi assim
+     que a rota do app já travou uma vez. */
+  const rota = await page.evaluate(async () => {
+    fecharEntrega();
+    otimizarRota();
+    await new Promise(r => setTimeout(r, 6000));
+    const b = document.getElementById('btnOtimizar');
+    return { texto: b.textContent, travado: b.disabled };
+  });
+  ok(!rota.travado && /Otimizar rota/.test(rota.texto),
+    `serviço de rota fora do ar devolve o botão (${rota.texto})`);
 
   await ctx.close();
 });

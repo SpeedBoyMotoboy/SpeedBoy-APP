@@ -72,6 +72,12 @@ Só depois do passo 2 confirmado.
 | `newData.isString()` + teto de tamanho | O app grava tudo como string JSON; qualquer outro formato é recusado, e há limite de tamanho por caminho. |
 | `$desconhecido: {".validate": false}` | Caminhos novos não previstos são recusados em vez de aceitos em silêncio. |
 
+> **Republicar ao ativar o modo FULL.** As regras ganharam o caminho `proofs`,
+> onde o `motoboy.html` grava a foto do comprovante. Como `$desconhecido` recusa
+> tudo que não está previsto, uma sala rodando as regras antigas **rejeita a
+> gravação da foto** — a entrega é registrada, mas o comprovante não sobe. Se for
+> usar a foto no comprovante, republique as regras deste arquivo antes.
+
 ### Se algo quebrar
 
 Volte ao editor de regras e republique as regras antigas que você copiou no

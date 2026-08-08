@@ -6,7 +6,9 @@
     "senão o app e as páginas públicas perdem acesso ao banco.",
     "Leia ROLLOUT-SEGURANCA.md antes de aplicar.",
     "Todos os dados são gravados como string JSON pelo app, por isso a validação",
-    "usa newData.isString() com um teto de tamanho para evitar entulho no banco."
+    "usa newData.isString() com um teto de tamanho para evitar entulho no banco.",
+    "proofs guarda a foto do comprovante como data URL JPEG, já reduzida pelo",
+    "motoboy.html; o teto de 512 KB é o mesmo limite que ele respeita ao gerar."
   ],
 
   "rules": {
@@ -33,6 +35,9 @@
         },
         "repass": {
           "$item": { ".validate": "newData.isString() && newData.val().length <= 262144" }
+        },
+        "proofs": {
+          "$item": { ".validate": "newData.isString() && newData.val().length <= 524288" }
         },
         "faturas": {
           "$item": { ".validate": "newData.isString() && newData.val().length <= 524288" }

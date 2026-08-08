@@ -40,6 +40,50 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 #syncRow.visible{display:flex;}
 .sync-label{font-size:10px;font-weight:600;color:var(--muted);}
 
+/* ══ MODO FULL ══
+   O interruptor fica no cabeçalho, visível de qualquer tela: o dia vira
+   "muita demanda" no meio do expediente, e procurar isso na Config custa
+   três toques justamente na hora em que ninguém tem três toques de
+   sobra. Apagado quando desligado, aceso quando ligado. */
+.btn-full{background:transparent;border:1.5px solid var(--border);color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:12px;letter-spacing:.5px;padding:4px 10px;border-radius:20px;cursor:pointer;line-height:1.3;}
+.btn-full.on{background:var(--accent2);border-color:var(--accent2);color:#fff;}
+.full-bar{display:none;margin:10px 14px 0;background:rgba(255,107,0,.1);border:1px solid var(--accent2);border-radius:var(--radius);padding:10px 12px;align-items:center;gap:10px;}
+.full-bar.visible{display:flex;}
+.full-bar-txt{flex:1;min-width:0;font-size:12px;color:var(--text);line-height:1.5;}
+.full-bar-txt b{color:var(--accent2);}
+.full-bar-btn{background:var(--accent2);color:#fff;border:none;border-radius:9px;padding:9px 12px;font-weight:800;font-size:12px;cursor:pointer;flex-shrink:0;}
+
+/* ══ REPASSES (aba do modo FULL) ══ */
+.rp-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;}
+.rp-card.tem-problema{border-color:var(--red);}
+.rp-head{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;}
+.rp-nome{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rp-meta{font-size:11px;color:var(--muted);margin-top:2px;}
+.rp-prog{flex-shrink:0;text-align:right;}
+.rp-prog-val{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--green);}
+.rp-prog-lbl{font-size:9px;font-weight:700;letter-spacing:.6px;color:var(--muted);text-transform:uppercase;}
+.rp-body{display:none;border-top:1px solid var(--border);background:var(--card2);padding:6px 14px 12px;}
+.rp-card.aberto .rp-body{display:block;}
+.rp-item{padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.rp-item:last-child{border-bottom:none;}
+.rp-item-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+.rp-item-nome{font-weight:600;}
+.rp-item-sub{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.5;}
+.rp-sel{font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;flex-shrink:0;}
+.rp-sel.ok{background:rgba(0,230,118,.15);color:var(--green);}
+.rp-sel.prob{background:rgba(255,82,82,.15);color:var(--red);}
+.rp-sel.wait{background:rgba(127,127,127,.15);color:var(--muted);}
+.rp-acts{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap;}
+.rp-acts .sc-btn{flex:1;min-width:90px;}
+.rp-prova{margin-top:7px;border:1px solid var(--border);border-radius:8px;max-width:100%;display:block;cursor:pointer;}
+.rp-vazio{color:var(--muted);text-align:center;padding:26px 16px;font-size:13px;line-height:1.7;}
+.rp-opt{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:13px;cursor:pointer;}
+.rp-opt input{width:20px;height:20px;accent-color:var(--accent);flex-shrink:0;cursor:pointer;}
+/* Quem entregou, quando e quem recebeu — a linha que o fechamento passou
+   a precisar quando as entregas deixaram de ser todas do próprio dono. */
+.fstop-quem{font-size:12px;color:var(--muted);line-height:1.6;display:flex;flex-wrap:wrap;gap:4px 10px;}
+.fstop-quem b{color:var(--accent2);font-weight:700;}
+
 /* BOTTOM NAV */
 /* env(safe-area-inset-bottom): sem isto a barra fica embaixo da faixa do
    iPhone e do gesto do Android, e o último item vira quase intocável. */
@@ -48,6 +92,10 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 .nav-btn:active{background:rgba(127,127,127,.12);}
 .nav-btn.active{color:var(--accent);}
 .nav-btn .icon{font-size:20px;line-height:1;}
+.nav-btn.hidden{display:none;}
+/* Bolinha no item Repasses quando algum motoboy relatou problema */
+.nav-btn .alerta{position:absolute;transform:translate(14px,-14px);width:9px;height:9px;border-radius:50%;background:var(--red);}
+.nav-btn{position:relative;}
 
 /* SCREENS */
 .screen{display:none;flex:1;flex-direction:column;overflow-y:auto;padding-bottom:calc(70px + env(safe-area-inset-bottom));}
@@ -507,6 +555,7 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
   <div class="logo">SPEED<span>BOY</span></div>
   <div class="header-right">
     <div id="syncRow"><div class="sync-dot" id="syncDot"></div><span class="sync-label" id="syncLabel"></span></div>
+    <button type="button" class="btn-full" id="btnFull" onclick="alternarModoFull()" aria-pressed="false" title="Modo FULL — dia de muita demanda">FULL</button>
     <button type="button" onclick="toggleTheme()" id="themeToggleBtn" style="background:none;border:none;font-size:18px;cursor:pointer;padding:2px 4px;" title="Alternar tema">☀️</button>
     <div id="badgeCount" class="badge-count">0</div>
   </div>
@@ -525,6 +574,10 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
     <div class="notify-bar-text" id="notifyBarText">🔔 Ative as notificações para ser avisado de novos pedidos</div>
     <span class="notify-status hidden" id="notifyStatus">Permissão negada</span>
     <button type="button" class="btn-allow-notify" id="notifyBtn" onclick="event.stopPropagation();onNotifyBar()">Ativar</button>
+  </div>
+  <div class="full-bar" id="fullBar">
+    <div class="full-bar-txt" id="fullBarTxt"></div>
+    <button type="button" class="full-bar-btn" onclick="goNav('repassesScreen','nav-repasses')">Ver repasses</button>
   </div>
   <div class="home-top">
     <button type="button" class="btn-add" onclick="goForm()">＋ Adicionar parada</button>
@@ -875,6 +928,7 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
         <button type="button" class="period-tab"   id="tab60" onclick="setPeriod('60d')">60 Dias</button>
       </div>
       <div id="reportSummary"></div>
+      <div id="reportMotoboys"></div>
       <div id="reportStores"></div>
       <div id="reportHistory"></div>
       <button type="button" class="btn-pdf" id="btnPdf" onclick="genPDF()" style="margin-top:8px;">📄 Baixar PDF do período</button>
@@ -910,6 +964,15 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
       <div class="field-label">Telefone do motoboy (opcional)</div>
       <input class="field-input" id="repassPhone" placeholder="(XX) XXXXX-XXXX" type="tel" oninput="maskPhone(this)" maxlength="15" />
     </div>
+    <!-- O que o motoboy vê do outro lado do link. No modo FULL o padrão é
+         esconder a taxa: quem recebe muitas entregas de origens diferentes
+         não precisa (nem deve) ver quanto cada loja pagou. -->
+    <div class="cfg-section" style="margin-bottom:12px;">
+      <div class="cfg-title" style="margin-bottom:8px;">🔒 O que o motoboy vê e confirma</div>
+      <label class="rp-opt"><input type="checkbox" id="rpOcultarTaxa" /> <span>Ocultar taxas de entrega (mostra todo o resto)</span></label>
+      <label class="rp-opt"><input type="checkbox" id="rpPedirRecebedor" checked /> <span>Pedir o nome de quem recebeu</span></label>
+      <label class="rp-opt"><input type="checkbox" id="rpPedirFoto" /> <span>Pedir foto com data, hora e local</span></label>
+    </div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Selecione as entregas e ajuste o valor que vai pagar:</div>
     <div id="repassList"></div>
     <button type="button" class="btn-save" onclick="sendRepassLink()" id="btnRepassLink" disabled style="margin-top:14px;background:var(--accent);">🔗 Gerar link para o motoboy</button>
@@ -925,6 +988,29 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 </div>
 
 
+<!-- ══ REPASSES (aba do modo FULL) ══ -->
+<div class="screen" id="repassesScreen">
+  <div class="config-body">
+    <div class="screen-title">
+      <button type="button" class="back-btn" onclick="goNav('homeScreen','nav-home')">←</button>
+      🏍️ Repasses
+    </div>
+    <div id="repassesResumo"></div>
+    <div id="repassesList"></div>
+    <button type="button" class="btn-save" onclick="goRepass()" style="background:var(--accent);margin-top:14px;">＋ Novo repasse</button>
+  </div>
+</div>
+
+<!-- Comprovante da entrega em tamanho cheio -->
+<div class="modal-overlay hidden" id="provaModal">
+  <div class="modal-sheet" style="max-height:90vh;overflow-y:auto;">
+    <div class="modal-header">
+      <div class="modal-name" id="provaTitulo">📷 Comprovante</div>
+      <button type="button" class="modal-close" onclick="fecharProva()">✕</button>
+    </div>
+    <div id="provaCorpo" style="text-align:center;font-size:13px;color:var(--muted);">Carregando...</div>
+  </div>
+</div>
 
 <!-- ══ CONFIG ══ -->
 <div class="screen" id="configScreen">
@@ -943,8 +1029,23 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
         <span class="cfg-resumo" id="resumo-lojas"></span><span class="cfg-seta">▾</span>
       </button>
       <div class="cfg-corpo" id="cfg-lojas">
-        <div class="stores-list" id="storesList"></div>
+        <div class="stores-list" id="storesList" style="flex-direction:column;align-items:stretch;gap:6px;"></div>
         <div class="store-add-row"><input class="finput" id="newStore" placeholder="Nome da loja (ex: KS)" maxlength="30" /><button type="button" class="btn-store-add" onclick="addStore()">+ Adicionar</button></div>
+      </div>
+    </div>
+    <div class="cfg-section">
+      <button type="button" class="cfg-cab compacto" onclick="dobrarSecao('full')" aria-expanded="false" aria-controls="cfg-full">
+        <span class="cfg-title">⚡ Modo FULL</span>
+        <span class="cfg-resumo" id="resumo-full"></span><span class="cfg-seta">▾</span>
+      </button>
+      <div class="cfg-corpo" id="cfg-full">
+        <div class="info-box">Para dia de muita demanda, quando a entrega deixa de ser só sua. Liga a aba <strong style="color:var(--accent)">Repasses</strong>, esconde as taxas do painel do motoboy e passa a exigir quem recebeu — e, se quiser, foto com data, hora e local.</div>
+        <label class="rp-opt" style="font-size:15px;font-weight:700;"><input type="checkbox" id="cfgFull" onchange="alternarModoFull(this.checked)" /> <span>Modo FULL ligado</span></label>
+        <div id="cfgFullOpts" style="margin-top:6px;padding-left:2px;">
+          <label class="rp-opt"><input type="checkbox" id="cfgFullOcultarTaxa" /> <span>Novos repasses já saem sem as taxas</span></label>
+          <label class="rp-opt"><input type="checkbox" id="cfgFullPedirFoto" /> <span>Novos repasses já pedem foto do comprovante</span></label>
+          <div class="field" style="margin-top:8px;"><div class="flabel">WhatsApp do plantão (recebe o que não tem loja)</div><input class="finput" id="cfgPlantaoTel" placeholder="(27) 90000-0000" type="tel" oninput="maskPhone(this)" maxlength="15" /></div>
+        </div>
       </div>
     </div>
     <div class="cfg-section">
@@ -1039,6 +1140,9 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 <!-- BOTTOM NAV -->
 <nav class="bottom-nav">
   <button type="button" class="nav-btn active" id="nav-home"    onclick="goNav('homeScreen','nav-home')"><span class="icon">📦</span>Entregas</button>
+  <!-- Só existe no modo FULL: em dia normal ninguém repassa entrega, e um
+       quinto item rouba largura dos quatro que se usa sempre. -->
+  <button type="button" class="nav-btn hidden" id="nav-repasses" onclick="goNav('repassesScreen','nav-repasses')"><span class="icon">🏍️</span>Repasses</button>
   <button type="button" class="nav-btn"        id="nav-finance" onclick="goNav('financeScreen','nav-finance')"><span class="icon">💰</span>Ganhos</button>
   <button type="button" class="nav-btn"        id="nav-report"  onclick="goNav('reportScreen','nav-report')"><span class="icon">📊</span>Fechamento</button>
   <button type="button" class="nav-btn"        id="nav-cfg"     onclick="goNav('configScreen','nav-cfg')"><span class="icon">⚙️</span>Config</button>
@@ -1524,7 +1628,8 @@ const TELAS = {
   configScreen:  { slug: 'config',     nav: 'nav-cfg'     },
   addScreen:     { slug: 'nova',       nav: null          },
   linkgenScreen: { slug: 'links',      nav: null          },
-  repassScreen:  { slug: 'repasse',    nav: null          }
+  repassScreen:  { slug: 'repasse',    nav: null          },
+  repassesScreen:{ slug: 'repasses',   nav: 'nav-repasses'}
 };
 const TELA_POR_SLUG = Object.fromEntries(
   Object.entries(TELAS).map(([id, v]) => [v.slug, id])
@@ -1626,6 +1731,7 @@ function goNav(screenId, navId, viaHistorico) {
   }
   if(screenId==='linkgenScreen') renderLinks();
   if(screenId==='repassScreen')  renderRepassList();
+  if(screenId==='repassesScreen')renderRepasses();
   if(screenId==='configScreen')  loadConfig();
 
   /* Voltando: devolve o dedo onde ele estava. Indo para uma tela nova:
@@ -1643,7 +1749,9 @@ function goNav(screenId, navId, viaHistorico) {
 function navPelaURL(){
   const bruto = (location.hash || '').replace(/^#/, '');
   const [slug, modal] = bruto.split('/');
-  const tela = TELA_POR_SLUG[slug] || 'homeScreen';
+  let tela = TELA_POR_SLUG[slug] || 'homeScreen';
+  // #repasses só existe no modo FULL; fora dele cairia numa tela sem volta pela barra
+  if (tela === 'repassesScreen' && !modoFull()) tela = 'homeScreen';
   _telaAtual = tela;
   goNav(tela, (TELAS[tela] || {}).nav, true);
   window.history.replaceState({ tela, modal: null }, '', '#' + (TELAS[tela] || {}).slug);
@@ -1847,7 +1955,11 @@ function renderHome(){
               <span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:700;background:rgba(255,107,0,.15);color:#ff6b00;">${s.serviceType==='retirada'?'📦 Retirada':s.serviceType==='troca'?'🔄 Troca':'🛵 Entrega'}</span>
               ${prodVal>0?`<span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:700;background:${s.productPaid?'rgba(0,230,118,.15)':'rgba(245,197,24,.12)'};color:${s.productPaid?'var(--green)':'var(--accent)'};">${s.productPaid?'✓ Cobrado':'💰 R$'+prodVal.toFixed(2).replace('.',',')}</span>`:''}
               ${s.deliveryDate?`<span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:700;background:rgba(161,100,220,.15);color:#a164dc;">${esc(delivDateLabel(s.deliveryDate))}</span>`:''}
+              ${s.repassadaPara&&!s.done?`<span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:700;background:rgba(255,107,0,.18);color:var(--accent2);">🏍️ ${esc(s.repassadaPara)}</span>`:''}
+              ${s.problema&&!s.done?`<span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:800;background:rgba(255,82,82,.18);color:var(--red);">⚠️ ${esc(s.problema.titulo||'Problema')}</span>`:''}
             </div>
+            ${s.problema&&!s.done&&s.problema.detalhe?`<div style="font-size:12px;color:var(--red);margin-bottom:3px;">💬 ${esc(s.problema.detalhe)}</div>`:''}
+            ${s.done&&s.deliveredBy?`<div style="font-size:12px;color:var(--muted);margin-bottom:2px;">🏍️ ${esc(s.deliveredBy)}${horaDeISO(s.deliveredAt)?' · ⏰ '+esc(horaDeISO(s.deliveredAt)):''}${s.receivedBy?' · ✋ '+esc(s.receivedBy):''}</div>`:''}
             ${(s.street||s.number||s.complement||s.neighborhood)?`<div style="font-size:13px;color:var(--muted);margin-bottom:2px;">${esc([s.street,s.number,s.complement].filter(Boolean).join(' '))}${s.neighborhood?`<span style="color:var(--muted);opacity:.75;"> · ${esc(s.neighborhood)}</span>`:''}</div>`:''}
             ${(s.reference||s.notes)?`<div style="font-size:12px;color:var(--muted);opacity:.75;">${esc([s.reference,s.notes].filter(Boolean).join(' · '))}</div>`:''}
           </div>
@@ -3250,6 +3362,7 @@ function renderReport(){
   const d=getReportData();
   document.getElementById('btnPdf').disabled=!d.allStops.length;
   _renderSummary(d);
+  _renderMotoboys(d);
   _renderStores(d);
   _renderDays(d);
 }
@@ -3258,6 +3371,7 @@ function _renderSummary(d){
   const el=document.getElementById('reportSummary');
   if(!d.allStops.length){
     el.innerHTML='<div class="no-data">📭 Sem dados para o período.</div>';
+    document.getElementById('reportMotoboys').innerHTML='';
     document.getElementById('reportStores').innerHTML='';
     document.getElementById('reportHistory').innerHTML='';
     return;
@@ -3304,6 +3418,62 @@ function _renderStores(d){
       </div>
     </div>`;
   }).join('');
+}
+
+/* Quem entregou, a que hora e quem recebeu.
+
+   Enquanto quem entregava era sempre a mesma pessoa, "entregue" bastava.
+   Com repasse, a pergunta que a loja faz por telefone é outra: quem foi,
+   que horas chegou e com quem ficou. Estas três respostas passam a viver
+   na parada, vindas do painel do motoboy, e aparecem aqui — mais o
+   comprovante, quando houve foto. */
+function horaDeISO(iso){
+  if(!iso) return '';
+  const d=new Date(iso);
+  return isNaN(d) ? '' : d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+function linhaQuemEntregou(s){
+  const partes=[];
+  if(s.deliveredBy) partes.push(`🏍️ <b>${esc(s.deliveredBy)}</b>`);
+  const h=horaDeISO(s.deliveredAt);
+  if(h) partes.push('⏰ '+esc(h));
+  if(s.receivedBy) partes.push('✋ Recebido por '+esc(s.receivedBy));
+  if(s.proofId) partes.push(`<button type="button" class="sc-btn blue" style="padding:3px 8px;font-size:12px;" onclick="abrirProva('${escJs(s.proofId)}','${escJs(s.name||'')}');event.stopPropagation();">📷 Comprovante</button>`);
+  if(!partes.length) return '';
+  return `<div class="fstop-quem">${partes.join('<span style="opacity:.4;">·</span>')}</div>`;
+}
+
+/* Quanto cada motoboy entregou no período e quanto foi repassado a ele.
+   Só aparece quando houve repasse — em dia normal não há o que somar. */
+function _renderMotoboys(d){
+  const el=document.getElementById('reportMotoboys');
+  if(!el)return;
+  const por={};
+  d.allStops.forEach(s=>{
+    if(s._cancelled)return;
+    const quem=s.deliveredBy;
+    if(!quem)return;
+    if(!por[quem])por[quem]={c:0,taxa:0,repasse:0};
+    por[quem].c++;
+    por[quem].taxa+=parseMoney(s.value);
+    por[quem].repasse+=parseMoney(s.repassValor);
+  });
+  const linhas=Object.entries(por).sort((a,b)=>b[1].c-a[1].c);
+  if(!linhas.length){el.innerHTML='';return;}
+  const totC=linhas.reduce((a,[,v])=>a+v.c,0);
+  const totR=linhas.reduce((a,[,v])=>a+v.repasse,0);
+  el.innerHTML='<div class="fsec-title">Por motoboy</div>'+
+    `<div class="sc" style="padding-top:10px;">`+
+    linhas.map(([nome,v])=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);">
+        <div style="min-width:0;">
+          <div style="font-weight:700;font-size:14px;">🏍️ ${esc(nome)}</div>
+          <div style="font-size:12px;color:var(--muted);">${v.c} entrega${v.c!==1?'s':''} · ${fmtMoney(v.taxa)} faturado</div>
+        </div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;color:var(--red);flex-shrink:0;">${fmtMoney(v.repasse)}</div>
+      </div>`).join('')+
+    `<div style="display:flex;justify-content:space-between;padding:9px 0 0;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px;color:var(--muted);">
+      <span>${totC} entrega(s) repassada(s)</span><span style="color:var(--red);">${fmtMoney(totR)} pagos</span>
+    </div></div>`;
 }
 
 function _renderDays(d){
@@ -3354,6 +3524,7 @@ function _renderDays(d){
         ${fullAddr?`<div style="font-size:13px;color:var(--muted);">📍 ${fullAddr}</div>`:''}
         ${s.address&&!addr?`<div style="font-size:13px;color:var(--muted);">📍 ${esc(s.address)}</div>`:''}
         ${(s.reference||s.notes)?`<div style="font-size:12px;color:var(--muted);opacity:.8;">💬 ${esc([s.reference,s.notes].filter(Boolean).join(' · '))}</div>`:''}
+        ${linhaQuemEntregou(s)}
       </div>`;
     }).join('');
     return `<div class="fday" id="${dayId}">
@@ -3424,6 +3595,7 @@ function _renderSearch(q){
       ${addr?`<div style="font-size:13px;color:var(--muted);">${addr}${city?' · '+city:''}</div>`:''}
       ${s.address&&!addr?`<div style="font-size:13px;color:var(--muted);">${esc(s.address)}</div>`:''}
       ${s.notes||s.reference?`<div style="font-size:12px;color:var(--muted);opacity:.75;margin-top:2px;">${esc([s.reference,s.notes].filter(Boolean).join(' · '))}</div>`:''}
+      ${linhaQuemEntregou(s)}
       ${val>0?`<div style="margin-top:6px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;color:${s.paid?'var(--green)':'var(--accent)'};">${fmtMoney(val)} ${s.paid?'· Recebida':'· A receber'}</div>`:''}
     </div>`;
   }).join('');
@@ -3501,6 +3673,10 @@ async function genPDF(){
     const now=new Date();
     const reportNum=genReportNumber();
     const stopsOrd=d.allStops.slice().sort((a,b)=>{try{return parseDate(a._date)-parseDate(b._date);}catch(e){return 0;}});
+    /* POR MOTOBOY só entra quando houve repasse no período. Em dia normal
+       seria uma seção com uma linha só, dizendo o que já se sabe. */
+    const resumos=[{titulo:'POR LOJA',chave:'loja'},{titulo:'POR CIDADE',chave:'cidade'}];
+    if(stopsOrd.some(s=>s.deliveredBy)) resumos.push({titulo:'POR MOTOBOY',chave:'motoboy'});
     const primeira=stopsOrd.length?isoFromBR(stopsOrd[0]._date):isoFromDate(d.cutoff);
     const ultima=stopsOrd.length?isoFromBR(stopsOrd[stopsOrd.length-1]._date):isoFromDate(now);
 
@@ -3517,7 +3693,7 @@ async function genPDF(){
       },
       pagamento:{recebido:d.received},
       config:{siglas_cidade:siglasCidadeApp()},
-      resumos:[{titulo:'POR LOJA',chave:'loja'},{titulo:'POR CIDADE',chave:'cidade'}],
+      resumos,
       itens:stopsOrd.map(itemFatura)
     });
 
@@ -3606,6 +3782,7 @@ function itemFatura(s,i){
     cidade:cityName(resolveCityCode(s.city||s.cityId||''))||'—',
     tipo:tipoFatura(s),
     loja:s.store||'Sem loja',
+    motoboy:s.deliveredBy||'',
     valor:cancelado?0:parseMoney(s.value),
     cancelado:cancelado
   };
@@ -3775,13 +3952,132 @@ function cobrancaWppLoja(storeName){
   window.open(url,'_blank');
 }
 
+/* ═══════════════════════════════════════════════════════
+   MODO FULL
+
+   Dia de muita demanda muda o que o app precisa ser. Fora do FULL quem
+   entrega é quem usa o app: não há repasse para acompanhar, ninguém
+   precisa saber "quem fez" porque a resposta é sempre a mesma pessoa, e
+   uma quinta aba na barra só rouba largura das quatro que se usa sempre.
+
+   No FULL a entrega passa por outra mão. Três coisas passam a existir:
+
+   • a aba Repasses, que é onde se vê a lista de cada motoboy andando ao
+     vivo — e o problema que ele relatou, antes de a loja ligar cobrando;
+   • as taxas somem do painel do motoboy (ele vê endereço, telefone,
+     janela de horário, observação — tudo, menos quanto a loja pagou);
+   • o fechamento passa a registrar quem entregou, a que horas e quem
+     recebeu, porque "foi entregue" deixou de ser resposta suficiente.
+
+   O interruptor é um só, e fica no cabeçalho: a demanda estoura no meio
+   do expediente, não na hora de abrir a Config.
+   ═══════════════════════════════════════════════════════ */
+function modoFull(){ return !!cfg.full; }
+
+function alternarModoFull(valor){
+  const novo = (valor === undefined) ? !cfg.full : !!valor;
+  if (cfg.full === novo) { aplicarModoFull(); return; }
+  cfg.full = novo;
+  saveCfg();
+  aplicarModoFull();
+  /* Sair do FULL com repasse em aberto esconderia a aba onde se acompanha
+     ele. O modo desliga do mesmo jeito — só não em silêncio. */
+  const abertos = Object.keys(repassesData).length;
+  if (novo) toast('⚡ Modo FULL ligado — aba Repasses disponível','success');
+  else if (abertos) toast(`Modo FULL desligado — ${abertos} repasse(s) continuam ativos`,'');
+  else toast('Modo FULL desligado','');
+}
+
+function aplicarModoFull(){
+  const on = modoFull();
+  const pill = document.getElementById('btnFull');
+  if (pill){ pill.classList.toggle('on', on); pill.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+  const nav = document.getElementById('nav-repasses');
+  if (nav) nav.classList.toggle('hidden', !on);
+  const chk = document.getElementById('cfgFull');
+  if (chk) chk.checked = on;
+  /* Fora do FULL a aba some — quem estivesse nela ficaria numa tela sem
+     como voltar pela barra. */
+  if (!on && _telaAtual === 'repassesScreen') goNav('homeScreen','nav-home');
+  atualizarBarraFull();
+}
+
+/* Resumo de uma linha na inicial: quantas estão na rua e quantas travaram.
+   Sem isto, saber que um motoboy relatou problema exige abrir a aba. */
+function atualizarBarraFull(){
+  const bar = document.getElementById('fullBar');
+  if (!bar) return;
+  const on = modoFull();
+  const r = resumoRepasses();
+  bar.classList.toggle('visible', on && (r.repasses > 0));
+  if (!on || !r.repasses) { marcarAlertaRepasses(0); return; }
+  const txt = document.getElementById('fullBarTxt');
+  if (txt) txt.innerHTML =
+    `<b>${r.repasses}</b> repasse${r.repasses!==1?'s':''} · <b>${r.entregues}/${r.total}</b> entregues` +
+    (r.problemas ? ` · <span style="color:var(--red);font-weight:800;">⚠️ ${r.problemas} problema${r.problemas!==1?'s':''}</span>` : '');
+  marcarAlertaRepasses(r.problemas);
+}
+
+function marcarAlertaRepasses(qtd){
+  const nav = document.getElementById('nav-repasses');
+  if (!nav) return;
+  let dot = nav.querySelector('.alerta');
+  if (qtd > 0 && !dot){ dot = document.createElement('span'); dot.className='alerta'; nav.appendChild(dot); }
+  else if (!qtd && dot) dot.remove();
+}
+
+// ── Contato da loja ─────────────────────────────────────
+/* O motoboy que trava numa entrega precisa falar com QUEM MANDOU ela, não
+   com o despachante. Cada loja tem seu número; sem número cadastrado o
+   aviso cai no plantão, e sem plantão no telefone da fatura — o motoboy
+   nunca fica sem para quem mandar. */
+function getStorePhones(){
+  const m = cfg.storePhones;
+  return (m && typeof m === 'object') ? m : {};
+}
+function telefoneDaLoja(nome){
+  const bruto = getStorePhones()[nome] || '';
+  return String(bruto).replace(/\D/g,'');
+}
+function telefonePlantao(){
+  return String(cfg.plantaoTel || cfg.emiTel || cfg.prestTel || '').replace(/\D/g,'');
+}
+function contatoDaLoja(nome){
+  const proprio = telefoneDaLoja(nome);
+  if (proprio) return { phone: proprio, nome: nome || 'a loja', plantao: false };
+  return { phone: telefonePlantao(), nome: nome || 'a central', plantao: true };
+}
+function setStorePhone(i, valor){
+  const nome = (cfg.stores||[])[i];
+  if (nome === undefined) return;
+  const mapa = { ...getStorePhones() };
+  const digitos = String(valor||'').replace(/\D/g,'');
+  if (digitos) mapa[nome] = digitos; else delete mapa[nome];
+  cfg.storePhones = mapa;
+  saveCfg();
+  atualizarResumosCfg();
+}
+
 // ═══════════════════════════════════════════════════════
 //  REPASSAR ENTREGAS
 // ═══════════════════════════════════════════════════════
 function goRepass(){
   goNav('repassScreen','');
 }
+/* Estado inicial das opções do repasse. Esconder a taxa e pedir foto seguem
+   o modo FULL; quem recebeu vem marcado sempre, porque é a resposta que o
+   fechamento passou a precisar e custa um campo ao motoboy. Os três seguem
+   editáveis por repasse — isto decide só como a tela abre. */
+function aplicarPadraoRepasse(){
+  const set=(id,v)=>{const el=document.getElementById(id); if(el) el.checked=!!v;};
+  const full=modoFull();
+  set('rpOcultarTaxa',    full && cfg.fullOcultarTaxa !== false);
+  set('rpPedirRecebedor', true);
+  set('rpPedirFoto',      full && !!cfg.fullPedirFoto);
+}
+
 function renderRepassList(){
+  aplicarPadraoRepasse();
   const list=document.getElementById('repassList');
   const pending=stops.map((s,i)=>({s,i})).filter(({s})=>!s.done);
   if(!pending.length){list.innerHTML='<div style="color:var(--muted);text-align:center;padding:20px;">Nenhuma entrega pendente</div>';return;}
@@ -3820,6 +4116,34 @@ function getRepassItems(){
   });
   return items;
 }
+/* O que vai para o painel do motoboy. Três campos novos, cada um com um
+   motivo concreto:
+
+   • stopId — a confirmação precisa achar o caminho de volta. Sem ele o
+     "entregue" do motoboy morre no nó do repasse e o fechamento aqui
+     continua achando que a parada está pendente.
+   • storePhone — o motoboy que travou fala com quem mandou a entrega,
+     não com o despachante. Vai resolvido por entrega, porque o painel
+     dele não tem acesso à lista de lojas.
+   • hideTaxa/askReceiver/askPhoto — o que ele vê e o que precisa
+     preencher para poder marcar como entregue. */
+function montarEntregaRepasse(x){
+  const s=x.stop;
+  const contato=contatoDaLoja(s.store||'');
+  return {
+    stopId: idDaParada(s),
+    name:s.name||'', address:s.address||'', complement:s.complement||'',
+    reference:s.reference||'', phone:s.phone||'', store:s.store||'',
+    storePhone:contato.phone, storeIsPlantao:contato.plantao,
+    city:cityName(resolveCityCode(s.city||'')), neighborhood:s.neighborhood||'',
+    serviceType:s.serviceType||'entrega', deliveryDate:s.deliveryDate||'',
+    timeFrom:s.timeFrom||'', timeTo:s.timeTo||'',
+    taxa:x.taxa, notes:s.notes||'',
+    productValue:parseMoney(s.productValue)||0, productPaid:!!s.productPaid,
+    done:false
+  };
+}
+
 let lastRepassLink='';
 async function sendRepassLink(){
   const motoName=document.getElementById('repassName').value.trim()||'Motoboy';
@@ -3831,8 +4155,13 @@ async function sendRepassLink(){
   try{
     const room=localStorage.getItem('sb_room_code');
     const code='RP-'+Date.now().toString(36).toUpperCase();
-    const payload={motoboy:motoName,phone:motoPhone,createdAt:new Date().toISOString(),
-      deliveries:items.map(x=>({name:x.stop.name||'',address:x.stop.address||'',complement:x.stop.complement||'',reference:x.stop.reference||'',phone:x.stop.phone||'',store:x.stop.store||'',city:cityName(resolveCityCode(x.stop.city||'')),neighborhood:x.stop.neighborhood||'',serviceType:x.stop.serviceType||'entrega',deliveryDate:x.stop.deliveryDate||'',timeFrom:x.stop.timeFrom||'',timeTo:x.stop.timeTo||'',taxa:x.taxa,notes:x.stop.notes||'',done:false}))
+    const lido=id=>{const el=document.getElementById(id); return !!(el&&el.checked);};
+    const payload={
+      motoboy:motoName, phone:motoPhone, createdAt:new Date().toISOString(),
+      hideTaxa:lido('rpOcultarTaxa'),
+      askReceiver:lido('rpPedirRecebedor'),
+      askPhoto:lido('rpPedirFoto'),
+      deliveries:items.map(montarEntregaRepasse)
     };
     const {ref:r,set:s}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
     await s(r(fbDb,'rooms/'+room+'/repass/'+code),JSON.stringify(payload));
@@ -3840,6 +4169,16 @@ async function sendRepassLink(){
     lastRepassLink=base+'?room='+encodeURIComponent(room)+'&id='+encodeURIComponent(code);
     document.getElementById('repassLinkUrl').textContent=lastRepassLink;
     document.getElementById('repassLinkResult').style.display='block';
+    /* A parada fica marcada com o repasse que a levou. É o que faz a lista
+       da inicial dizer "está com o Fulano" em vez de só "pendente". */
+    items.forEach(x=>{
+      const alvo=stops[x.idx];
+      if(!alvo)return;
+      alvo._repassId=code;
+      alvo.repassadaPara=motoName;
+      alvo.repassValor=x.taxa;
+    });
+    saveStops(); renderHome();
     // Salvar no histórico de motoboys para o relatório financeiro
     const rh=getRepassHistory();
     rh.unshift({name:motoName,date:new Date().toLocaleDateString('pt-BR'),deliveries:items.length,total:items.reduce((a,x)=>a+x.taxa,0),repassId:code});
@@ -3858,6 +4197,293 @@ function shareRepassWpp(){
   const url=phone?`https://wa.me/55${phone}?text=${encodeURIComponent(msg)}`:`https://wa.me/?text=${encodeURIComponent(msg)}`;
   window.open(url,'_blank');
 }
+
+/* ═══════════════════════════════════════════════════════
+   ABA REPASSES — o que está na rua, ao vivo
+
+   Antes do FULL, gerar o link era o fim da linha: o app não voltava a
+   olhar para o repasse. O motoboy marcava entregue no painel dele e essa
+   informação ficava lá — quem despachou continuava vendo a parada como
+   pendente e descobria o problema pelo telefone da loja.
+
+   Agora cada repasse tem um ouvinte. O que chega dele entra na parada
+   correspondente (por stopId) e vira fechamento: quem entregou, a que
+   hora, quem recebeu.
+   ═══════════════════════════════════════════════════════ */
+let repassesData     = sbRead('sb_repasses', {}) || {};   // id → payload
+let repassesListener = null;
+let _repassAberto    = null;
+let _problemasVistos = sbRead('sb_problemas_vistos', {}) || {};
+
+function salvarRepassesLocal(){
+  try{ localStorage.setItem('sb_repasses', JSON.stringify(repassesData)); }catch(e){}
+}
+
+function resumoRepasses(){
+  let repasses=0,total=0,entregues=0,problemas=0;
+  Object.values(repassesData).forEach(rp=>{
+    const ds=(rp&&rp.deliveries)||[];
+    if(!ds.length)return;
+    repasses++;
+    ds.forEach(d=>{ total++; if(d.done)entregues++; if(d.problem&&!d.done)problemas++; });
+  });
+  return {repasses,total,entregues,problemas};
+}
+
+function listenRepasses(){
+  if(!fbDb)return;
+  const room=localStorage.getItem('sb_room_code')||'';
+  if(!room)return;
+  if(repassesListener){ try{repassesListener();}catch(e){} repassesListener=null; }
+  repassesListener=fbMods.onValue(fbMods.ref(fbDb,'rooms/'+room+'/repass'),snap=>{
+    try{
+      const raw=snap.val()||{};
+      const novo={};
+      Object.keys(raw).forEach(id=>{
+        const v=raw[id];
+        try{ novo[id]=typeof v==='string'?JSON.parse(v):v; }catch(e){}
+      });
+      repassesData=novo;
+      salvarRepassesLocal();
+      aplicarConfirmacoesRepasse();
+      avisarProblemasNovos();
+      if(_telaAtual==='repassesScreen') renderRepasses();
+      atualizarBarraFull();
+    }catch(e){ sbLogError('listener de repasses',e); }
+  },err=>sbLogError('listener de repasses',err));
+}
+
+/* A volta da informação. Cada entrega confirmada no painel do motoboy
+   encontra a parada pelo stopId e escreve nela o que o fechamento passou
+   a precisar. Só grava quando algo mudou de verdade — este listener roda
+   a cada toque de qualquer motoboy. */
+function aplicarConfirmacoesRepasse(){
+  const porId=new Map(stops.map(s=>[idDaParada(s),s]));
+  let mudou=false, novasEntregas=0;
+  Object.entries(repassesData).forEach(([rpId,rp])=>{
+    if(!rp||!Array.isArray(rp.deliveries))return;
+    rp.deliveries.forEach(d=>{
+      const alvo=d.stopId&&porId.get(d.stopId);
+      if(!alvo)return;
+      if(d.problem){
+        if(JSON.stringify(alvo.problema||null)!==JSON.stringify(d.problem)){
+          alvo.problema=d.problem; mudou=true;
+        }
+      }else if(alvo.problema){ delete alvo.problema; mudou=true; }
+
+      if(d.done && !alvo.done){
+        alvo.done=true;
+        // Carimbo do motoboy só vale se for data de verdade — senão o dia
+        // da entrega viraria "Invalid Date" e ela sumiria do fechamento.
+        const q=d.doneAt?new Date(d.doneAt):null;
+        alvo._doneDate=(q&&!isNaN(q)?q:new Date()).toLocaleDateString('pt-BR');
+        novasEntregas++; mudou=true;
+      }
+      /* Reabrir só desfaz o que ESTE repasse fechou. Se a parada foi dada
+         como entregue aqui — pela dona do app, sem motoboy — um repasse
+         ainda pendente não pode desmarcá-la. */
+      if(!d.done && alvo.done && alvo.deliveredBy && alvo._repassId===rpId){
+        alvo.done=false;
+        ['_doneDate','deliveredBy','deliveredAt','receivedBy','proofId'].forEach(k=>{ delete alvo[k]; });
+        mudou=true;
+      }
+      const campos={deliveredBy:d.done?(rp.motoboy||'Motoboy'):undefined,
+                    deliveredAt:d.doneAt,receivedBy:d.receivedBy,proofId:d.proofId};
+      Object.entries(campos).forEach(([k,v])=>{
+        if(v===undefined||v===null||v==='')return;
+        if(alvo[k]!==v){ alvo[k]=v; mudou=true; }
+      });
+      if(alvo._repassId!==rpId){ alvo._repassId=rpId; mudou=true; }
+    });
+  });
+  if(!mudou)return;
+  saveStops();
+  if(_telaAtual==='homeScreen') renderHome();
+  if(_telaAtual==='reportScreen') renderReport();
+  if(novasEntregas){
+    toast(`✅ ${novasEntregas} entrega(s) confirmada(s) pelo motoboy`,'success');
+    sendNotify('✅ SPEEDBOY — Entrega confirmada',
+      novasEntregas===1?'Um motoboy marcou uma entrega como concluída':`${novasEntregas} entregas foram concluídas`,'repasse');
+  }
+}
+
+/* Problema relatado é a única coisa aqui que não pode esperar alguém abrir
+   a aba. Avisa uma vez por relato — o mesmo problema não reabre
+   notificação a cada snapshot. */
+function avisarProblemasNovos(){
+  let novos=0, ultimo=null;
+  Object.entries(repassesData).forEach(([rpId,rp])=>{
+    ((rp&&rp.deliveries)||[]).forEach((d,i)=>{
+      if(!d.problem||d.done)return;
+      const chave=rpId+'#'+i+'#'+(d.problem.at||'');
+      if(_problemasVistos[chave])return;
+      _problemasVistos[chave]=Date.now();
+      novos++; ultimo={rp,d};
+    });
+  });
+  if(!novos)return;
+  /* Poda: sem isto a lista de "já avisei sobre este" cresce para sempre no
+     localStorage, que é o mesmo espaço das paradas e do histórico. */
+  const corte=Date.now()-7*24*3600*1000;
+  Object.keys(_problemasVistos).forEach(k=>{ if(_problemasVistos[k]<corte) delete _problemasVistos[k]; });
+  try{ localStorage.setItem('sb_problemas_vistos',JSON.stringify(_problemasVistos)); }catch(e){}
+  const t=ultimo?`${ultimo.rp.motoboy||'Motoboy'}: ${ultimo.d.problem.titulo||'problema na entrega'}`:'';
+  toast('⚠️ '+(novos===1?t:`${novos} problemas relatados`),'error');
+  sendNotify('⚠️ SPEEDBOY — Problema na entrega',
+    novos===1?`${t} — ${ultimo.d.name||''}`:`${novos} entregas travadas`,'problema');
+}
+
+const SEL_REPASSE={ok:'✅ Entregue',prob:'⚠️ Problema',wait:'⏳ A caminho'};
+
+function renderRepasses(){
+  const el=document.getElementById('repassesList');
+  const res=document.getElementById('repassesResumo');
+  if(!el)return;
+  const ids=Object.keys(repassesData).sort((a,b)=>
+    String(repassesData[b]?.createdAt||'').localeCompare(String(repassesData[a]?.createdAt||'')));
+  const r=resumoRepasses();
+  res.innerHTML = ids.length
+    ? `<div class="rstat-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+         <div class="rstat"><div class="rstat-lbl">Na rua</div><div class="rstat-val ac">${r.total-r.entregues}</div></div>
+         <div class="rstat"><div class="rstat-lbl">Entregues</div><div class="rstat-val gr">${r.entregues}/${r.total}</div></div>
+         <div class="rstat"><div class="rstat-lbl">Problemas</div><div class="rstat-val" style="color:${r.problemas?'var(--red)':'var(--muted)'}">${r.problemas}</div></div>
+       </div>`
+    : '';
+  if(!ids.length){
+    el.innerHTML='<div class="rp-vazio">Nenhum repasse ativo.<br>Gere um link em <strong>＋ Novo repasse</strong> e o andamento aparece aqui, ao vivo.</div>';
+    return;
+  }
+  el.innerHTML=ids.map(id=>{
+    const rp=repassesData[id]||{};
+    const ds=Array.isArray(rp.deliveries)?rp.deliveries:[];
+    const feitas=ds.filter(d=>d.done).length;
+    const probs=ds.filter(d=>d.problem&&!d.done).length;
+    const totalPagar=ds.reduce((a,d)=>a+(parseFloat(d.taxa)||0),0);
+    const criado=rp.createdAt?new Date(rp.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
+    const itens=ds.map((d,i)=>{
+      const est=d.done?'ok':(d.problem?'prob':'wait');
+      const hora=d.doneAt?new Date(d.doneAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
+      const linhas=[];
+      if(d.address) linhas.push('📍 '+esc(d.address));
+      if(d.done){
+        linhas.push('⏰ '+esc(hora)+(d.receivedBy?' · ✋ Recebido por '+esc(d.receivedBy):''));
+      }
+      if(d.problem){
+        const ph=d.problem.at?new Date(d.problem.at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
+        linhas.push(`<span style="color:var(--red);font-weight:700;">⚠️ ${esc(d.problem.titulo||'Problema')}${ph?' · '+esc(ph):''}</span>`);
+        if(d.problem.detalhe) linhas.push('💬 '+esc(d.problem.detalhe));
+      }
+      const prova=d.proofId
+        ? `<button type="button" class="sc-btn blue" style="margin-top:7px;padding:7px 10px;" onclick="abrirProva('${escJs(d.proofId)}','${escJs(d.name||'')}')">📷 Ver comprovante</button>`
+        : '';
+      return `<div class="rp-item">
+        <div class="rp-item-top">
+          <div style="min-width:0;">
+            <div class="rp-item-nome">${i+1}. ${esc(d.name||'Sem nome')}</div>
+            <div class="rp-item-sub">${linhas.join('<br>')}</div>
+          </div>
+          <span class="rp-sel ${est}">${SEL_REPASSE[est]}</span>
+        </div>
+        ${prova}
+      </div>`;
+    }).join('');
+    return `<div class="rp-card ${probs?'tem-problema':''} ${_repassAberto===id?'aberto':''}" id="rpc_${esc(id)}">
+      <div class="rp-head" onclick="abrirRepasse('${escJs(id)}')">
+        <div style="flex:1;min-width:0;">
+          <div class="rp-nome">🏍️ ${esc(rp.motoboy||'Motoboy')}${probs?' <span style="color:var(--red);">⚠️</span>':''}</div>
+          <div class="rp-meta">${criado?'Desde '+esc(criado)+' · ':''}${ds.length} entrega${ds.length!==1?'s':''} · a pagar ${fmtMoney(totalPagar)}</div>
+        </div>
+        <div class="rp-prog">
+          <div class="rp-prog-val">${feitas}/${ds.length}</div>
+          <div class="rp-prog-lbl">feitas</div>
+        </div>
+      </div>
+      <div class="rp-body">
+        ${itens||'<div class="rp-vazio">Repasse sem entregas.</div>'}
+        <div class="rp-acts">
+          ${rp.phone?`<button type="button" class="sc-btn wpp" onclick="wppMotoboy('${escJs(id)}')">💬 Falar</button>`:''}
+          <button type="button" class="sc-btn blue" onclick="copiarLinkRepasse('${escJs(id)}')">🔗 Link</button>
+          <button type="button" class="sc-btn" style="color:var(--red);border-color:rgba(255,82,82,.45);" onclick="encerrarRepasse('${escJs(id)}')">✔️ Encerrar</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function abrirRepasse(id){
+  _repassAberto = (_repassAberto===id) ? null : id;
+  renderRepasses();
+}
+
+function linkDoRepasse(id){
+  const room=localStorage.getItem('sb_room_code')||'';
+  const base='https://speedboymotoboy.github.io/SpeedBoy-APP/motoboy.html';
+  return base+'?room='+encodeURIComponent(room)+'&id='+encodeURIComponent(id);
+}
+function copiarLinkRepasse(id){
+  const l=linkDoRepasse(id);
+  navigator.clipboard?.writeText(l).then(()=>toast('📋 Link copiado!','success')).catch(()=>toast(l,''));
+}
+function wppMotoboy(id){
+  const rp=repassesData[id]; if(!rp)return;
+  const ds=(rp.deliveries||[]);
+  const pend=ds.filter(d=>!d.done);
+  const msg=`🏍️ *SPEEDBOY*\n\nOlá ${rp.motoboy||''}! Como estão as entregas?\n\n📦 ${ds.length-pend.length}/${ds.length} concluídas\n\n🔗 Seu painel:\n${linkDoRepasse(id)}`;
+  const fone=String(rp.phone||'').replace(/\D/g,'');
+  window.open((fone?`https://wa.me/55${fone}?text=`:'https://wa.me/?text=')+encodeURIComponent(msg),'_blank');
+}
+
+/* Encerrar apaga o nó do repasse — o link do motoboy para de abrir. O que
+   ele já confirmou não se perde: isso está nas paradas desde o momento em
+   que chegou. Mesmo assim é destrutivo e irreversível para o link, então
+   pede confirmação dizendo isso. */
+async function encerrarRepasse(id){
+  const rp=repassesData[id]; if(!rp)return;
+  const ds=rp.deliveries||[];
+  const pend=ds.filter(d=>!d.done).length;
+  const ok=await confirmarAcao({
+    titulo:'Encerrar repasse?',
+    texto:`O link de ${rp.motoboy||'motoboy'} para de funcionar.`,
+    detalhe:pend?`${pend} entrega(s) ainda não foram confirmadas — elas continuam pendentes na sua lista.`
+                :'Todas as entregas já foram confirmadas e estão no seu fechamento.',
+    botao:'Encerrar', perigo:true
+  });
+  if(!ok)return;
+  try{
+    const room=localStorage.getItem('sb_room_code')||'';
+    const {ref:r,remove}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
+    await remove(r(fbDb,'rooms/'+room+'/repass/'+id));
+    delete repassesData[id]; salvarRepassesLocal();
+    renderRepasses(); atualizarBarraFull();
+    toast('✔️ Repasse encerrado','success');
+  }catch(e){ sbLogError('encerrar repasse',e); toast('Erro ao encerrar','error'); }
+}
+
+/* Comprovante mora fora do repasse (rooms/<sala>/proofs/<id>) e só é
+   baixado quando alguém pede para ver. Se viesse junto do repasse, cada
+   snapshot do painel arrastaria todas as fotos do dia. */
+async function abrirProva(proofId, titulo){
+  abrirModal('provaModal');
+  document.getElementById('provaTitulo').textContent='📷 '+(titulo||'Comprovante');
+  const corpo=document.getElementById('provaCorpo');
+  corpo.textContent='Carregando...';
+  try{
+    const room=localStorage.getItem('sb_room_code')||'';
+    const {ref:r,get}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
+    const snap=await get(r(fbDb,'rooms/'+room+'/proofs/'+proofId));
+    const dado=snap.val();
+    if(!dado){ corpo.textContent='Comprovante não encontrado (pode ter sido apagado).'; return; }
+    const img=typeof dado==='string'?dado:(dado.img||'');
+    if(!/^data:image\//.test(img)){ corpo.textContent='Comprovante em formato desconhecido.'; return; }
+    corpo.innerHTML='';
+    const el=document.createElement('img');
+    el.src=img; el.style.cssText='max-width:100%;border-radius:10px;border:1px solid var(--border);';
+    el.alt='Comprovante da entrega';
+    corpo.appendChild(el);
+  }catch(e){ sbLogError('abrir comprovante',e); corpo.textContent='Não foi possível carregar o comprovante.'; }
+}
+function fecharProva(){ fecharModal('provaModal'); }
+document.getElementById('provaModal').addEventListener('click',e=>{if(e.target===e.currentTarget)fecharProva();});
 
 // ═══════════════════════════════════════════════════════
 //  LINKS GENERATOR
@@ -3898,7 +4524,7 @@ function genLink(){
 
    O estado fica guardado — quem abre a Sincronização todo dia não precisa
    reabrir toda vez. */
-const CFG_ABERTAS_PADRAO = { lojas:true, rapidas:true, links:false, sync:false, fatura:false, backup:false, perigo:false };
+const CFG_ABERTAS_PADRAO = { lojas:true, rapidas:true, full:false, links:false, sync:false, fatura:false, backup:false, perigo:false };
 
 function cfgAbertas(){
   const salvo = sbRead('sb_cfg_abertas', null);
@@ -3931,7 +4557,9 @@ function aplicarDobras(){
 function atualizarResumosCfg(){
   const por = (id, txt) => { const el=document.getElementById('resumo-'+id); if(el) el.textContent=txt; };
   const n = (q, um, muitos) => q===0 ? 'nenhuma' : q===1 ? ('1 '+um) : (q+' '+muitos);
-  por('lojas',   n((cfg.stores||[]).length, 'loja', 'lojas'));
+  const semFone=(cfg.stores||[]).filter(s=>!telefoneDaLoja(s)).length;
+  por('lojas',   n((cfg.stores||[]).length, 'loja', 'lojas') + (semFone?` · ${semFone} sem WhatsApp`:''));
+  por('full',    modoFull() ? 'ligado' : 'desligado');
   por('rapidas', n(getQuickStores().length, 'loja', 'lojas'));
   por('links',   n(getLinks().length, 'link', 'links'));
   por('fatura',  (cfg.emiNome || faturaEmissor().nome || '').slice(0,20));
@@ -3982,6 +4610,10 @@ function loadConfig(){
   document.getElementById('cfgEmiCnpj').value=em.cnpj;
   document.getElementById('cfgEmiTel').value=em.telefone;
   document.getElementById('cfgEmiEmail').value=em.email;
+  document.getElementById('cfgFull').checked=modoFull();
+  document.getElementById('cfgFullOcultarTaxa').checked=cfg.fullOcultarTaxa!==false;
+  document.getElementById('cfgFullPedirFoto').checked=!!cfg.fullPedirFoto;
+  document.getElementById('cfgPlantaoTel').value=fmtPhone(cfg.plantaoTel||'');
   // Se config embutida: esconde apenas o formulário de configuração do Firebase
   if(EMBEDDED_FB_CONFIG){
     document.getElementById('fbEmbeddedNotice').style.display='';
@@ -4009,6 +4641,9 @@ function saveConfig(){
   cfg.emiCnpj =document.getElementById('cfgEmiCnpj').value.trim();
   cfg.emiTel  =document.getElementById('cfgEmiTel').value.trim();
   cfg.emiEmail=document.getElementById('cfgEmiEmail').value.trim();
+  cfg.fullOcultarTaxa=document.getElementById('cfgFullOcultarTaxa').checked;
+  cfg.fullPedirFoto  =document.getElementById('cfgFullPedirFoto').checked;
+  cfg.plantaoTel     =document.getElementById('cfgPlantaoTel').value.replace(/\D/g,'');
   saveCfg();
   if(!EMBEDDED_FB_CONFIG){
     const fbStr=document.getElementById('cfgFb').value.trim();
@@ -4026,18 +4661,38 @@ function saveConfig(){
   toast('✅ Configurações salvas!','success');
   goNav('homeScreen','nav-home');
 }
+/* Cada loja passou a carregar um telefone. Antes era só um chip com o
+   nome — e o motoboy que travava numa entrega não tinha para onde mandar
+   o problema a não ser ligar para o despachante no meio da rua.
+
+   Nome e número na MESMA linha, e sem caixa explicativa: esta seção abre
+   por padrão, e cada linha extra aqui é rolagem que todo mundo paga todo
+   dia. A explicação mora na seção do modo FULL, que é onde o assunto
+   aparece. */
 function renderStores(){
   const list=document.getElementById('storesList');
   if(!cfg.stores.length){list.innerHTML='<div style="font-size:12px;color:var(--muted)">Nenhuma loja cadastrada.</div>';return;}
-  list.innerHTML=cfg.stores.map((s,i)=>`<div class="store-chip">${s}<button type="button" class="store-chip-del" onclick="rmStore(${i})">×</button></div>`).join('');
+  const fones=getStorePhones();
+  list.innerHTML=cfg.stores.map((s,i)=>`
+    <div style="display:flex;align-items:center;gap:7px;">
+      <div style="flex:0 0 33%;min-width:0;font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🏪 ${esc(s)}</div>
+      <input class="finput" style="flex:1;min-width:0;padding:8px 10px;font-size:13px;" type="tel" inputmode="tel" maxlength="15"
+             placeholder="WhatsApp da loja" aria-label="WhatsApp de ${esc(s)}"
+             value="${esc(fmtPhone(fones[s]||''))}"
+             oninput="maskPhone(this)" onchange="setStorePhone(${i},this.value)" />
+      <button type="button" class="store-chip-del" onclick="rmStore(${i})" style="font-size:19px;flex-shrink:0;padding:0 2px;">×</button>
+    </div>`).join('');
 }
 function addStore(){const n=document.getElementById('newStore').value.trim();if(!n)return;if(cfg.stores.includes(n)){toast('Loja já cadastrada','error');return;}cfg.stores.push(n);document.getElementById('newStore').value='';saveCfg();renderStores();updateStoreSelect();toast(`🏪 "${n}" adicionada!`,'success');}
 function rmStore(i){
   const nome=cfg.stores[i]; if(nome===undefined)return;
   const antes=cfg.stores.slice();
-  cfg.stores.splice(i,1);saveCfg();renderStores();updateStoreSelect();
+  const fonesAntes={...getStorePhones()};
+  cfg.stores.splice(i,1);
+  const fones={...fonesAntes}; delete fones[nome]; cfg.storePhones=fones;
+  saveCfg();renderStores();updateStoreSelect();
   comDesfazer(`🏪 "${nome}" removida`, ()=>{
-    cfg.stores=antes;saveCfg();renderStores();updateStoreSelect();toast('↩️ Loja de volta','success');
+    cfg.stores=antes;cfg.storePhones=fonesAntes;saveCfg();renderStores();updateStoreSelect();toast('↩️ Loja de volta','success');
   });
 }
 function updateStoreSelect(){const sel=document.getElementById('fStore');const cur=sel.value;sel.innerHTML='<option value="">— Sem loja específica —</option>'+cfg.stores.map(s=>`<option value="${s}">${s}</option>`).join('');sel.value=cur;}
@@ -4186,6 +4841,7 @@ function startSync(code){
 
   setTimeout(listenPending,500);
   setTimeout(listenClientRequests,800);
+  setTimeout(listenRepasses,1000);
   startLocationWatch();
   // Alteração feita sem sinal numa sessão anterior: envia agora.
   if(temPendencia()) setTimeout(fbPush,1200);
@@ -4983,6 +5639,9 @@ async function initFirebase(){
 
 checkNewDay();
 updateStoreSelect();
+/* Antes de renderHome e de navPelaURL: a aba Repasses precisa existir na
+   barra antes de alguém poder cair nela por #repasses. */
+aplicarModoFull();
 renderHome();
 navPelaURL();          // respeita #ganhos, #fechamento etc. e firma o estado inicial
 initFirebase();

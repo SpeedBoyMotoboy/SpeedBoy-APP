@@ -329,20 +329,39 @@ function prepararInstalacao(){
   if(ehIOS()) b.classList.add('visible');
 }
 
+/* Passo a passo com o nome dos botões. Este é o público que menos vai
+   adivinhar o que é "adicionar à tela inicial" — e o que mais ganha com o
+   app instalado, porque passa o dia inteiro nesta página. */
+function passosComoInstalar(){
+  if(ehIOS()) return '<strong>No iPhone (Safari):</strong><ol style="margin:6px 0 0 18px;">'+
+    '<li>Toque em <strong>Compartilhar</strong> — o quadrado com a seta para cima, embaixo.</li>'+
+    '<li>Desça até <strong>Adicionar à Tela de Início</strong>.</li>'+
+    '<li>Toque em <strong>Adicionar</strong>.</li></ol>'+
+    'Tem de ser pelo Safari — no Chrome do iPhone essa opção não aparece.';
+  return '<strong>No Android (Chrome):</strong><ol style="margin:6px 0 0 18px;">'+
+    '<li>Toque nos <strong>três pontinhos</strong> (⋮), em cima.</li>'+
+    '<li>Escolha <strong>Instalar aplicativo</strong> ou <strong>Adicionar à tela inicial</strong>.</li>'+
+    '<li>Confirme em <strong>Instalar</strong>.</li></ol>';
+}
+
+function mostrarComoInstalar(){
+  document.getElementById('ajudaInstalar').style.display='';
+  document.getElementById('ajudaInstalarTexto').innerHTML=passosComoInstalar();
+}
+
 function instalarApp(){
   if(_promptInstalar){
     _promptInstalar.prompt();
     _promptInstalar.userChoice.then(function(r){
       if(r&&r.outcome==='accepted') document.getElementById('barraInstalar').classList.remove('visible');
+      // Recusou: o evento não volta nesta sessão — passa a ensinar o caminho
+      else mostrarComoInstalar();
       _promptInstalar=null;
-    });
+    }).catch(function(){ mostrarComoInstalar(); _promptInstalar=null; });
     return;
   }
   // Sem prompt nativo (iPhone, ou navegador que não suporta): explica
-  document.getElementById('ajudaInstalar').style.display='';
-  document.getElementById('ajudaInstalarTexto').innerHTML = ehIOS()
-    ? 'No iPhone: toque em <strong>Compartilhar</strong> (o quadrado com a seta para cima), desça e escolha <strong>Adicionar à Tela de Início</strong>.'
-    : 'No menu do navegador (⋮), escolha <strong>Instalar aplicativo</strong> ou <strong>Adicionar à tela inicial</strong>.';
+  mostrarComoInstalar();
 }
 function dispensarInstalar(){
   try{ localStorage.setItem('sb_moto_instalar_nao','1'); }catch(e){}

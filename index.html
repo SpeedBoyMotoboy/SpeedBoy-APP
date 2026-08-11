@@ -666,17 +666,19 @@
         <button type="button" class="danger-btn gray" onclick="clearHist()">🗑️ Apagar todo o histórico</button>
       </div>
     </div>
-    <div style="margin-top:22px;padding-top:16px;border-top:1px solid var(--border);text-align:center;">
-      <div id="appVersao" style="font-size:11px;color:var(--muted);letter-spacing:.5px;">versão —</div>
-      <!-- Instalar também aqui, e não só na faixa da inicial: quem dispensou
-           a faixa uma vez precisa de um lugar fixo para instalar depois.
-           Na MESMA linha do "forçar atualização" de propósito — a Config
-           precisa continuar cabendo em pouco mais de uma tela. -->
-      <div style="display:flex;gap:8px;justify-content:center;align-items:center;margin-top:8px;">
-        <button type="button" id="btnInstalarCfg" onclick="instalarApp()" style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:700;text-decoration:underline;cursor:pointer;padding:8px 10px;min-height:36px;">📲 Instalar o app</button>
-        <button type="button" onclick="forcarAtualizacao()" style="background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;padding:8px 10px;min-height:36px;">Forçar atualização</button>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);text-align:center;">
+      <!-- Baixar o app é um botão de verdade, não um link no rodapé: era
+           discreto demais para uma coisa que se procura de propósito.
+           O rótulo muda com o estado — "já instalado" também é resposta. -->
+      <button type="button" class="btn-baixar" id="btnInstalarCfg" onclick="instalarApp()">📲 Baixar o app</button>
+      <div id="instalarAjudaCfg" class="baixar-ajuda"></div>
+      <!-- Versão e "forçar atualização" na mesma linha: as duas juntas são
+           uma linha de rodapé, e a Config precisa de folga para a próxima
+           coisa que alguém acrescentar aqui. -->
+      <div style="display:flex;gap:10px;justify-content:center;align-items:center;margin-top:6px;">
+        <span id="appVersao" style="font-size:11px;color:var(--muted);letter-spacing:.5px;">versão —</span>
+        <button type="button" onclick="forcarAtualizacao()" style="background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;padding:2px 6px;">Forçar atualização</button>
       </div>
-      <div id="instalarAjudaCfg" style="display:none;font-size:12px;color:var(--muted);line-height:1.6;text-align:left;margin-top:6px;"></div>
     </div>
   </div>
 </div>
@@ -4940,18 +4942,50 @@ function instalarDispensado(){ return localStorage.getItem('sb_instalar_nao') ==
 
 function atualizarBarraInstalar(){
   const b = document.getElementById('instalarBar');
-  if (!b) return;
-  // Já instalado, ou dispensado: nada a oferecer
-  const podeOferecer = !appJaInstalado() && !instalarDispensado() && (!!_promptInstalar || ehIOS());
-  b.classList.toggle('hidden', !podeOferecer);
-  const btnCfg = document.getElementById('btnInstalarCfg');
-  if (btnCfg) btnCfg.style.display = appJaInstalado() ? 'none' : '';
+  // A faixa da inicial é um convite: aparece só quando dá para instalar de
+  // verdade, e some para sempre depois de dispensada.
+  if (b) b.classList.toggle('hidden',
+    appJaInstalado() || instalarDispensado() || !(_promptInstalar || ehIOS()));
+
+  /* O botão da Config é o contrário: está SEMPRE lá, porque é onde a pessoa
+     vai procurar de propósito. Instalado, ele vira a resposta em vez de
+     sumir — sumir deixaria a impressão de que a opção não existe. */
+  const btn = document.getElementById('btnInstalarCfg');
+  if (!btn) return;
+  const instalado = appJaInstalado();
+  btn.classList.toggle('instalado', instalado);
+  btn.textContent = instalado ? '✅ App instalado neste aparelho' : '📲 Baixar o app';
+  btn.disabled = instalado;
 }
 
-function textoComoInstalar(){
-  return ehIOS()
-    ? 'No iPhone: toque em <strong>Compartilhar</strong> (o quadrado com a seta para cima), desça a lista e escolha <strong>Adicionar à Tela de Início</strong>.'
-    : 'No menu do navegador (⋮), escolha <strong>Instalar aplicativo</strong> ou <strong>Adicionar à tela inicial</strong>.';
+/* Como instalar, quando não há diálogo nativo para abrir. Vale sempre no
+   iPhone (Safari não tem beforeinstallprompt) e no Android quando o evento
+   já foi consumido por uma recusa anterior. Passo a passo mesmo, com o
+   nome dos botões: "adicione à tela inicial" não ajuda quem nunca fez. */
+function passosComoInstalar(){
+  if (ehIOS()) return '<strong>No iPhone ou iPad (Safari):</strong><ol>' +
+    '<li>Toque em <strong>Compartilhar</strong> — o quadrado com a seta para cima, na barra de baixo.</li>' +
+    '<li>Desça a lista até <strong>Adicionar à Tela de Início</strong>.</li>' +
+    '<li>Toque em <strong>Adicionar</strong>, no canto de cima.</li></ol>' +
+    'Precisa ser pelo Safari: no Chrome do iPhone essa opção não aparece.';
+  return '<strong>No Android (Chrome):</strong><ol>' +
+    '<li>Toque nos <strong>três pontinhos</strong> (⋮), no canto de cima.</li>' +
+    '<li>Escolha <strong>Instalar aplicativo</strong> — ou <strong>Adicionar à tela inicial</strong>.</li>' +
+    '<li>Confirme em <strong>Instalar</strong>.</li></ol>' +
+    'Se a opção não estiver no menu, o app pode já estar instalado — procure o ícone amarelo do SPEEDBOY na tela do celular.';
+}
+
+function mostrarComoInstalar(){
+  const naCfg = _telaAtual === 'configScreen';
+  if (naCfg) {
+    const el = document.getElementById('instalarAjudaCfg');
+    el.innerHTML = passosComoInstalar();
+    el.classList.add('visible');
+    el.scrollIntoView({ block:'nearest', behavior:'smooth' });
+  } else {
+    const el = document.getElementById('instalarTexto');
+    if (el) el.innerHTML = passosComoInstalar();
+  }
 }
 
 function instalarApp(){
@@ -4959,17 +4993,15 @@ function instalarApp(){
   if (_promptInstalar) {
     _promptInstalar.prompt();
     _promptInstalar.userChoice.then(r => {
-      if (r && r.outcome === 'accepted') document.getElementById('instalarBar').classList.add('hidden');
+      if (r && r.outcome === 'accepted') { atualizarBarraInstalar(); }
+      /* Recusou: o evento não volta nesta sessão. Em vez de deixar o botão
+         mudo até recarregar, ele passa a ensinar o caminho do menu. */
+      else mostrarComoInstalar();
       _promptInstalar = null;
-    }).catch(()=>{});
+    }).catch(() => { mostrarComoInstalar(); _promptInstalar = null; });
     return;
   }
-  /* Sem prompt nativo. Acontece no iPhone sempre, e no Android quando o
-     evento já foi consumido — em vez de um botão que não faz nada, mostra
-     o caminho. */
-  const naCfg = _telaAtual === 'configScreen';
-  const alvo = document.getElementById(naCfg ? 'instalarAjudaCfg' : 'instalarTexto');
-  if (alvo) { alvo.innerHTML = textoComoInstalar(); alvo.style.display = ''; }
+  mostrarComoInstalar();
 }
 
 function dispensarInstalar(){

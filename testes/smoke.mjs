@@ -454,7 +454,18 @@ await secao('Config dobrável e primeiro uso', async () => {
     const corpo = document.querySelector('#configScreen .config-body');
     return { total: corpo.scrollHeight, tela: corpo.clientHeight };
   });
-  ok(medida.total < 1000,
+  /* O número é um ORÇAMENTO, não uma medição. O problema que ele existe
+     para impedir é a Config voltar a ser um paredão de rolagem — eram
+     1899px, 2,7 telas, com tudo sempre aberto.
+
+     Já foi 1000. Subiu para 1100 quando entraram a seção do modo FULL e o
+     botão de baixar o app: espremer o botão até caber deixaria o alvo de
+     toque abaixo do mínimo, que é uma troca pior que rolar 100px. Continua
+     valendo como trava — 1100 ainda é 1,3 tela contra as 2,7 de antes.
+
+     Se estourar de novo, a pergunta certa é "o que sai daqui?", não "quanto
+     eu aumento o número". */
+  ok(medida.total < 1100,
     `a Config cabe em pouco mais de uma tela (${medida.total}px, antes eram 1899px)`);
 
   // O resumo diz o que tem dentro sem precisar abrir
@@ -734,23 +745,34 @@ await secao('O app se oferece para ser instalado', async () => {
   const app = await page.evaluate(() => ({
     temFn: typeof instalarApp === 'function',
     barraEscondida: document.getElementById('instalarBar').classList.contains('hidden'),
-    botaoCfg: !!document.getElementById('btnInstalarCfg')
+    botaoCfg: !!document.getElementById('btnInstalarCfg'),
+    cfgVisivel: getComputedStyle(document.getElementById('btnInstalarCfg')).display !== 'none',
+    rotulo: document.getElementById('btnInstalarCfg').textContent
   }));
   ok(app.temFn, 'o app tem a função de instalar');
   /* Sem beforeinstallprompt e fora do iOS não há como instalar — a faixa
      não pode aparecer prometendo um botão que não faz nada. */
   ok(app.barraEscondida, 'a faixa fica escondida quando não há instalação possível');
-  ok(app.botaoCfg, 'e existe um botão fixo na Config para quem dispensou a faixa');
+  /* O botão da Config é o contrário da faixa: está SEMPRE lá, porque é onde
+     a pessoa vai procurar de propósito. Escondê-lo por não haver diálogo
+     nativo é o que faz alguém concluir que a opção não existe. */
+  ok(app.botaoCfg && app.cfgVisivel,
+    'o botão de baixar está sempre visível na Config, com ou sem diálogo nativo');
+  ok(/Baixar o app/.test(app.rotulo), `e diz o que faz ("${app.rotulo.trim()}")`);
 
   // Sem prompt nativo, o botão passa a ENSINAR em vez de não fazer nada
   const ajuda = await page.evaluate(() => {
     goNav('configScreen', 'nav-cfg');
     instalarApp();
     const el = document.getElementById('instalarAjudaCfg');
-    return { visivel: el.style.display !== 'none', texto: el.textContent };
+    return { visivel: el.classList.contains('visible'), texto: el.textContent, html: el.innerHTML };
   });
-  ok(ajuda.visivel && /Instalar aplicativo|Adicionar à tela inicial/i.test(ajuda.texto),
+  ok(ajuda.visivel && /Instalar aplicativo|Adicionar à Tela de Início/i.test(ajuda.texto),
     'sem diálogo nativo, o botão mostra o caminho do navegador');
+  /* Passo a passo numerado, com o nome dos botões: "adicione à tela
+     inicial" não ajuda quem nunca fez isso. */
+  ok(/<ol>|<ol /.test(ajuda.html) && (ajuda.html.match(/<li>/g) || []).length >= 3,
+    'e é um passo a passo numerado, não uma frase solta');
 
   // Dispensar é para sempre
   const dispensou = await page.evaluate(() => {
@@ -771,6 +793,14 @@ await secao('O app se oferece para ser instalado', async () => {
   }));
   ok(m.manifesto === './manifest-motoboy.json', 'o painel do motoboy tem manifesto próprio');
   ok(m.temFn, 'e botão de instalar');
+
+  // Mesmo passo a passo no painel do motoboy — é quem menos vai adivinhar
+  const ajudaMoto = await moto.page.evaluate(() => {
+    instalarApp();
+    return document.getElementById('ajudaInstalarTexto').innerHTML;
+  });
+  ok((ajudaMoto.match(/<li>/g) || []).length >= 3,
+    'o painel do motoboy também ensina o caminho, passo a passo');
   /* Instalado, o ícone abre motoboy.html SEM parâmetros — sem isto a página
      abriria em "link inválido" e o app instalado seria inútil. */
   ok(m.guardou && m.guardou.room === 'SB-TEST' && m.guardou.id === 'RP1',

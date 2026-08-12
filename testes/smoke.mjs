@@ -454,7 +454,18 @@ await secao('Config dobrável e primeiro uso', async () => {
     const corpo = document.querySelector('#configScreen .config-body');
     return { total: corpo.scrollHeight, tela: corpo.clientHeight };
   });
-  ok(medida.total < 1000,
+  /* O número é um ORÇAMENTO, não uma medição. O problema que ele existe
+     para impedir é a Config voltar a ser um paredão de rolagem — eram
+     1899px, 2,7 telas, com tudo sempre aberto.
+
+     Já foi 1000. Subiu para 1100 quando entraram a seção do modo FULL e o
+     botão de baixar o app: espremer o botão até caber deixaria o alvo de
+     toque abaixo do mínimo, que é uma troca pior que rolar 100px. Continua
+     valendo como trava — 1100 ainda é 1,3 tela contra as 2,7 de antes.
+
+     Se estourar de novo, a pergunta certa é "o que sai daqui?", não "quanto
+     eu aumento o número". */
+  ok(medida.total < 1100,
     `a Config cabe em pouco mais de uma tela (${medida.total}px, antes eram 1899px)`);
 
   // O resumo diz o que tem dentro sem precisar abrir
@@ -677,6 +688,265 @@ await secao('Painel do motoboy no modo FULL', async () => {
     `serviço de rota fora do ar devolve o botão (${rota.texto})`);
 
   await ctx.close();
+});
+
+// ── 7i. A loja vê a entrega finalizada ───────────────────────
+await secao('A loja vê hora, quem recebeu e o comprovante', async () => {
+  const { page, ctx } = await abrir('/pedido.html?room=SB-TEST&store=KS');
+
+  const r = await page.evaluate(() => {
+    // Como chega do /tracking depois de o motoboy confirmar no painel dele
+    _trackStatus = { k1: 'entregue', k2: 'entregue', k3: '' };
+    _trackInfo = {
+      k1: { deliveredBy: 'Carlos', deliveredAt: new Date().toISOString(),
+            receivedBy: 'Porteiro João', proofId: 'PF-9' },
+      k2: { deliveredAt: new Date().toISOString() },
+      k3: {}
+    };
+    return {
+      completo: detalheEntrega('k1'),
+      semFoto:  detalheEntrega('k2'),
+      pendente: detalheEntrega('k3')
+    };
+  });
+
+  ok(/\d{2}:\d{2}/.test(r.completo), 'a loja vê a HORA da entrega');
+  ok(r.completo.includes('Porteiro João'), 'e QUEM RECEBEU');
+  ok(r.completo.includes('Carlos'), 'e quem entregou');
+  ok(r.completo.includes('verComprovante'), 'e um botão para ver a FOTO');
+  ok(!r.semFoto.includes('verComprovante'), 'sem foto, não oferece botão de comprovante');
+  ok(/\d{2}:\d{2}/.test(r.semFoto), 'entrega sem foto ainda mostra a hora');
+  ok(r.pendente === '', 'entrega ainda não finalizada não mostra detalhe nenhum');
+
+  /* O nome de quem recebeu é digitado pelo motoboy e vira HTML na página da
+     loja — texto de terceiro, mesmo risco do resto. */
+  const xss = await page.evaluate(() => {
+    window.__xss = false;
+    _trackStatus = { kx: 'entregue' };
+    _trackInfo = { kx: { receivedBy: '<img src=x onerror="window.__xss=true">' } };
+    const alvo = document.createElement('div');
+    alvo.innerHTML = detalheEntrega('kx');
+    document.body.appendChild(alvo);
+    return window.__xss;
+  });
+  ok(!xss, 'nome de quem recebeu com marcação NÃO executa nada na página da loja');
+
+  ok(await page.locator('#provaModal').count() === 1, 'o modal do comprovante existe');
+  ok(await page.evaluate(() => typeof window.verComprovante === 'function'),
+    'a loja tem como pedir o comprovante');
+
+  await ctx.close();
+});
+
+// ── 7k. Corrigir entrega já fechada ──────────────────────────
+await secao('Corrigir uma entrega do mês passado', async () => {
+  const { page, ctx } = await abrir('/index.html');
+
+  // Um histórico com os dois defeitos relatados: taxa zerada e nome errado
+  const inicio = await page.evaluate(() => {
+    const mesPassado = new Date();
+    mesPassado.setDate(1); mesPassado.setDate(0);          // último dia do mês anterior
+    const d = mesPassado.toLocaleDateString('pt-BR');
+    stops = [];
+    history = [{ date: d, stops: [
+      { _id: 'e1', name: 'Nome Errado', value: 0,  store: 'KS', done: true, _doneDate: d },
+      { _id: 'e2', name: 'Ana Souza',   value: 18, store: 'KS', done: true, _doneDate: d }
+    ] }];
+    saveHistory();
+    reportPeriod = '60d';
+    goNav('reportScreen', 'nav-report');
+    renderReport();
+    return { data: d, avisos: document.getElementById('reportSuspeitas').textContent };
+  });
+
+  /* Elas não sabem QUAIS entregas estão erradas — abrir dia por dia
+     procurando é o que ninguém faz. O aviso sobe para o topo. */
+  ok(/1 entrega\(s\)/.test(inicio.avisos), 'o fechamento avisa quantas podem sair erradas na fatura');
+  ok(/taxa zerada/.test(inicio.avisos), 'e diz o motivo');
+  ok(!/Ana Souza/.test(inicio.avisos), 'a entrega correta não entra na lista de avisos');
+
+  // Abrir pelo botão do aviso e corrigir nome e valor
+  const corrigido = await page.evaluate(data => {
+    abrirEditHist(data, 0, false);
+    document.getElementById('ehNome').value = 'Padaria Central';
+    document.getElementById('ehTaxa').value = '22,50';
+    salvarEditHist();
+    const s = history[0].stops[0];
+    return { nome: s.name, valor: s.value };
+  }, inicio.data);
+
+  ok(corrigido.nome === 'Padaria Central', 'o nome é corrigido no histórico');
+  ok(corrigido.valor === 22.5, 'e a taxa zerada recebe valor');
+  /* O modal fecha pelo histórico do navegador (window.history.back), que é
+     assíncrono — é assim que ele evita deixar entrada órfã. */
+  await page.waitForTimeout(300);
+  ok(await page.locator('#editHistModal.hidden').count() === 1, 'o formulário fecha ao salvar');
+
+  const depois = await page.evaluate(() => {
+    renderReport();
+    return {
+      avisos: document.getElementById('reportSuspeitas').textContent,
+      total: getReportData().total
+    };
+  });
+  ok(depois.avisos === '', 'o aviso some quando não há mais nada errado');
+  ok(depois.total === 40.5, `e o total do período acompanha (R$ ${depois.total})`);
+
+  // Nome vazio não pode passar: é ele que vai na fatura
+  const vazio = await page.evaluate(data => {
+    abrirEditHist(data, 0, false);
+    document.getElementById('ehNome').value = '   ';
+    salvarEditHist();
+    return { nome: history[0].stops[0].name,
+             aberto: !document.getElementById('editHistModal').classList.contains('hidden') };
+  }, inicio.data);
+  ok(vazio.nome === 'Padaria Central' && vazio.aberto,
+    'salvar sem nome é recusado e o formulário continua aberto');
+
+  // Desfazer devolve o estado anterior inteiro
+  await page.waitForTimeout(300);
+  const desfeito = await page.evaluate(data => {
+    abrirEditHist(data, 1, false);
+    document.getElementById('ehNome').value = 'Trocado por engano';
+    salvarEditHist();
+    const meio = history[0].stops[1].name;
+    desfazerAgora();
+    return { meio, depois: history[0].stops[1].name };
+  }, inicio.data);
+  ok(desfeito.meio === 'Trocado por engano' && desfeito.depois === 'Ana Souza',
+    'desfazer devolve o nome anterior');
+
+  /* Mudar a data move a entrega de dia — e pode mudar de MÊS, que é o que
+     fecha a fatura. O aviso tem de aparecer antes de salvar. */
+  await page.waitForTimeout(300);
+  const aviso = await page.evaluate(data => {
+    abrirEditHist(data, 0, false);
+    const inp = document.getElementById('ehData');
+    const [dia, mes, ano] = data.split('/');
+    inp.value = `${Number(ano) - 1}-01-15`;                 // outro mês e outro ano
+    avisarMudancaDeData();
+    const el = document.getElementById('ehAvisoData');
+    return { visivel: el.style.display !== 'none', texto: el.textContent };
+  }, inicio.data);
+  ok(aviso.visivel && /M[ÊE]S DIFERENTE/i.test(aviso.texto),
+    'mudar para outro mês avisa que os dois fechamentos mudam de total');
+
+  const moveu = await page.evaluate(data => {
+    salvarEditHist();
+    const [, , ano] = data.split('/');
+    const alvo = `15/01/${Number(ano) - 1}`;
+    const destino = history.find(h => h.date === alvo);
+    return { criou: !!destino, nome: destino && destino.stops[0].name,
+             sobrou: (history.find(h => h.date === data) || {}).stops.length };
+  }, inicio.data);
+  ok(moveu.criou && moveu.nome === 'Padaria Central', 'salvar move a entrega para o dia certo');
+  ok(moveu.sobrou === 1, 'e ela sai do dia de onde veio');
+
+  await ctx.close();
+});
+
+// ── 7j. Instalar na tela inicial ─────────────────────────────
+await secao('O app se oferece para ser instalado', async () => {
+  const { page, ctx } = await abrir('/index.html');
+
+  const app = await page.evaluate(() => ({
+    temFn: typeof instalarApp === 'function',
+    barraEscondida: document.getElementById('instalarBar').classList.contains('hidden'),
+    botaoCfg: !!document.getElementById('btnInstalarCfg'),
+    cfgVisivel: getComputedStyle(document.getElementById('btnInstalarCfg')).display !== 'none',
+    rotulo: document.getElementById('btnInstalarCfg').textContent
+  }));
+  ok(app.temFn, 'o app tem a função de instalar');
+  /* Sem beforeinstallprompt e fora do iOS não há como instalar — a faixa
+     não pode aparecer prometendo um botão que não faz nada. */
+  ok(app.barraEscondida, 'a faixa fica escondida quando não há instalação possível');
+  /* O botão da Config é o contrário da faixa: está SEMPRE lá, porque é onde
+     a pessoa vai procurar de propósito. Escondê-lo por não haver diálogo
+     nativo é o que faz alguém concluir que a opção não existe. */
+  ok(app.botaoCfg && app.cfgVisivel,
+    'o botão de baixar está sempre visível na Config, com ou sem diálogo nativo');
+  ok(/Baixar o app/.test(app.rotulo), `e diz o que faz ("${app.rotulo.trim()}")`);
+
+  // Sem prompt nativo, o botão passa a ENSINAR em vez de não fazer nada
+  const ajuda = await page.evaluate(() => {
+    goNav('configScreen', 'nav-cfg');
+    instalarApp();
+    const el = document.getElementById('instalarAjudaCfg');
+    return { visivel: el.classList.contains('visible'), texto: el.textContent, html: el.innerHTML };
+  });
+  ok(ajuda.visivel && /Instalar aplicativo|Adicionar à Tela de Início/i.test(ajuda.texto),
+    'sem diálogo nativo, o botão mostra o caminho do navegador');
+  /* Passo a passo numerado, com o nome dos botões: "adicione à tela
+     inicial" não ajuda quem nunca fez isso. */
+  ok(/<ol>|<ol /.test(ajuda.html) && (ajuda.html.match(/<li>/g) || []).length >= 3,
+    'e é um passo a passo numerado, não uma frase solta');
+
+  // Dispensar é para sempre
+  const dispensou = await page.evaluate(() => {
+    dispensarInstalar();
+    return { escondida: document.getElementById('instalarBar').classList.contains('hidden'),
+             gravado: localStorage.getItem('sb_instalar_nao') };
+  });
+  ok(dispensou.escondida && dispensou.gravado === '1', 'dispensar a faixa fica gravado');
+
+  await ctx.close();
+
+  // O painel do motoboy é instalável por conta própria
+  const moto = await abrir('/motoboy.html?room=SB-TEST&id=RP1');
+  const m = await moto.page.evaluate(() => ({
+    manifesto: document.querySelector('link[rel=manifest]').getAttribute('href'),
+    temFn: typeof instalarApp === 'function',
+    guardou: JSON.parse(localStorage.getItem('sb_moto_ultimo') || 'null')
+  }));
+  ok(m.manifesto === './manifest-motoboy.json', 'o painel do motoboy tem manifesto próprio');
+  ok(m.temFn, 'e botão de instalar');
+
+  // Mesmo passo a passo no painel do motoboy — é quem menos vai adivinhar
+  const ajudaMoto = await moto.page.evaluate(() => {
+    instalarApp();
+    return document.getElementById('ajudaInstalarTexto').innerHTML;
+  });
+  ok((ajudaMoto.match(/<li>/g) || []).length >= 3,
+    'o painel do motoboy também ensina o caminho, passo a passo');
+  /* Instalado, o ícone abre motoboy.html SEM parâmetros — sem isto a página
+     abriria em "link inválido" e o app instalado seria inútil. */
+  ok(m.guardou && m.guardou.room === 'SB-TEST' && m.guardou.id === 'RP1',
+    'o repasse aberto fica guardado para o ícone instalado achar');
+  await moto.ctx.close();
+
+  /* MESMO contexto: o repasse guardado vive no localStorage, e um contexto
+     novo do Playwright começa com o armazenamento vazio. Aqui simulamos o
+     que o aparelho faz de verdade — abriu pelo link uma vez, e depois abre
+     pelo ícone instalado, que não tem parâmetro nenhum na URL.
+
+     Sem Firebase no sandbox, este é também o teste do modo sem sinal: a
+     lista tem de vir do cache, não de um spinner eterno. */
+  const moto2 = await abrir('/motoboy.html?room=SB-TEST&id=RP1');
+  await moto2.page.evaluate(() => {
+    localStorage.setItem('sb_moto_cache_SB-TEST_RP1', JSON.stringify({
+      motoboy: 'Carlos', hideTaxa: true, askReceiver: true,
+      deliveries: [{ name: 'Ana', address: 'R. das Flores, 10', taxa: 9, done: false }]
+    }));
+  });
+  await moto2.page.goto(base + '/motoboy.html', { waitUntil: 'load' });
+  await moto2.page.waitForTimeout(1500);
+
+  const recuperou = await moto2.page.evaluate(() => ({
+    room: window.ROOM, id: window.REPASS_ID,
+    erro: document.getElementById('errorWrap').classList.contains('show'),
+    lista: document.getElementById('stopsWrap').textContent,
+    avisoOffline: document.getElementById('avisoCache').style.display !== 'none',
+    motoboy: document.getElementById('motoName').textContent
+  }));
+  ok(recuperou.room === 'SB-TEST' && recuperou.id === 'RP1',
+    `abrir sem parâmetros recupera o último repasse (${recuperou.room}/${recuperou.id})`);
+  ok(!recuperou.erro, 'e não cai na tela de "link inválido"');
+  ok(recuperou.lista.includes('Ana') && recuperou.lista.includes('R. das Flores'),
+    'sem sinal, a lista vem do cache em vez de um spinner eterno');
+  ok(recuperou.motoboy === 'Carlos', 'e o painel sabe de quem é a lista');
+  ok(recuperou.avisoOffline,
+    'com aviso de que é a lista da última conexão — não pode parecer dado fresco');
+  await moto2.ctx.close();
 });
 
 // ── 8. Faixa de atualização e controles de versão ────────────

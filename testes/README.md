@@ -30,6 +30,7 @@ Ou individualmente:
 | `desfazer.mjs` | desfazer e confirmação (veja abaixo) |
 | `config.mjs` | Config dobrável e primeiro uso (veja abaixo) |
 | `full.mjs` | modo FULL: repasse, problema na entrega e autoria (veja abaixo) |
+| `regras.mjs` | as regras do banco cobrem tudo que o app grava (veja abaixo) |
 | `lint.mjs` | guarda de regressão (veja abaixo) |
 | `smoke.mjs` | o app inteiro num navegador real |
 
@@ -49,6 +50,18 @@ Rodado contra o `index.html` de antes da correção, o teste reprova em 5
 verificações com esses sintomas exatos. Cobre também o que a correção **não**
 pode quebrar: três entregas distintas continuam somando, e parada ainda não
 entregue continua fora do fechamento.
+
+Cobre também a **correção de entrega já fechada**, que veio depois. Dava para
+consertar o valor, e só na lista dos últimos 30 dias da inicial; nome errado não
+tinha conserto em lugar nenhum. Como o fechamento vira fatura, nome trocado e
+taxa zerada vão inteiros para o PDF que a loja recebe.
+
+O caso mais delicado é a **troca de data**: a entrega precisa sair do dia em que
+estava e entrar no dia certo, criando o dia se preciso e removendo o antigo se
+ficou vazio — senão o total dos dois dias continua errado. E `getReportData`
+passou a devolver `_bucket`/`_si`: a data que o fechamento MOSTRA (`_doneDate`)
+pode não ser o dia em que a parada está guardada, e é o dia real que a correção
+usa para encontrá-la de volta.
 
 ## `desfazer.mjs` — a lápide precisa sair junto
 
@@ -108,6 +121,24 @@ navegador da frente e a aba costuma voltar recarregada; navegação com **um
 destino por link**, o único formato que o Waze aceita; e o limite da foto do
 comprovante batendo com o teto do `database.rules.json`, senão a gravação falha
 depois de o motoboy já ter tirado a foto.
+
+## `regras.mjs` — a recusa silenciosa do banco
+
+`$desconhecido: {".validate": false}` recusa caminho não previsto, e é a regra
+mais perigosa do arquivo: a recusa aparece no console do navegador e **não muda
+nada na tela**.
+
+Foi o que aconteceu com `tombs`, o caminho das exclusões — nunca esteve nas
+regras. Publicadas, apagar uma parada num celular pararia de chegar no outro (ela
+voltaria à lista no snapshot seguinte) e o `Promise.all` do `fbPush` rejeitaria em
+toda gravação, deixando o ponto de sincronização travado em "⏳ Aguardando envio"
+para sempre, mesmo com tudo enviado. Nenhum dos dois dá erro visível.
+
+O teste normaliza os caminhos que as quatro páginas usam — eles aparecem
+partidos, `'rooms/' + room + '/stops'` — e exige regra para cada um. Confere
+também que toda regra tem teto de tamanho, que as travas de sessão e de formato
+de sala continuam lá, e que o teto da foto do comprovante bate com o tamanho que
+o `motoboy.html` gera (maior, a foto seria recusada depois de já ter sido tirada).
 
 ## `nucleo.mjs` — nenhum bairro pode sumir
 
@@ -185,12 +216,17 @@ Sobe um servidor estático na raiz e abre as páginas num Chromium. Verifica:
   saiu, e tocar em Desfazer devolve a parada **e apaga a lápide junto**
 - a confirmação de apagar histórico abre dentro do app com os números reais, e
   fechá-la pelo botão voltar **não** executa a ação
-- a Config cabe em pouco mais de uma tela (875px; eram 1899px), cada seção
-  fechada mostra um resumo do que tem dentro, e abrir uma guarda o estado
+- a Config cabe em pouco mais de uma tela (o orçamento é 1100px; eram 1899px),
+  cada seção fechada mostra um resumo do que tem dentro, e abrir uma guarda o
+  estado
 - um aparelho zerado mostra o campo do código da sala na **primeira** tela, com
   o próprio código já gerado; código malformado é recusado com aviso
 - a aba Repasses só existe no modo FULL, mostra o andamento e o problema
   relatado, e desligar o modo estando nela devolve a pessoa para a inicial
+- o fechamento avisa quantas entregas do período podem sair erradas na fatura
+  (sem nome, sem valor, sem loja), corrigir uma delas tira o aviso e muda o
+  total, salvar sem nome é recusado, desfazer devolve o nome anterior, e mudar
+  a entrega de mês avisa antes de salvar
 - o painel do motoboy com as taxas escondidas **continua** mostrando
   complemento, referência, bairro, janela de horário, loja, observação e
   telefone; nome de cliente com marcação não executa nada

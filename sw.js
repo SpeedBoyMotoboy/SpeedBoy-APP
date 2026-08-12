@@ -15,16 +15,25 @@
    conteúdo dos arquivos — não edite à mão.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION = '20260808-7b957518';                       // gerado por scripts/bump-versao.mjs
+const VERSION = '20260812-da1a8186';                       // gerado por scripts/bump-versao.mjs
 const CACHE   = 'speedboy-' + VERSION;
 
 // Casca do app: o que precisa estar disponível para abrir offline.
+/* motoboy.html e o manifesto dele entram aqui porque o painel do motoboy
+   também é instalável, e instalado ele precisa abrir sem sinal. O custo é
+   que o cache é um só e compartilhado: o celular do motoboy guarda também
+   a casca do app de quem despacha. Um service worker só pode controlar
+   este caminho, então não há como separar as duas listas. */
 const SHELL = [
   './index.html',
+  './motoboy.html',
   './manifest.json',
+  './manifest-motoboy.json',
   './speedboy-firebase.js',
   './speedboy-core.js',
+  './speedboy-graficos.js',
   './speedboy.css',
+  './speedboy-app.css',
   './fatura-padrao.js',
   './fatura.html',
   './offline.html',

@@ -72,11 +72,19 @@ Só depois do passo 2 confirmado.
 | `newData.isString()` + teto de tamanho | O app grava tudo como string JSON; qualquer outro formato é recusado, e há limite de tamanho por caminho. |
 | `$desconhecido: {".validate": false}` | Caminhos novos não previstos são recusados em vez de aceitos em silêncio. |
 
-> **Republicar ao ativar o modo FULL.** As regras ganharam o caminho `proofs`,
-> onde o `motoboy.html` grava a foto do comprovante. Como `$desconhecido` recusa
-> tudo que não está previsto, uma sala rodando as regras antigas **rejeita a
-> gravação da foto** — a entrega é registrada, mas o comprovante não sobe. Se for
-> usar a foto no comprovante, republique as regras deste arquivo antes.
+> **Republique as regras deste arquivo antes de usar o modo FULL.** Duas
+> mudanças desde a última publicação:
+>
+> - **`proofs`** — onde o `motoboy.html` grava a foto do comprovante. Sem esta
+>   regra a entrega é registrada, mas o comprovante não sobe.
+> - **`tombs`** — as exclusões de parada. **Esta faltava desde o começo.** Com as
+>   regras publicadas sem ela, apagar uma parada num celular pararia de chegar no
+>   outro (ela voltaria à lista no snapshot seguinte), e o ponto de sincronização
+>   ficaria travado em "⏳ Aguardando envio" para sempre, mesmo com tudo enviado.
+>
+> As duas falhas seriam **silenciosas**: `$desconhecido` recusa o que não está
+> previsto sem nada aparecer na tela. `testes/regras.mjs` agora compara a lista
+> de regras com os caminhos que o app realmente grava, para não faltar outro.
 
 ### Se algo quebrar
 

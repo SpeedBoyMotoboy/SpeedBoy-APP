@@ -129,4 +129,152 @@ const HOJE = new Date().toLocaleDateString('pt-BR');
     `parada ainda não entregue fica fora do fechamento (${d.deliveries} entrega, R$ ${d.total})`);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   CORRIGIR ENTREGA JÁ FECHADA
+
+   O que dava para consertar numa entrega antiga: o valor, e só na lista
+   dos últimos 30 dias da inicial. Nome errado não tinha conserto em lugar
+   nenhum, e entrega do mês passado não aparecia em tela que permitisse
+   editar. O fechamento vira fatura — nome trocado e taxa zerada vão
+   inteiros para o PDF que a loja recebe para conferir.
+   ═══════════════════════════════════════════════════════════════ */
+
+// Sandbox da correção: mexe em history/stops e move parada entre dias.
+function montarEdicao() {
+  const ctx = {
+    history: [], stops: [],
+    parseMoney(v) { return Number(String(v == null ? 0 : v).replace(',', '.')) || 0; },
+    parseDate(d) { const [dia, mes, ano] = String(d).split('/'); return new Date(+ano, +mes - 1, +dia); }
+  };
+  const fonte =
+    trecho('function paradaPorRef(ref){', '\nfunction abrirEditHist', 'index.html') +
+    trecho('function brParaISO(br){', '\n/* Trocar a data', 'index.html') +
+    trecho('function moverParadaDeDia(', '\n/* ── O que provavelmente', 'index.html') +
+    trecho('function entregasSuspeitas(d){', '\nfunction _renderSuspeitas', 'index.html');
+  const fabrica = new Function('ctx',
+    `with (ctx) { ${fonte}; return { paradaPorRef, moverParadaDeDia, entregasSuspeitas, brParaISO, isoParaBR }; }`);
+  return { ctx, ...fabrica(ctx) };
+}
+
+// ── Achar a entrega certa para corrigir ──────────────────────
+{
+  const { ctx, paradaPorRef } = montarEdicao();
+  ctx.stops = [{ _id: 'hoje', name: 'De hoje' }];
+  ctx.history = [
+    { date: '05/07/2026', stops: [{ _id: 'a', name: 'Ana' }, { _id: 'b', name: 'Beto' }] },
+    { date: '04/07/2026', stops: [{ _id: 'c', name: 'Caio' }] }
+  ];
+  ok(paradaPorRef({ data: '05/07/2026', si: 1 }).name === 'Beto',
+    'a entrega é endereçada por DATA + índice, não por índice do array inteiro');
+  ok(paradaPorRef({ data: '04/07/2026', si: 0 }).name === 'Caio',
+    'e acha em qualquer dia do histórico, não só nos últimos 30');
+  ok(paradaPorRef({ hoje: true, si: 0 }).name === 'De hoje',
+    'a de hoje vem de stops, não do histórico');
+  ok(paradaPorRef({ data: '01/01/2000', si: 0 }) === null,
+    'dia que não existe devolve nulo em vez de quebrar');
+  ok(paradaPorRef({ data: '05/07/2026', si: 99 }) === null,
+    'índice fora da lista devolve nulo');
+  ok(paradaPorRef(null) === null, 'sem referência, nulo');
+}
+
+// ── Trocar a data move a entrega de dia ──────────────────────
+/* Sem mover, a entrega ficaria listada sob a data antiga: o total dos DOIS
+   dias continuaria errado, e no fim do mês a fatura também. */
+{
+  const { ctx, moverParadaDeDia } = montarEdicao();
+  ctx.history = [
+    { date: '05/07/2026', stops: [{ _id: 'a', name: 'Ana' }, { _id: 'b', name: 'Beto' }] },
+    { date: '03/07/2026', stops: [{ _id: 'c', name: 'Caio' }] }
+  ];
+  ok(moverParadaDeDia('05/07/2026', 0, '03/07/2026') === true, 'a mudança de dia acontece');
+  ok(ctx.history.find(d => d.date === '05/07/2026').stops.length === 1,
+    'a entrega sai do dia antigo');
+  ok(ctx.history.find(d => d.date === '03/07/2026').stops.map(s => s.name).join(',') === 'Caio,Ana',
+    'e entra no dia novo');
+}
+{
+  // Dia de destino que ainda não existe precisa ser criado
+  const { ctx, moverParadaDeDia } = montarEdicao();
+  ctx.history = [{ date: '05/07/2026', stops: [{ _id: 'a', name: 'Ana' }] }];
+  moverParadaDeDia('05/07/2026', 0, '28/06/2026');
+  const destino = ctx.history.find(d => d.date === '28/06/2026');
+  ok(!!destino && destino.stops[0].name === 'Ana', 'dia de destino inexistente é criado');
+  ok(!ctx.history.some(d => d.date === '05/07/2026'),
+    'e o dia que ficou vazio some, em vez de virar um dia de zero entregas no fechamento');
+}
+{
+  // Ordem do histórico: o app inteiro conta com mais recente primeiro
+  const { ctx, moverParadaDeDia } = montarEdicao();
+  ctx.history = [
+    { date: '05/07/2026', stops: [{ _id: 'a', name: 'Ana' }, { _id: 'z', name: 'Zeca' }] },
+    { date: '01/07/2026', stops: [{ _id: 'c', name: 'Caio' }] }
+  ];
+  moverParadaDeDia('05/07/2026', 0, '10/07/2026');
+  ok(ctx.history.map(d => d.date).join(' ') === '10/07/2026 05/07/2026 01/07/2026',
+    'o histórico continua em ordem, do mais recente para o mais antigo');
+}
+
+// ── Datas: ida e volta entre o campo e o app ─────────────────
+/* O <input type="date"> fala ISO; o app inteiro fala dd/mm/aaaa. Converter
+   errado colocaria a entrega em outro mês sem ninguém pedir. */
+{
+  const { brParaISO, isoParaBR } = montarEdicao();
+  ok(brParaISO('05/07/2026') === '2026-07-05', 'dd/mm/aaaa vira ISO para o campo');
+  ok(isoParaBR('2026-07-05') === '05/07/2026', 'e ISO volta para dd/mm/aaaa');
+  ok(brParaISO('5/7/2026') === '2026-07-05', 'dia e mês sem zero à esquerda também');
+  ok(brParaISO('') === '' && isoParaBR('') === '', 'vazio não vira data inventada');
+  ok(isoParaBR(brParaISO('31/12/2025')) === '31/12/2025', 'a ida e a volta preservam a data');
+}
+
+// ── A varredura acha o que quebraria a fatura ────────────────
+{
+  const { entregasSuspeitas } = montarEdicao();
+  const d = { allStops: [
+    { name: 'Ana Souza', value: 12, store: 'KS' },                 // ok
+    { name: '', value: 15, store: 'KS' },                          // sem nome
+    { name: 'Beto', value: 0, store: 'KS' },                       // taxa zerada
+    { name: 'Caio', value: 10, store: '' },                        // sem loja
+    { name: 'Sem nome', value: 0, store: '' },                     // três motivos
+    { name: 'Duda', value: 0, store: 'KS', _cancelled: true },     // cancelada: zero é o certo
+    { name: 'Elis', value: 0, store: 'KS', cancelled: true }
+  ]};
+  const r = entregasSuspeitas(d);
+  ok(r.length === 4, `acha as 4 que quebram a fatura (achou ${r.length})`);
+  ok(r.some(x => x.motivos.includes('sem nome')),    'pega nome vazio');
+  ok(r.some(x => x.motivos.includes('taxa zerada')), 'pega taxa zerada');
+  ok(r.some(x => x.motivos.includes('sem loja')),    'pega entrega sem loja');
+  ok(r.find(x => x.s.name === 'Sem nome').motivos.length === 3,
+    'e lista TODOS os motivos de uma vez, para não corrigir duas vezes a mesma entrega');
+  /* Cancelada com valor zero é o certo, não um erro. Marcá-la faria a lista
+     de avisos encher de falso positivo e ninguém mais olharia para ela. */
+  ok(!r.some(x => x.s.name === 'Duda' || x.s.name === 'Elis'),
+    'cancelada fica fora — zero nela é o esperado');
+  ok(entregasSuspeitas({ allStops: [] }).length === 0, 'período sem entregas não acusa nada');
+}
+
+// ── getReportData diz ONDE cada entrega mora ─────────────────
+/* Sem isto o botão de corrigir não teria como achar a parada de volta: a
+   data que o fechamento MOSTRA (_doneDate) pode não ser o dia em que ela
+   está guardada. */
+{
+  const { ctx, getReportData } = montar();
+  ctx.history = [
+    { date: '05/07/2026', stops: [
+      { _id: 'a', name: 'Ana', value: '10', done: true, _doneDate: '04/07/2026' }
+    ] }
+  ];
+  ctx.reportPeriod = '60d';
+  const s = getReportData().allStops[0];
+  ok(s._date === '04/07/2026', 'o fechamento mostra a data em que foi entregue');
+  ok(s._bucket === '05/07/2026',
+    'mas guarda o dia REAL onde a parada está — é por ele que a correção a encontra');
+  ok(s._si === 0 && s._hoje === false, 'e o índice dentro daquele dia');
+}
+{
+  const { ctx, getReportData } = montar();
+  ctx.stops = [{ _id: 'x', name: 'De hoje', value: '10', done: true }];
+  const s = getReportData().allStops[0];
+  ok(s._hoje === true, 'a entrega de hoje é marcada como tal (mora em stops, não no histórico)');
+}
+
 fim();

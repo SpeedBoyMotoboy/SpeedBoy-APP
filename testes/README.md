@@ -51,6 +51,18 @@ verificações com esses sintomas exatos. Cobre também o que a correção **nã
 pode quebrar: três entregas distintas continuam somando, e parada ainda não
 entregue continua fora do fechamento.
 
+Cobre também a **correção de entrega já fechada**, que veio depois. Dava para
+consertar o valor, e só na lista dos últimos 30 dias da inicial; nome errado não
+tinha conserto em lugar nenhum. Como o fechamento vira fatura, nome trocado e
+taxa zerada vão inteiros para o PDF que a loja recebe.
+
+O caso mais delicado é a **troca de data**: a entrega precisa sair do dia em que
+estava e entrar no dia certo, criando o dia se preciso e removendo o antigo se
+ficou vazio — senão o total dos dois dias continua errado. E `getReportData`
+passou a devolver `_bucket`/`_si`: a data que o fechamento MOSTRA (`_doneDate`)
+pode não ser o dia em que a parada está guardada, e é o dia real que a correção
+usa para encontrá-la de volta.
+
 ## `desfazer.mjs` — a lápide precisa sair junto
 
 O teste mais importante do arquivo. Excluir uma parada grava um *tombstone*
@@ -204,12 +216,17 @@ Sobe um servidor estático na raiz e abre as páginas num Chromium. Verifica:
   saiu, e tocar em Desfazer devolve a parada **e apaga a lápide junto**
 - a confirmação de apagar histórico abre dentro do app com os números reais, e
   fechá-la pelo botão voltar **não** executa a ação
-- a Config cabe em pouco mais de uma tela (875px; eram 1899px), cada seção
-  fechada mostra um resumo do que tem dentro, e abrir uma guarda o estado
+- a Config cabe em pouco mais de uma tela (o orçamento é 1100px; eram 1899px),
+  cada seção fechada mostra um resumo do que tem dentro, e abrir uma guarda o
+  estado
 - um aparelho zerado mostra o campo do código da sala na **primeira** tela, com
   o próprio código já gerado; código malformado é recusado com aviso
 - a aba Repasses só existe no modo FULL, mostra o andamento e o problema
   relatado, e desligar o modo estando nela devolve a pessoa para a inicial
+- o fechamento avisa quantas entregas do período podem sair erradas na fatura
+  (sem nome, sem valor, sem loja), corrigir uma delas tira o aviso e muda o
+  total, salvar sem nome é recusado, desfazer devolve o nome anterior, e mudar
+  a entrega de mês avisa antes de salvar
 - o painel do motoboy com as taxas escondidas **continua** mostrando
   complemento, referência, bairro, janela de horário, loja, observação e
   telefone; nome de cliente com marcação não executa nada

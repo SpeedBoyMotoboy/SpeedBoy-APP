@@ -81,6 +81,7 @@ que se procura mais:
 | taxa que se preenche sozinha | `§ 14` (KS) e `§ 15` (Aritana) |
 | rota / Waze / Google Maps | `§ 17` e `§ 18` |
 | o fechamento e o PDF | `§ 26`, `§ 27` |
+| corrigir uma entrega antiga | `§ 25b` |
 | o modo FULL e os repasses | `§ 29`, `§ 30`, `§ 31` |
 | sincronizar entre os celulares | `§ 7` (merge) e `§ 35` (Firebase) |
 | o que acontece ao abrir o app | `§ 43`, no fim do arquivo |

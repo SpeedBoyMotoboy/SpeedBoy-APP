@@ -149,7 +149,7 @@ for (const arq of PAGINAS) {
 
   // Modais precisam passar pelo histórico, senão voltar sai da tela
   // em vez de fechar o modal que está na frente.
-  const MODAIS = ['wppModal', 'quickPanel', 'qsModal', 'expenseModal', 'notifyHelpModal', 'provaModal'];
+  const MODAIS = ['wppModal', 'quickPanel', 'qsModal', 'expenseModal', 'notifyHelpModal', 'provaModal', 'editHistModal'];
   const direto = MODAIS.filter(id =>
     new RegExp(`getElementById\\('${id}'\\)\\.classList\\.(add|remove)\\('hidden'\\)`).test(src));
   ok(direto.length === 0,

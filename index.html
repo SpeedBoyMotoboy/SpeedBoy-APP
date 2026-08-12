@@ -464,6 +464,7 @@
         <button type="button" class="period-tab"   id="tab60" onclick="setPeriod('60d')">60 Dias</button>
       </div>
       <div id="reportSummary"></div>
+      <div id="reportSuspeitas"></div>
       <div id="reportMotoboys"></div>
       <div id="reportStores"></div>
       <div id="reportHistory"></div>
@@ -534,6 +535,94 @@
     <div id="repassesResumo"></div>
     <div id="repassesList"></div>
     <button type="button" class="btn-save" onclick="goRepass()" style="background:var(--accent);margin-top:14px;">＋ Novo repasse</button>
+  </div>
+</div>
+
+<!-- ══ CORRIGIR ENTREGA JÁ FECHADA ══
+     Só os campos que chegam na fatura da loja. Telefone, observação e
+     referência ficam de fora: erro neles não muda o que o cliente recebe
+     para conferir, e cada campo a mais é rolagem num formulário que se
+     abre para arrumar uma coisa só. -->
+<div class="modal-overlay hidden" id="editHistModal">
+  <div class="modal-sheet" style="max-height:90vh;overflow-y:auto;">
+    <div class="modal-header">
+      <div class="modal-name">✏️ Corrigir entrega</div>
+      <button type="button" class="modal-close" onclick="fecharEditHist()">✕</button>
+    </div>
+    <div class="modal-phone" id="editHistOrigem"></div>
+    <div class="field" style="margin-bottom:10px;">
+      <div class="field-label">Nome do cliente</div>
+      <input class="field-input" id="ehNome" maxlength="60" placeholder="Nome que aparece na fatura" />
+    </div>
+    <div class="field" style="margin-bottom:10px;">
+      <div class="field-label">Loja</div>
+      <select class="field-input" id="ehLoja"></select>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <div class="field" style="flex:1;">
+        <div class="field-label">Taxa da entrega (R$)</div>
+        <input class="field-input" id="ehTaxa" type="text" inputmode="decimal" placeholder="0,00" oninput="maskMoney(this)" />
+      </div>
+      <div class="field" style="flex:1;">
+        <div class="field-label">Produto a cobrar (R$)</div>
+        <input class="field-input" id="ehProduto" type="text" inputmode="decimal" placeholder="0,00" oninput="maskMoney(this)" />
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <div class="field" style="flex:1;">
+        <div class="field-label">Cidade</div>
+        <select class="field-input" id="ehCidade">
+          <option value="">— Sem cidade —</option>
+          <option value="SRR">Serra</option>
+          <option value="VIX">Vitória</option>
+          <option value="VV">Vila Velha</option>
+          <option value="CCA">Cariacica</option>
+          <option value="VIA">Viana</option>
+          <option value="OUT">Outra</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1;">
+        <div class="field-label">Bairro</div>
+        <input class="field-input" id="ehBairro" maxlength="40" />
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <div class="field" style="flex:2;">
+        <div class="field-label">Rua</div>
+        <input class="field-input" id="ehRua" maxlength="60" />
+      </div>
+      <div class="field" style="flex:1;">
+        <div class="field-label">Número</div>
+        <input class="field-input" id="ehNumero" maxlength="10" />
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <div class="field" style="flex:1;">
+        <div class="field-label">Tipo</div>
+        <select class="field-input" id="ehTipo">
+          <option value="entrega">🛵 Entrega</option>
+          <option value="retirada">📦 Retirada</option>
+          <option value="troca">🔄 Troca</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1;">
+        <div class="field-label">Data da entrega</div>
+        <input class="field-input" id="ehData" type="date" />
+      </div>
+    </div>
+    <!-- Mudar a data move a entrega de dia no fechamento, e pode mudar de
+         MÊS — a fatura da loja é fechada por período. O aviso aparece só
+         quando a data muda de verdade. -->
+    <div id="ehAvisoData" class="info-box warn" style="display:none;"></div>
+    <label class="rp-opt" style="margin-bottom:6px;">
+      <input type="checkbox" id="ehCancelada" />
+      <span>Cancelada — sai dos totais e aparece riscada na fatura</span>
+    </label>
+    <label class="rp-opt" style="margin-bottom:10px;">
+      <input type="checkbox" id="ehPaga" />
+      <span>Taxa já recebida da loja</span>
+    </label>
+    <button type="button" class="btn-save" onclick="salvarEditHist()">💾 Salvar correção</button>
   </div>
 </div>
 
@@ -2797,6 +2886,207 @@ function markDayReceived(ref){
   saveHistory();renderReport();
 }
 
+/* ═══════════════════════════════════════════════════════
+   § 25b — CORRIGIR ENTREGA JÁ FECHADA
+
+   O que dava para consertar numa entrega antiga: o valor, e só na lista
+   dos últimos 30 dias da tela inicial. Nome errado não tinha conserto em
+   lugar nenhum, e entrega do mês passado não aparecia em tela que
+   permitisse editar.
+
+   Isso importa porque o fechamento vira fatura: um nome trocado ou uma
+   taxa zerada vão inteiros para o PDF que a loja recebe para conferir.
+   Corrigir na mão depois, no PDF, não corrige o total.
+
+   Aqui a entrega é endereçada por DATA + índice, e não por índice só: é a
+   mesma convenção de togHistPaid, e sobrevive à lista ser reordenada
+   entre abrir o formulário e salvar.
+   ═══════════════════════════════════════════════════════ */
+let _ehRef = null;   // { data, si, hoje }
+
+// Hoje mora em `stops`; o resto mora em history[di].stops. Um lugar só
+// para resolver isso, senão cada função repete o mesmo if.
+function paradaPorRef(ref){
+  if(!ref) return null;
+  if(ref.hoje) return stops[ref.si] || null;
+  const di = history.findIndex(d => d.date === ref.data);
+  if(di < 0 || !history[di]) return null;
+  return history[di].stops[ref.si] || null;
+}
+
+function abrirEditHist(data, si, hoje){
+  _ehRef = { data, si, hoje: !!hoje };
+  const s = paradaPorRef(_ehRef);
+  if(!s){ toast('Entrega não encontrada','error'); _ehRef=null; return; }
+
+  document.getElementById('editHistOrigem').textContent =
+    (hoje ? 'Hoje' : data) + ' · ' + (s.store || 'sem loja');
+
+  const sel = document.getElementById('ehLoja');
+  const lojas = [...new Set([...(cfg.stores||[]), s.store].filter(Boolean))];
+  sel.innerHTML = '<option value="">— Sem loja —</option>' +
+    lojas.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  sel.value = s.store || '';
+
+  document.getElementById('ehNome').value     = s.name || '';
+  document.getElementById('ehTaxa').value     = parseMoney(s.value) ? String(parseMoney(s.value)).replace('.',',') : '';
+  document.getElementById('ehProduto').value  = parseMoney(s.productValue) ? String(parseMoney(s.productValue)).replace('.',',') : '';
+  document.getElementById('ehCidade').value   = resolveCityCode(s.city || s.cityId || '') || '';
+  document.getElementById('ehBairro').value   = s.neighborhood || '';
+  document.getElementById('ehRua').value      = s.street || '';
+  document.getElementById('ehNumero').value   = s.number || '';
+  document.getElementById('ehTipo').value     = s.serviceType || 'entrega';
+  document.getElementById('ehCancelada').checked = !!s.cancelled;
+  document.getElementById('ehPaga').checked      = !!s.paid;
+
+  // A data que vale para o fechamento é _doneDate; o resto é retrocompatibilidade
+  const dataAtual = s._doneDate || (hoje ? new Date().toLocaleDateString('pt-BR') : data);
+  const inp = document.getElementById('ehData');
+  inp.value = brParaISO(dataAtual);
+  inp.dataset.original = inp.value;
+  document.getElementById('ehAvisoData').style.display = 'none';
+  inp.onchange = avisarMudancaDeData;
+
+  abrirModal('editHistModal');
+}
+
+function brParaISO(br){
+  const p = String(br||'').split('/');
+  return p.length === 3 ? `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}` : '';
+}
+function isoParaBR(iso){
+  const p = String(iso||'').split('-');
+  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : '';
+}
+
+/* Trocar a data pode tirar a entrega do mês que já foi faturado — ou
+   colocá-la num que já foi. Vale avisar antes, não depois. */
+function avisarMudancaDeData(){
+  const inp = document.getElementById('ehData');
+  const aviso = document.getElementById('ehAvisoData');
+  const mudou = inp.value && inp.value !== inp.dataset.original;
+  aviso.style.display = mudou ? '' : 'none';
+  if(!mudou) return;
+  const de = isoParaBR(inp.dataset.original), para = isoParaBR(inp.value);
+  const mesDiferente = de.slice(3) !== para.slice(3);
+  aviso.textContent = mesDiferente
+    ? `⚠️ A entrega sai de ${de} e vai para ${para} — MÊS DIFERENTE. Os dois fechamentos mudam de total.`
+    : `A entrega sai do dia ${de} e vai para ${para}.`;
+}
+
+function fecharEditHist(){ fecharModal('editHistModal'); _ehRef = null; }
+document.getElementById('editHistModal').addEventListener('click',e=>{if(e.target===e.currentTarget)fecharEditHist();});
+
+function salvarEditHist(){
+  const ref = _ehRef;
+  const s = paradaPorRef(ref);
+  if(!s){ toast('Entrega não encontrada','error'); return; }
+
+  const nome = document.getElementById('ehNome').value.trim();
+  if(!nome){ toast('O nome não pode ficar vazio — é ele que vai na fatura','error'); return; }
+
+  // Retrato ANTES de mexer: o desfazer precisa dos dois arrays, porque a
+  // troca de data move a parada de um para o outro.
+  const antes = retratoDoDia();
+
+  const cidade   = document.getElementById('ehCidade').value;
+  const bairro   = document.getElementById('ehBairro').value.trim();
+  const rua      = document.getElementById('ehRua').value.trim();
+  const numero   = document.getElementById('ehNumero').value.trim();
+  const novaData = isoParaBR(document.getElementById('ehData').value);
+
+  s.name         = nome;
+  s.store        = document.getElementById('ehLoja').value;
+  s.value        = parseMoney(document.getElementById('ehTaxa').value);
+  s.productValue = parseMoney(document.getElementById('ehProduto').value);
+  s.city         = cidade;
+  s.neighborhood = bairro;
+  s.street       = rua;
+  s.number       = numero;
+  s.serviceType  = document.getElementById('ehTipo').value;
+  s.cancelled    = document.getElementById('ehCancelada').checked;
+  s.paid         = document.getElementById('ehPaga').checked;
+  /* O endereço de uma linha é o que a maioria das telas mostra. Recompor
+     aqui evita a entrega ficar com nome novo e endereço velho. */
+  s.address = [rua + (numero ? ', ' + numero : ''), bairro, cityName(cidade)]
+    .filter(Boolean).join(', ');
+
+  let moveu = false;
+  if(novaData && novaData !== (s._doneDate || ref.data)){
+    s._doneDate = novaData;
+    if(!ref.hoje) moveu = moverParadaDeDia(ref.data, ref.si, novaData);
+  }
+
+  saveHistory();
+  if(ref.hoje) saveStops();
+  fecharEditHist();
+  renderReport();
+  renderHome();
+
+  comDesfazer(`✏️ "${nome}" corrigida${moveu ? ' e movida para ' + novaData : ''}`, () => {
+    restaurarDia(antes);
+    renderReport();
+    toast('↩️ Correção desfeita','success');
+  });
+}
+
+/* Tira a parada do dia em que estava e põe no dia certo, criando o dia se
+   ele não existir. Sem isto, mudar a data deixaria a entrega listada sob a
+   data antiga no fechamento — o total do dia continuaria errado. */
+function moverParadaDeDia(dataAntiga, si, dataNova){
+  const de = history.findIndex(d => d.date === dataAntiga);
+  if(de < 0 || !history[de] || !history[de].stops[si]) return false;
+  const [parada] = history[de].stops.splice(si, 1);
+  if(!history[de].stops.length) history.splice(de, 1);
+  let para = history.findIndex(d => d.date === dataNova);
+  if(para < 0){ history.unshift({ date: dataNova, stops: [] }); para = 0; }
+  history[para].stops.push(parada);
+  // Mais recente primeiro, como o resto do app espera
+  history.sort((a,b) => { try { return parseDate(b.date) - parseDate(a.date); } catch(e){ return 0; } });
+  return true;
+}
+
+/* ── O que provavelmente está errado ──────────────────────
+   Eles não sabem QUAIS entregas estão zeradas ou sem nome — teriam de
+   abrir dia por dia procurando. Esta varredura junta as suspeitas do
+   período num lugar só, com o botão de corrigir do lado.
+
+   "Suspeita" aqui é só o que quebra a fatura: sem nome, sem valor, ou sem
+   loja. Cancelada não conta — zero nela é o certo. */
+function entregasSuspeitas(d){
+  const fora = [];
+  d.allStops.forEach(s => {
+    if(s._cancelled || s.cancelled) return;
+    const motivos = [];
+    const nome = String(s.name||'').trim();
+    if(!nome || /^(sem nome|cliente|teste|-{1,})$/i.test(nome)) motivos.push('sem nome');
+    if(parseMoney(s.value) === 0) motivos.push('taxa zerada');
+    if(!String(s.store||'').trim()) motivos.push('sem loja');
+    if(motivos.length) fora.push({ s, motivos });
+  });
+  return fora;
+}
+
+function _renderSuspeitas(d){
+  const el = document.getElementById('reportSuspeitas');
+  if(!el) return;
+  const lista = entregasSuspeitas(d);
+  if(!lista.length){ el.innerHTML=''; return; }
+  el.innerHTML =
+    `<div class="suspeitas">
+      <div class="suspeitas-cab">⚠️ ${lista.length} entrega(s) do período podem sair erradas na fatura</div>
+      <div class="suspeitas-sub">Toque para corrigir antes de gerar o PDF da loja.</div>
+      ${lista.map(({s,motivos}) => `
+        <div class="suspeita">
+          <div style="min-width:0;">
+            <div class="suspeita-nome">${esc(String(s.name||'').trim() || '(sem nome)')}</div>
+            <div class="suspeita-motivo">${esc(s._date||'')} · ${esc(motivos.join(' · '))}</div>
+          </div>
+          <button type="button" class="sc-btn" onclick="abrirEditHist('${escJs(s._bucket||'')}',${s._si},${s._hoje?'true':'false'})">✏️ Corrigir</button>
+        </div>`).join('')}
+    </div>`;
+}
+
 /* Guarda as paradas de hoje no histórico do dia.
 
    Antes esta função fazia `history[ex] = entry`: o lote de agora
@@ -2857,7 +3147,8 @@ function getReportData(){
      fechamento. Vence a primeira ocorrência, que é a de `stops` — a mais
      recente. */
   const jaContadas=new Set();
-  days.forEach(day=>day.stops.forEach(s=>{
+  const ehHoje=day=>day===allDays[0];
+  days.forEach(day=>day.stops.forEach((s,si)=>{
     // Apenas entregas finalizadas entram no fechamento
     if(!s.done)return;
     const id=idDaParada(s);
@@ -2865,10 +3156,15 @@ function getReportData(){
     jaContadas.add(id);
     // Usa a data em que foi finalizada (_doneDate); cai para a lógica antiga se ausente
     const reportDate=s._doneDate||(day===days[0]?(s.deliveryDate||s._addedDate||day.date):day.date);
+    /* _date é a data que o fechamento MOSTRA; _bucket é o dia em que a
+       parada está guardada de verdade. Os dois divergem quando _doneDate
+       difere do dia do histórico — e é o _bucket que acha a parada de
+       volta na hora de corrigir. */
+    const onde={_date:reportDate,_bucket:day.date,_si:si,_hoje:ehHoje(day)};
     // Entregas canceladas aparecem assinaladas, com taxa zerada e fora dos totais
-    if(s.cancelled){ cancelled++; allStops.push({...s,_date:reportDate,_cancelled:true}); return; }
+    if(s.cancelled){ cancelled++; allStops.push({...s,...onde,_cancelled:true}); return; }
     const v=parseMoney(s.value); total+=v; if(s.paid)received+=v; deliveries++;
-    allStops.push({...s,_date:reportDate});
+    allStops.push({...s,...onde});
     const k=s.store||'Sem loja'; if(!sm[k])sm[k]={t:0,c:0,r:0}; sm[k].t+=v; sm[k].c++; if(s.paid)sm[k].r+=v;
   }));
   const range=days.length?days[days.length-1].date+' — '+days[0].date:'Sem dados';
@@ -2891,6 +3187,7 @@ function renderReport(){
   const d=getReportData();
   document.getElementById('btnPdf').disabled=!d.allStops.length;
   _renderSummary(d);
+  _renderSuspeitas(d);
   _renderMotoboys(d);
   _renderStores(d);
   _renderDays(d);
@@ -2900,6 +3197,7 @@ function _renderSummary(d){
   const el=document.getElementById('reportSummary');
   if(!d.allStops.length){
     el.innerHTML='<div class="no-data">📭 Sem dados para o período.</div>';
+    document.getElementById('reportSuspeitas').innerHTML='';
     document.getElementById('reportMotoboys').innerHTML='';
     document.getElementById('reportStores').innerHTML='';
     document.getElementById('reportHistory').innerHTML='';
@@ -3047,6 +3345,7 @@ function _renderDays(d){
             ${!canc&&val>0?`<div class="fstop-val" style="color:${s.paid?'var(--green)':'var(--accent)'};">${fmtMoney(val)}</div>`:''}
             ${!canc&&val>0?`<button type="button" class="sc-btn ${s.paid?'paid':''}" style="font-size:12px;padding:5px 8px;" onclick="${payFn};renderReport();">${s.paid?'✓':'💰'}</button>`:''}
             ${!canc&&prodVal>0?`<button type="button" class="sc-btn" style="font-size:12px;padding:5px 8px;color:var(--blue);border-color:rgba(59,130,246,.4);" onclick="${prodFn};renderReport();">${s.productPaid?'✓ Prod':'💳 Prod'}</button>`:''}
+            <button type="button" class="sc-btn" style="font-size:12px;padding:5px 8px;color:var(--muted);border-color:var(--border);" title="Corrigir esta entrega" onclick="abrirEditHist('${escJs(day.date)}',${si},${day.isToday?'true':'false'});event.stopPropagation();">✏️</button>
           </div>
         </div>
         ${wppNum?`<a href="https://wa.me/55${wppNum}" target="_blank" style="font-size:13px;color:#25d366;font-weight:700;text-decoration:none;">📞 ${fmtPhone(s.phone)}</a>`:(s.phone?`<div style="font-size:13px;color:var(--muted);">📞 ${s.phone}</div>`:'')}
@@ -3125,6 +3424,7 @@ function _renderSearch(q){
       ${s.address&&!addr?`<div style="font-size:13px;color:var(--muted);">${esc(s.address)}</div>`:''}
       ${s.notes||s.reference?`<div style="font-size:12px;color:var(--muted);opacity:.75;margin-top:2px;">${esc([s.reference,s.notes].filter(Boolean).join(' · '))}</div>`:''}
       ${linhaQuemEntregou(s)}
+      <button type="button" class="sc-btn" style="margin-top:8px;font-size:12px;padding:6px 12px;" onclick="abrirEditHist('${escJs(day.date)}',${si},${day.isToday?'true':'false'})">✏️ Corrigir</button>
       ${val>0?`<div style="margin-top:6px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;color:${s.paid?'var(--green)':'var(--accent)'};">${fmtMoney(val)} ${s.paid?'· Recebida':'· A receber'}</div>`:''}
     </div>`;
   }).join('');

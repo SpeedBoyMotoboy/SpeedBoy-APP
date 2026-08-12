@@ -738,6 +738,113 @@ await secao('A loja vê hora, quem recebeu e o comprovante', async () => {
   await ctx.close();
 });
 
+// ── 7k. Corrigir entrega já fechada ──────────────────────────
+await secao('Corrigir uma entrega do mês passado', async () => {
+  const { page, ctx } = await abrir('/index.html');
+
+  // Um histórico com os dois defeitos relatados: taxa zerada e nome errado
+  const inicio = await page.evaluate(() => {
+    const mesPassado = new Date();
+    mesPassado.setDate(1); mesPassado.setDate(0);          // último dia do mês anterior
+    const d = mesPassado.toLocaleDateString('pt-BR');
+    stops = [];
+    history = [{ date: d, stops: [
+      { _id: 'e1', name: 'Nome Errado', value: 0,  store: 'KS', done: true, _doneDate: d },
+      { _id: 'e2', name: 'Ana Souza',   value: 18, store: 'KS', done: true, _doneDate: d }
+    ] }];
+    saveHistory();
+    reportPeriod = '60d';
+    goNav('reportScreen', 'nav-report');
+    renderReport();
+    return { data: d, avisos: document.getElementById('reportSuspeitas').textContent };
+  });
+
+  /* Elas não sabem QUAIS entregas estão erradas — abrir dia por dia
+     procurando é o que ninguém faz. O aviso sobe para o topo. */
+  ok(/1 entrega\(s\)/.test(inicio.avisos), 'o fechamento avisa quantas podem sair erradas na fatura');
+  ok(/taxa zerada/.test(inicio.avisos), 'e diz o motivo');
+  ok(!/Ana Souza/.test(inicio.avisos), 'a entrega correta não entra na lista de avisos');
+
+  // Abrir pelo botão do aviso e corrigir nome e valor
+  const corrigido = await page.evaluate(data => {
+    abrirEditHist(data, 0, false);
+    document.getElementById('ehNome').value = 'Padaria Central';
+    document.getElementById('ehTaxa').value = '22,50';
+    salvarEditHist();
+    const s = history[0].stops[0];
+    return { nome: s.name, valor: s.value };
+  }, inicio.data);
+
+  ok(corrigido.nome === 'Padaria Central', 'o nome é corrigido no histórico');
+  ok(corrigido.valor === 22.5, 'e a taxa zerada recebe valor');
+  /* O modal fecha pelo histórico do navegador (window.history.back), que é
+     assíncrono — é assim que ele evita deixar entrada órfã. */
+  await page.waitForTimeout(300);
+  ok(await page.locator('#editHistModal.hidden').count() === 1, 'o formulário fecha ao salvar');
+
+  const depois = await page.evaluate(() => {
+    renderReport();
+    return {
+      avisos: document.getElementById('reportSuspeitas').textContent,
+      total: getReportData().total
+    };
+  });
+  ok(depois.avisos === '', 'o aviso some quando não há mais nada errado');
+  ok(depois.total === 40.5, `e o total do período acompanha (R$ ${depois.total})`);
+
+  // Nome vazio não pode passar: é ele que vai na fatura
+  const vazio = await page.evaluate(data => {
+    abrirEditHist(data, 0, false);
+    document.getElementById('ehNome').value = '   ';
+    salvarEditHist();
+    return { nome: history[0].stops[0].name,
+             aberto: !document.getElementById('editHistModal').classList.contains('hidden') };
+  }, inicio.data);
+  ok(vazio.nome === 'Padaria Central' && vazio.aberto,
+    'salvar sem nome é recusado e o formulário continua aberto');
+
+  // Desfazer devolve o estado anterior inteiro
+  await page.waitForTimeout(300);
+  const desfeito = await page.evaluate(data => {
+    abrirEditHist(data, 1, false);
+    document.getElementById('ehNome').value = 'Trocado por engano';
+    salvarEditHist();
+    const meio = history[0].stops[1].name;
+    desfazerAgora();
+    return { meio, depois: history[0].stops[1].name };
+  }, inicio.data);
+  ok(desfeito.meio === 'Trocado por engano' && desfeito.depois === 'Ana Souza',
+    'desfazer devolve o nome anterior');
+
+  /* Mudar a data move a entrega de dia — e pode mudar de MÊS, que é o que
+     fecha a fatura. O aviso tem de aparecer antes de salvar. */
+  await page.waitForTimeout(300);
+  const aviso = await page.evaluate(data => {
+    abrirEditHist(data, 0, false);
+    const inp = document.getElementById('ehData');
+    const [dia, mes, ano] = data.split('/');
+    inp.value = `${Number(ano) - 1}-01-15`;                 // outro mês e outro ano
+    avisarMudancaDeData();
+    const el = document.getElementById('ehAvisoData');
+    return { visivel: el.style.display !== 'none', texto: el.textContent };
+  }, inicio.data);
+  ok(aviso.visivel && /M[ÊE]S DIFERENTE/i.test(aviso.texto),
+    'mudar para outro mês avisa que os dois fechamentos mudam de total');
+
+  const moveu = await page.evaluate(data => {
+    salvarEditHist();
+    const [, , ano] = data.split('/');
+    const alvo = `15/01/${Number(ano) - 1}`;
+    const destino = history.find(h => h.date === alvo);
+    return { criou: !!destino, nome: destino && destino.stops[0].name,
+             sobrou: (history.find(h => h.date === data) || {}).stops.length };
+  }, inicio.data);
+  ok(moveu.criou && moveu.nome === 'Padaria Central', 'salvar move a entrega para o dia certo');
+  ok(moveu.sobrou === 1, 'e ela sai do dia de onde veio');
+
+  await ctx.close();
+});
+
 // ── 7j. Instalar na tela inicial ─────────────────────────────
 await secao('O app se oferece para ser instalado', async () => {
   const { page, ctx } = await abrir('/index.html');

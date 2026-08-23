@@ -538,6 +538,47 @@
   </div>
 </div>
 
+<!-- ══ DOCUMENTO (aba: foto da folha vira parada) ══ -->
+<div class="screen" id="docScreen">
+  <div class="config-body">
+    <div class="screen-title">
+      <button type="button" class="back-btn" onclick="goNav('homeScreen','nav-home')">←</button>
+      📄 Documento
+    </div>
+
+    <div class="doc-explica">
+      Fotografe a folha do cliente. O app lê nome, telefone e endereço e
+      monta a parada. Confira sempre antes de salvar.
+    </div>
+
+    <div class="doc-botoes">
+      <label class="doc-btn doc-btn-camera">
+        📷 Tirar foto
+        <input type="file" accept="image/*" capture="environment" multiple onchange="docLerArquivos(this)" />
+      </label>
+      <label class="doc-btn">
+        🖼️ Galeria
+        <input type="file" accept="image/*" multiple onchange="docLerArquivos(this)" />
+      </label>
+    </div>
+
+    <div class="doc-progresso hidden" id="docProgresso">
+      <div class="doc-progresso-msg" id="docProgressoMsg">Preparando…</div>
+      <div class="doc-barra"><div class="doc-barra-cheia" id="docBarra"></div></div>
+    </div>
+
+    <div id="docLista"></div>
+
+    <!-- Sem sinal, com a leitura falhando, ou com a folha ilegível: o
+         texto colado à mão passa pelo mesmo leitor e vira parada igual. -->
+    <details class="doc-manual" id="docManual">
+      <summary>Digitar ou colar o texto da folha</summary>
+      <textarea class="paste-area" id="docTexto" placeholder="CLIENTE: ...&#10;TELEFONE: ...&#10;ENDEREÇO: ..." style="min-height:110px;margin-top:8px;"></textarea>
+      <button type="button" class="doc-acao doc-acao-forte" style="width:100%;margin-top:8px;" onclick="docLerTextoColado()">Ler este texto</button>
+    </details>
+  </div>
+</div>
+
 <!-- ══ CORRIGIR ENTREGA JÁ FECHADA ══
      Só os campos que chegam na fatura da loja. Telefone, observação e
      referência ficam de fora: erro neles não muda o que o cliente recebe
@@ -778,6 +819,7 @@
   <!-- Só existe no modo FULL: em dia normal ninguém repassa entrega, e um
        quinto item rouba largura dos quatro que se usa sempre. -->
   <button type="button" class="nav-btn hidden" id="nav-repasses" onclick="goNav('repassesScreen','nav-repasses')"><span class="icon">🏍️</span>Repasses</button>
+  <button type="button" class="nav-btn"        id="nav-doc"     onclick="goNav('docScreen','nav-doc')"><span class="icon">📄</span>Documento</button>
   <button type="button" class="nav-btn"        id="nav-finance" onclick="goNav('financeScreen','nav-finance')"><span class="icon">💰</span>Ganhos</button>
   <button type="button" class="nav-btn"        id="nav-report"  onclick="goNav('reportScreen','nav-report')"><span class="icon">📊</span>Fechamento</button>
   <button type="button" class="nav-btn"        id="nav-cfg"     onclick="goNav('configScreen','nav-cfg')"><span class="icon">⚙️</span>Config</button>
@@ -793,6 +835,7 @@
        speedboy-graficos.js  os cinco gráficos de canvas
        speedboy-firebase.js  configuração do Firebase e login anônimo
        fatura-padrao.js      layout de fatura e de fechamento em PDF
+       speedboy-documento.js texto da folha fotografada → campos da parada
 
      A ordem importa: speedboy.css declara os tokens que o
      speedboy-app.css usa, e os .js definem funções que o script abaixo
@@ -803,6 +846,9 @@
 <script src="speedboy-graficos.js"></script>
 <!-- Padrão único de fatura (schema speedboy.fatura/v1) — compartilhado com fatura.html -->
 <script src="fatura-padrao.js"></script>
+<!-- Folha fotografada → campos da parada. Só texto: quem tira a foto e
+     quem chama o OCR é o § 43 aqui embaixo. -->
+<script src="speedboy-documento.js"></script>
 
 <script>
 'use strict';
@@ -870,7 +916,8 @@
        § 40  Instalar na tela inicial
        § 41  Notificações
        § 42  Atualização do app
-       § 43  Partida (as chamadas do fim do arquivo)
+       § 43  Leitura de documento (foto da folha → parada)
+       § 44  Partida (as chamadas do fim do arquivo)
    ═══════════════════════════════════════════════════════════════ */
 // ═══════════════════════════════════════════════════════
 //  § 1 — REDE DE SEGURANÇA DE ERROS
@@ -1346,7 +1393,8 @@ const TELAS = {
   addScreen:     { slug: 'nova',       nav: null          },
   linkgenScreen: { slug: 'links',      nav: null          },
   repassScreen:  { slug: 'repasse',    nav: null          },
-  repassesScreen:{ slug: 'repasses',   nav: 'nav-repasses'}
+  repassesScreen:{ slug: 'repasses',   nav: 'nav-repasses'},
+  docScreen:     { slug: 'documento',  nav: 'nav-doc'     }
 };
 const TELA_POR_SLUG = Object.fromEntries(
   Object.entries(TELAS).map(([id, v]) => [v.slug, id])
@@ -1446,6 +1494,7 @@ function goNav(screenId, navId, viaHistorico) {
     const pb=document.getElementById('reportPeriodBody'); if(pb)pb.style.display='';
     renderReport();
   }
+  if(screenId==='docScreen')     renderDocs();
   if(screenId==='linkgenScreen') renderLinks();
   if(screenId==='repassScreen')  renderRepassList();
   if(screenId==='repassesScreen')renderRepasses();
@@ -5553,7 +5602,390 @@ async function initFirebase(){
 }
 
 // ═══════════════════════════════════════════════════════
-//  § 43 — PARTIDA
+//  § 43 — LEITURA DE DOCUMENTO (foto da folha → parada)
+//
+//  Um escritório de advocacia manda pilhas de folhas "AUSÊNCIA DE
+//  CONTATO", uma por cliente, e cada folha é uma parada: nome, telefone,
+//  endereço e o motivo da visita. Digitar isso trinta vezes é meia hora
+//  e é onde nasce endereço errado.
+//
+//  Aqui mora só a metade suja — foto, giro, OCR e tela. A metade limpa
+//  (texto → campos) é o speedboy-documento.js, que roda igual no Node e
+//  por isso é testado contra o texto REAL saído do OCR das folhas.
+//
+//  Três decisões que valem explicação:
+//
+//  • O OCR é o Tesseract, baixado da CDN só quando o motoboy toca em
+//    "Tirar foto" — são alguns MB, e quem nunca usa esta aba não paga
+//    por eles. O sw.js guarda o que baixou, então a segunda vez funciona
+//    sem sinal.
+//
+//  • A foto NÃO sai do celular. Reconhecimento de nuvem seria melhor,
+//    mas exigiria mandar CPF e endereço de terceiros para um serviço de
+//    fora — e a chave de acesso ficaria à vista no código, que é público.
+//
+//  • A folha fotografada de lado sai como sopa de letra. Em vez de mais
+//    10 MB de modelo de orientação, lê-se a foto pequena nas quatro
+//    posições e fica a que reconhece mais rótulos da folha.
+// ═══════════════════════════════════════════════════════
+
+const OCR_CDN     = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js';
+const OCR_LARGURA = 1600;   // leitura de valer
+const OCR_SONDA   = 900;    // só para descobrir de que lado está a folha
+
+let docsLidos    = sbRead('sb_docs', []);
+let _ocrWorker   = null;    // o worker do Tesseract, reaproveitado entre fotos
+let _ocrPromessa = null;    // carga em andamento, para duas fotos não baixarem duas vezes
+let _ocrAviso    = null;    // para onde mandar o progresso da vez
+
+function saveDocs(){
+  try{ localStorage.setItem('sb_docs', JSON.stringify(docsLidos.slice(-20))); }
+  catch(e){ sbLogError('gravar documentos lidos', e); }
+}
+
+// ── CARGA DO OCR ────────────────────────────────────────
+function carregarScript(src){
+  return new Promise((ok, erro)=>{
+    const el=document.createElement('script');
+    el.src=src; el.async=true;
+    /* crossorigin: sem ele a resposta chega opaca e o service worker não
+       consegue guardá-la — a aba só funcionaria com sinal, sempre. */
+    el.crossOrigin='anonymous';
+    el.onload=()=>ok();
+    el.onerror=()=>erro(new Error('não deu para baixar o leitor'));
+    document.head.appendChild(el);
+  });
+}
+
+async function ocrWorker(){
+  if(_ocrWorker) return _ocrWorker;
+  if(!_ocrPromessa){
+    _ocrPromessa = (async()=>{
+      if(!window.Tesseract) await carregarScript(OCR_CDN);
+      /* 'por': a folha é toda em português, e o modelo em inglês troca
+         acento por lixo justo no nome do cliente. */
+      const w = await window.Tesseract.createWorker('por', 1, {
+        logger: m => { if(_ocrAviso) _ocrAviso(m); }
+      });
+      _ocrWorker = w;
+      return w;
+    })().catch(e=>{ _ocrPromessa=null; throw e; });
+  }
+  return _ocrPromessa;
+}
+
+// ── FOTO → TEXTO ────────────────────────────────────────
+function carregarImagem(file){
+  return new Promise((ok, erro)=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload =()=>{ URL.revokeObjectURL(url); ok(img); };
+    img.onerror=()=>{ URL.revokeObjectURL(url); erro(new Error('foto ilegível')); };
+    img.src=url;
+  });
+}
+
+/* Gira, encolhe e tira a cor. Foto de celular tem 4000px de largura: o
+   OCR fica lento sem ler nada melhor. Cinza com contraste puxado é o que
+   o Tesseract quer — papel branco, letra preta. */
+function prepararFoto(img, giro, largura){
+  const deitado = (giro===90 || giro===270);
+  const escala  = Math.min(1, largura / (deitado ? img.height : img.width));
+  const w = Math.round(img.width  * escala);
+  const h = Math.round(img.height * escala);
+
+  const cv = document.createElement('canvas');
+  cv.width  = deitado ? h : w;
+  cv.height = deitado ? w : h;
+  const ctx = cv.getContext('2d');
+  ctx.translate(cv.width/2, cv.height/2);
+  ctx.rotate(giro * Math.PI / 180);
+  ctx.drawImage(img, -w/2, -h/2, w, h);
+
+  const dados = ctx.getImageData(0, 0, cv.width, cv.height);
+  const px = dados.data;
+  for(let i=0; i<px.length; i+=4){
+    const cinza = (px[i]*0.299 + px[i+1]*0.587 + px[i+2]*0.114);
+    // Puxa o contraste em torno do meio: some a sombra do papel
+    const v = Math.max(0, Math.min(255, (cinza-128)*1.4 + 128));
+    px[i]=px[i+1]=px[i+2]=v;
+  }
+  ctx.putImageData(dados, 0, 0);
+  return cv;
+}
+
+async function ocrDaFoto(img, giro, largura){
+  const w = await ocrWorker();
+  const r = await w.recognize(prepararFoto(img, giro, largura));
+  return (r && r.data && r.data.text) || '';
+}
+
+/* Lê de pé primeiro, que é como 9 em 10 fotos chegam: acertando de
+   primeira, gasta-se uma passada só. Só quando o texto não tem cara de
+   folha é que as outras três posições são sondadas, e em foto pequena. */
+async function lerFolha(img, aviso){
+  const pontuar = window.SpeedBoy.doc.pontuarOrientacao;
+
+  aviso('lendo a folha', 0.15);
+  let texto = await ocrDaFoto(img, 0, OCR_LARGURA);
+  let nota  = pontuar(texto);
+  let giro  = 0;
+
+  if(nota < 4){
+    for(const g of [90, 270, 180]){
+      aviso('a folha parece virada — testando de lado', 0.5);
+      const t = await ocrDaFoto(img, g, OCR_SONDA);
+      const n = pontuar(t);
+      if(n > nota){ nota = n; giro = g; }
+      if(n >= 4) break;
+    }
+    if(giro){
+      aviso('achei — lendo de novo na posição certa', 0.8);
+      texto = await ocrDaFoto(img, giro, OCR_LARGURA);
+    }
+  }
+  return { texto, giro };
+}
+
+// ── PROGRESSO NA TELA ───────────────────────────────────
+function docProgresso(msg, fracao){
+  const cx=document.getElementById('docProgresso');
+  if(!cx) return;
+  cx.classList.toggle('hidden', msg===null);
+  if(msg===null) return;
+  document.getElementById('docProgressoMsg').textContent = msg;
+  document.getElementById('docBarra').style.width = Math.round(Math.max(0.03, Math.min(1, fracao||0))*100)+'%';
+}
+
+// ── ENTRADA: ARQUIVOS E TEXTO COLADO ────────────────────
+async function docLerArquivos(input){
+  const arquivos = Array.from(input.files||[]);
+  input.value='';                       // deixa refotografar o mesmo arquivo
+  if(!arquivos.length) return;
+
+  let lidos=0, falhas=0;
+  for(let i=0; i<arquivos.length; i++){
+    const nDe = arquivos.length>1 ? ` (${i+1} de ${arquivos.length})` : '';
+    /* Duas fontes de progresso na mesma barra: a etapa, que só quem lê a
+       folha sabe ("testando de lado"), e a fração, que só o Tesseract
+       sabe. Uma escreve a frase, a outra enche a barra — senão uma
+       apagava a mensagem da outra dez vezes por segundo, e a tela ficava
+       parada em "lendo" nos 20 segundos da primeira leitura. */
+    let etapa = 'preparando o leitor';
+    try{
+      _ocrAviso = m => docProgresso(etapa + nDe + '…', m.progress);
+      docProgresso(etapa + nDe + '…', 0.05);
+
+      const img = await carregarImagem(arquivos[i]);
+      const { texto, giro } = await lerFolha(img, (msg, f)=>{ etapa = msg; docProgresso(msg + nDe + '…', f); });
+      if(guardarDocumento(texto, giro)) lidos++; else falhas++;
+    }catch(e){
+      falhas++;
+      sbLogError('ler documento', e);
+    }
+  }
+  _ocrAviso=null;
+  docProgresso(null);
+  renderDocs();
+
+  if(lidos && !falhas)      toast(`✅ ${lidos} folha(s) lida(s) — confira e crie as paradas`,'success');
+  else if(lidos)            toast(`${lidos} lida(s), ${falhas} não deram`, '');
+  else if(!navigator.onLine)toast('Sem sinal: o leitor precisa de internet na primeira vez','error');
+  else                      toast('Não consegui ler a folha — tente com mais luz ou cole o texto','error');
+}
+
+function docLerTextoColado(){
+  const el=document.getElementById('docTexto');
+  const texto=(el.value||'').trim();
+  if(!texto){ toast('Cole o texto da folha primeiro','error'); return; }
+  if(guardarDocumento(texto, 0)){
+    el.value='';
+    document.getElementById('docManual').open=false;
+    renderDocs();
+    toast('✅ Texto lido — confira e crie a parada','success');
+  }else{
+    toast('Não achei nome nem endereço nesse texto','error');
+  }
+}
+
+/* Guarda só o que for folha de verdade. Foto do chão, print de conversa
+   ou folha ilegível dão confiança baixa: entrar na lista com um nome
+   inventado é pior que não entrar. */
+function guardarDocumento(texto, giro){
+  const doc = window.SpeedBoy.doc.lerDocumento(texto);
+  if(doc.confianca < 0.5 || (!doc.cliente && !doc.enderecos.length)) return false;
+  docsLidos.push({
+    id: 'doc_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    quando: new Date().toLocaleString('pt-BR'),
+    giro, doc, endereco: 0, virouParada: false
+  });
+  if(docsLidos.length>20) docsLidos=docsLidos.slice(-20);
+  saveDocs();
+  return true;
+}
+
+// ── TELA ────────────────────────────────────────────────
+function renderDocs(){
+  const alvo=document.getElementById('docLista');
+  if(!alvo) return;
+
+  if(!docsLidos.length){
+    alvo.innerHTML='<div class="doc-vazio">Nenhuma folha lida ainda.<br>Toque em <b>Tirar foto</b> e aponte para a folha inteira, sem sombra.</div>';
+    return;
+  }
+
+  const pendentes = docsLidos.filter(d=>!d.virouParada).length;
+  let html = pendentes>1
+    ? `<button type="button" class="doc-acao doc-acao-forte doc-todas" onclick="docCriarTodas()">＋ Criar as ${pendentes} paradas</button>`
+    : '';
+
+  // Mais nova em cima: é a folha que acabou de ser fotografada
+  docsLidos.slice().reverse().forEach(item=>{
+    /* O documento pode ter vindo do localStorage, gravado por uma versão
+       anterior desta aba. Nenhuma lista pode ser assumida: um forEach em
+       undefined aqui deixaria a aba inteira em branco. */
+    const d   = item.doc || {};
+    d.enderecos = d.enderecos || []; d.telefones = d.telefones || [];
+    d.compromissos = d.compromissos || []; d.revisar = d.revisar || [];
+    const end = d.enderecos[item.endereco] || d.enderecos[0] || {};
+    const tel = d.telefones.length ? fmtPhone(d.telefones[0].numero) : '';
+    const alerta = d.revisar.indexOf('cliente')!==-1;
+
+    const linhaEnd = [end.rua, end.numero].filter(Boolean).join(', ')
+      + (end.bairro ? ' — '+end.bairro : '')
+      + (end.cidade ? ' / '+cityName(end.cidade) : '');
+
+    const marcas = [];
+    if(alerta)     marcas.push('<span class="doc-marca doc-marca-alerta">⚠️ confira o nome</span>');
+    if(!end.rua)   marcas.push('<span class="doc-marca doc-marca-alerta">⚠️ sem endereço</span>');
+    if(!tel)       marcas.push('<span class="doc-marca doc-marca-alerta">⚠️ sem telefone</span>');
+    if(d.cpf)      marcas.push(`<span class="doc-marca">CPF ${esc(d.cpf)}</span>`);
+    d.compromissos.forEach(c=>marcas.push(
+      `<span class="doc-marca">${esc(c.tipo)} ${esc(c.data)}${c.hora?' às '+esc(c.hora):''}</span>`));
+    /* "já usada" e não "já virou parada": pelo caminho do formulário a
+       folha é marcada ao abrir, e a parada só existe se você salvar. */
+    if(item.virouParada) marcas.push('<span class="doc-marca doc-marca-ok">✅ já usada</span>');
+
+    html += `
+      <div class="doc-card${item.virouParada?' doc-card-feito':''}">
+        <div class="doc-card-topo">
+          <div class="doc-nome">${esc(d.cliente||'(sem nome)')}</div>
+          <button type="button" class="doc-x" onclick="docRemover('${escJs(item.id)}')" title="Tirar da lista">✕</button>
+        </div>
+        ${d.responsavel?`<div class="doc-linha">Responsável: ${esc(d.responsavel)}</div>`:''}
+        ${tel?`<div class="doc-linha">📞 ${esc(tel)}${d.telefones.length>1?` <span class="doc-mais">+${d.telefones.length-1}</span>`:''}</div>`:''}
+        <div class="doc-linha">📍 ${esc(linhaEnd||'—')}</div>
+        ${d.enderecos.length>1?`<button type="button" class="doc-troca" onclick="docTrocarEndereco('${escJs(item.id)}')">⇄ usar o outro endereço da folha (${esc(d.enderecos[(item.endereco+1)%d.enderecos.length].tipo)})</button>`:''}
+        ${d.motivo?`<div class="doc-motivo">${esc(d.motivo.slice(0,150))}</div>`:''}
+        <div class="doc-marcas">${marcas.join('')}</div>
+        <div class="doc-acoes">
+          <button type="button" class="doc-acao doc-acao-forte" onclick="docCriarParada('${escJs(item.id)}')">＋ Criar parada</button>
+          <button type="button" class="doc-acao" onclick="docAbrirFormulario('${escJs(item.id)}')">✏️ Abrir no formulário</button>
+        </div>
+      </div>`;
+  });
+
+  alvo.innerHTML = html;
+}
+
+function docItem(id){ return docsLidos.find(d=>d.id===id); }
+
+function docRemover(id){
+  const i=docsLidos.findIndex(d=>d.id===id);
+  if(i<0) return;
+  docsLidos.splice(i,1);
+  saveDocs(); renderDocs();
+}
+
+function docTrocarEndereco(id){
+  const item=docItem(id);
+  if(!item || !(item.doc.enderecos||[]).length) return;
+  item.endereco=(item.endereco+1)%item.doc.enderecos.length;
+  saveDocs(); renderDocs();
+}
+
+/* Vira parada sem passar pelo formulário. É o caminho da pilha de
+   folhas: fotografa dez, confere na lista, cria dez. A taxa fica em
+   branco de propósito — quem define é o fechamento, e um valor chutado
+   entraria na fatura do cliente. */
+function paradaDoDoc(item){
+  const p = window.SpeedBoy.doc.paradaDoDocumento(item.doc, item.endereco);
+  const cidade = p.city || '';
+  const endereco = [p.street, p.number].filter(Boolean).join(', ')
+    + (p.neighborhood ? ', '+p.neighborhood : '')
+    + (cityName(cidade) ? ' - '+cityName(cidade) : '');
+  return {
+    name: p.name, address: endereco,
+    street: p.street, number: p.number, neighborhood: p.neighborhood,
+    store: '', city: cidade, serviceType: 'entrega', deliveryDate: '',
+    complement: p.complement, reference: '',
+    timeFrom: '', timeTo: '',
+    phone: p.phone, value: 0, paid: false,
+    productValue: 0, productPaid: false,
+    notes: p.notes, done: false,
+    _order: stops.length,
+    _addedDate: new Date().toLocaleDateString('pt-BR')
+  };
+}
+
+function docCriarParada(id){
+  const item=docItem(id);
+  if(!item) return;
+  const s=paradaDoDoc(item);
+  if(!s.name || !s.street){ toast('Falta nome ou rua — abra no formulário','error'); return; }
+  stops.push(s);
+  if(s.city && s.neighborhood) addCustomBairro(s.city, s.neighborhood);
+  saveStops();
+  item.virouParada=true; saveDocs(); renderDocs();
+  toast('✅ Parada criada: '+s.name,'success');
+}
+
+function docCriarTodas(){
+  const pendentes=docsLidos.filter(d=>!d.virouParada);
+  let feitas=0, faltando=0;
+  pendentes.forEach(item=>{
+    const s=paradaDoDoc(item);
+    if(!s.name || !s.street){ faltando++; return; }
+    s._order = stops.length;
+    stops.push(s);
+    if(s.city && s.neighborhood) addCustomBairro(s.city, s.neighborhood);
+    item.virouParada=true; feitas++;
+  });
+  if(feitas){ saveStops(); saveDocs(); }
+  renderDocs();
+  toast(feitas
+    ? `✅ ${feitas} parada(s) criada(s)` + (faltando?` — ${faltando} sem endereço, abra no formulário`:'')
+    : 'Nenhuma folha tinha nome e rua', feitas?'success':'error');
+}
+
+/* O outro caminho: abre a parada no formulário já preenchida, para
+   ajustar taxa, loja e horário antes de salvar. */
+function docAbrirFormulario(id){
+  const item=docItem(id);
+  if(!item) return;
+  const p=window.SpeedBoy.doc.paradaDoDocumento(item.doc, item.endereco);
+
+  goForm();
+  document.getElementById('fName').value      = p.name;
+  document.getElementById('fRua').value       = p.street;
+  document.getElementById('fNumero').value    = p.number;
+  document.getElementById('fBairro').value    = p.neighborhood;
+  document.getElementById('fCity').value      = p.city;
+  document.getElementById('fComplement').value= p.complement;
+  document.getElementById('fNotes').value     = p.notes;
+  const tel=document.getElementById('fPhone');
+  tel.value=p.phone; if(p.phone) maskPhone(tel);
+
+  /* Sem onCityChange() aqui: ele é o handler da troca manual de cidade e
+     limpa o bairro — chamado agora, apagaria o bairro que acabou de ser
+     lido da folha. */
+  autoTaxaAritana();
+  autoTaxaKS();
+  item.virouParada=true; saveDocs();
+}
+
+// ═══════════════════════════════════════════════════════
+//  § 44 — PARTIDA
 //  A ordem aqui é a única parte do arquivo em que a ordem das linhas
 //  muda o comportamento — o resto são declarações de função, que o
 //  JavaScript iça para o topo. Mexa com cuidado.

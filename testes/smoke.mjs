@@ -98,7 +98,7 @@ await secao('index.html carrega e as telas existem', async () => {
   ok(reais.length === 0, 'index.html carrega sem erro de JavaScript' + (reais.length ? '\n     ' + reais.join('\n     ') : ''));
 
   const telas = await page.$$eval('.screen', els => els.map(e => e.id));
-  ok(telas.length === 8, `8 telas presentes (achou ${telas.length}: ${telas.join(', ')})`);
+  ok(telas.length === 9, `9 telas presentes (achou ${telas.length}: ${telas.join(', ')})`);
 
   ok(await page.isVisible('#homeScreen'), 'tela inicial visível ao abrir');
 
@@ -530,6 +530,102 @@ await secao('Config dobrável e primeiro uso', async () => {
   });
   ok(entrou.sala === 'SB-A1B2', `o código digitado em minúsculo é aceito (${entrou.sala})`);
   ok(!entrou.cartao, 'depois de entrar, o cartão de boas-vindas não volta');
+
+  await ctx.close();
+});
+
+// ── 7f2. Aba Documento: folha lida vira parada ───────────────
+/* A leitura da FOTO não entra aqui: o OCR são megabytes vindos de uma CDN
+   e o teste roda sem rede. O que se testa é todo o resto do caminho —
+   texto da folha → campos → parada na lista —, que é onde mora o erro que
+   chegaria ao motoboy. O texto abaixo é fictício, com os defeitos reais
+   do OCR (ver testes/documento.mjs). */
+await secao('Aba Documento: a folha lida vira parada', async () => {
+  const { page, ctx } = await abrir('/index.html');
+
+  const FOLHA = [
+    'AUSÊNCIA DE CONTATO',
+    'CLIENTE: JOANA PEREIRA DOS REIS',
+    'TELEFONE DO CONTRATO: (27) 9818-91234',
+    'ENDEREÇO DO CONTRATO: RUA GOVERNADOR',
+    'VALADARES, 14, 29171-727, PARQUE RESIDENCIAL DE',
+    'TUBARÃO.',
+    'MOTIVO DO CONTATO: Processo Previdenciário',
+    'OBSERVAÇÕES: CONTATO COM O ESCRITORIO (27)3065-3080.'
+  ].join('\n');
+
+  const abriu = await page.evaluate(() => {
+    goNav('docScreen', 'nav-doc');
+    return {
+      tela: document.querySelector('.screen.active').id,
+      vazio: document.getElementById('docLista').textContent,
+      leitor: typeof window.SpeedBoy.doc.lerDocumento === 'function'
+    };
+  });
+  ok(abriu.tela === 'docScreen', 'a aba Documento abre pela barra de baixo');
+  ok(/Nenhuma folha lida/.test(abriu.vazio), 'sem folha nenhuma, a aba explica o que fazer');
+  ok(abriu.leitor, 'speedboy-documento.js carregou junto com a página');
+
+  const lido = await page.evaluate((folha) => {
+    document.getElementById('docTexto').value = folha;
+    docLerTextoColado();
+    const card = document.querySelector('.doc-card');
+    return {
+      cards: document.querySelectorAll('.doc-card').length,
+      texto: card ? card.textContent.replace(/\s+/g, ' ') : ''
+    };
+  }, FOLHA);
+  ok(lido.cards === 1, `a folha colada vira um cartão (achou ${lido.cards})`);
+  ok(/JOANA PEREIRA DOS REIS/.test(lido.texto), 'o cartão mostra o nome do cliente');
+  ok(/Parque Residencial Tubarão/.test(lido.texto),
+    'o bairro abreviado na folha aparece com o nome oficial da lista');
+  ok(/\(27\) 98189-1234/.test(lido.texto), 'o telefone do cliente aparece formatado');
+  ok(!/3065/.test(lido.texto), 'o telefone do escritório NÃO aparece como telefone do cliente');
+
+  const parada = await page.evaluate(() => {
+    document.querySelector('.doc-acao-forte').click();
+    const s = stops[stops.length - 1] || {};
+    return {
+      total: stops.length,
+      name: s.name, phone: s.phone, street: s.street,
+      number: s.number, neighborhood: s.neighborhood, city: s.city,
+      notes: s.notes, done: s.done, value: s.value,
+      guardado: JSON.parse(localStorage.getItem('sb_stops') || '[]').length,
+      marcado: document.querySelector('.doc-card').textContent
+    };
+  });
+  ok(parada.total === 1, `criar a parada põe uma entrega na lista (achou ${parada.total})`);
+  ok(parada.name === 'JOANA PEREIRA DOS REIS' && parada.phone === '27981891234',
+    'a parada nasce com nome e telefone da folha');
+  ok(parada.street === 'RUA GOVERNADOR VALADARES' && parada.number === '14' &&
+     parada.neighborhood === 'Parque Residencial Tubarão' && parada.city === 'SRR',
+    `a parada nasce com o endereço completo (${parada.street}, ${parada.number}, ${parada.neighborhood}, ${parada.city})`);
+  ok(parada.value === 0, 'a taxa fica em branco — quem define o valor é você, não a foto');
+  ok(parada.guardado === 1, 'a parada foi gravada no localStorage, não só na tela');
+  ok(/já usada/.test(parada.marcado), 'a folha fica marcada, para não virar parada duas vezes');
+
+  // Abrir no formulário preenche os campos e deixa revisar antes de salvar
+  const form = await page.evaluate(() => {
+    docAbrirFormulario(docsLidos[0].id);
+    return {
+      tela: document.querySelector('.screen.active').id,
+      nome: document.getElementById('fName').value,
+      bairro: document.getElementById('fBairro').value,
+      cidade: document.getElementById('fCity').value
+    };
+  });
+  ok(form.tela === 'addScreen', 'o outro caminho abre o formulário da parada');
+  ok(form.nome === 'JOANA PEREIRA DOS REIS' && form.bairro === 'Parque Residencial Tubarão' && form.cidade === 'SRR',
+    `o formulário abre preenchido, inclusive o bairro (${form.bairro || 'vazio'})`);
+
+  // Foto do chão não pode virar parada com nome inventado
+  const lixo = await page.evaluate(() => {
+    const antes = document.querySelectorAll('.doc-card').length;
+    document.getElementById('docTexto').value = 'oi bom dia tudo bem';
+    docLerTextoColado();
+    return { antes, depois: document.querySelectorAll('.doc-card').length };
+  });
+  ok(lixo.antes === lixo.depois, 'texto que não é folha não entra na lista');
 
   await ctx.close();
 });

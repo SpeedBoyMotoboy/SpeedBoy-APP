@@ -27,6 +27,7 @@ Ou individualmente:
 | `solicitacoes.mjs` | editar e cancelar pedido do cliente sem colisão |
 | `fechamento.mjs` | histórico do dia e contagem de entregas (veja abaixo) |
 | `nucleo.mjs` | `speedboy-core.js` — sobretudo: nenhum bairro se perdeu (veja abaixo) |
+| `documento.mjs` | folha fotografada → campos da parada, com os defeitos reais do OCR (veja abaixo) |
 | `desfazer.mjs` | desfazer e confirmação (veja abaixo) |
 | `config.mjs` | Config dobrável e primeiro uso (veja abaixo) |
 | `full.mjs` | modo FULL: repasse, problema na entrega e autoria (veja abaixo) |
@@ -156,6 +157,50 @@ Cobre também: formato único `{nome, bairros[]}`, os dois escopos de bairro
 personalizado (o do app e o de cada loja) sem vazar um no outro, `fmtPhone(null)`
 — que quebrava o `motoboy.html` — e a regra de que nenhuma página pode
 *reimplementar* o que vem do núcleo (delegar é permitido; copiar não).
+
+## `documento.mjs` — o que o OCR erra, e o que não pode errar
+
+A aba Documento lê a folha "AUSÊNCIA DE CONTATO" que o escritório de advocacia
+manda e monta a parada sozinha. O teste cobre a metade determinística
+(`speedboy-documento.js`): **texto → campos**.
+
+As folhas do teste são fictícias — o repositório é público e a folha real traz
+nome, CPF e endereço de gente que não pediu para aparecer aqui. O que foi
+copiado das fotos reais, e é o que faz o teste valer, são os **defeitos do
+OCR**, um a um:
+
+- o rótulo `CLIENTE:` sai ilegível (`| VE`, `so`, `SS. PRE`) **enquanto o nome
+  ao lado sai perfeito** — daí o segundo caminho pela assinatura do fim da folha
+- o timbre do escritório vira uma linha de texto logo acima do nome, candidata
+  a ser lida como cliente
+- o CPF ganha espaço no meio: `147.267 .777-73`, `...067-4 6` — e mesmo
+  assim precisa ser reconhecido, **para ser descartado**
+- o nome quebra no fim da linha e continua na de baixo
+- o bairro vem abreviado (`Parque Res. de Tubarão`) ou sem o numeral que a
+  lista oficial tem (`Vista da Serra` × `Vista da Serra I`)
+
+Quatro regras valem por si:
+
+- **o CPF não sai da folha.** Entregar não depende dele, então o app não o
+  coleta: o número não volta no documento lido, não entra nas observações da
+  parada e não chega ao `localStorage`. O que não é guardado não vaza. A
+  assinatura do pé da folha (`Eu, FULANO, inscrito no CPF..., declaro`) fecha o
+  bloco anterior — sem isso ela entrava inteira dentro do MOTIVO, com CPF e
+  tudo —, e há ainda uma rede de segurança que apaga o número de qualquer texto
+  devolvido, independente do layout da folha de amanhã.
+- **o telefone do escritório nunca vira telefone do cliente.** O (27) 3065-3080
+  está impresso em toda folha, dentro das observações. Sem descartá-lo, metade
+  das paradas nasceria com o telefone do advogado — e o motoboy ligaria para o
+  escritório parado na porta do cliente.
+- **CPF não é telefone.** Os dois têm 11 dígitos. O que separa é o DDD (não
+  existe DDD 07) e o 9 na frente do celular.
+- **a folha virada tem de perder.** É assim que o app escolhe girar a foto: OCR
+  barato nas quatro posições, fica a que reconhece mais rótulos. A folha de
+  lado pontua zero.
+
+Texto que não é folha — foto do chão, print de conversa, folha em branco — tem
+de sair vazio e com confiança baixa. Entrar na lista com um nome inventado é
+pior que não entrar.
 
 ## `sync.mjs` — ninguém pode perder entrega
 

@@ -403,7 +403,7 @@ for (const arq of PAGINAS) {
 }
 
 // ── 8. Arquivos .js soltos ────────────────────────────────────
-for (const arq of ['sw.js', 'speedboy-firebase.js', 'speedboy-core.js', 'fatura-padrao.js', 'scripts/bump-versao.mjs', 'scripts/gerar-icones.mjs']) {
+for (const arq of ['sw.js', 'speedboy-firebase.js', 'speedboy-core.js', 'speedboy-documento.js', 'fatura-padrao.js', 'scripts/bump-versao.mjs', 'scripts/gerar-icones.mjs']) {
   try {
     execFileSync(process.execPath, ['--check', path.join(RAIZ, arq)], { stdio: 'pipe' });
     ok(true, `${arq}: sintaxe valida`);

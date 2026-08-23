@@ -518,3 +518,44 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 .confirm-nao{background:var(--card2);border:1px solid var(--border);color:var(--text);}
 .confirm-sim{background:var(--green);border:none;color:#000;}
 .confirm-sim.perigo{background:var(--red);color:#fff;}
+
+/* ══ DOCUMENTO (aba: foto da folha → parada) ══
+   Botões grandes de propósito: esta tela é usada em pé, com a folha numa
+   mão e o celular na outra. Nada aqui declara cor própria — tudo sai dos
+   tokens do speedboy.css, senão a tela clara vira texto invisível. */
+.doc-explica{font-size:12.5px;color:var(--muted);line-height:1.6;margin-bottom:14px;}
+.doc-botoes{display:flex;gap:8px;margin-bottom:12px;}
+.doc-btn{flex:1;background:var(--card);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius);padding:18px 10px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;text-align:center;cursor:pointer;display:block;}
+.doc-btn:active{transform:scale(.98);}
+.doc-btn-camera{background:var(--accent);border-color:var(--accent);color:#000;}
+.doc-btn input{display:none;}
+
+.doc-progresso{margin-bottom:12px;}
+.doc-progresso-msg{font-size:12px;color:var(--muted);margin-bottom:6px;}
+.doc-barra{height:6px;background:var(--card2);border-radius:3px;overflow:hidden;}
+.doc-barra-cheia{height:100%;width:3%;background:var(--accent);border-radius:3px;transition:width .3s;}
+
+.doc-vazio{font-size:13px;color:var(--muted);line-height:1.7;text-align:center;padding:26px 10px;border:1.5px dashed var(--border);border-radius:var(--radius);}
+.doc-todas{width:100%;margin-bottom:12px;}
+
+.doc-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;}
+.doc-card-feito{opacity:.6;}
+.doc-card-topo{display:flex;align-items:flex-start;gap:8px;}
+.doc-nome{flex:1;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;line-height:1.2;}
+.doc-x{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:0 2px;}
+.doc-linha{font-size:13px;color:var(--text);margin-top:5px;line-height:1.4;}
+.doc-mais{font-size:11px;color:var(--muted);}
+.doc-motivo{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.45;}
+.doc-troca{background:none;border:none;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;padding:6px 0 0;text-align:left;}
+
+.doc-marcas{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+.doc-marca{font-size:10.5px;font-weight:700;color:var(--muted);background:var(--card2);border-radius:8px;padding:3px 7px;}
+.doc-marca-alerta{color:var(--red);}
+.doc-marca-ok{color:var(--green);}
+
+.doc-acoes{display:flex;gap:8px;margin-top:10px;}
+.doc-acao{flex:1;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:11px 8px;font-weight:800;font-size:13px;cursor:pointer;}
+.doc-acao-forte{background:var(--green);border-color:var(--green);color:#000;}
+
+.doc-manual{margin-top:16px;}
+.doc-manual summary{font-size:12.5px;color:var(--muted);cursor:pointer;padding:6px 0;}

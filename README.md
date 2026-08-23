@@ -46,6 +46,15 @@ isso o celular instalado continua servindo o código antigo do cache.
 | `motoboy.html` | os motoboys | Painel de um repasse: lista, rota, problema na entrega, confirmação com foto. |
 | `fatura.html` | as lojas | Conferem uma fatura publicada e baixam o PDF. |
 
+Dentro do app, a aba **Documento** lê uma folha fotografada e monta a parada
+sozinha — nome, telefone e endereço saem da foto. Nasceu de um cliente que
+manda pilhas de folhas "AUSÊNCIA DE CONTATO", uma por pessoa a visitar. O
+reconhecimento roda **no próprio celular**: a foto não sai do aparelho, porque
+a folha traz dados de terceiros. Pelo mesmo motivo o **CPF impresso na folha é
+reconhecido só para ser descartado** — ele não vai para a parada nem para o
+`localStorage`; reconhecê-lo é o que impede os onze dígitos de entrarem como
+telefone do cliente.
+
 Nenhuma delas tem login. O que separa os dados é o **código da sala**
 (`SB-XXXX`), que viaja no link.
 
@@ -59,6 +68,7 @@ Nenhuma delas tem login. O que separa os dados é o **código da sala**
 | `speedboy-app.css` | Estilos só do `index.html`. Saíram de um `<style>` de 472 linhas que ficava dentro dele. |
 | `speedboy-core.js` | Dinheiro, telefone, cidades e bairros, tema, aviso rápido. Existe porque nove símbolos viviam duplicados entre as páginas e as cópias divergiram: 93 bairros que o cliente escolhia no `pedido.html` não existiam na lista do app. |
 | `speedboy-graficos.js` | Os cinco gráficos de canvas. Não dependem do estado do app: recebem os dados apurados e devolvem um canvas. |
+| `speedboy-documento.js` | Folha fotografada → campos da parada. Só texto: quem tira a foto e chama o OCR é o `§ 43` do `index.html`. Roda igual no Node, e é por isso que dá para testá-lo contra o texto real do OCR. |
 | `speedboy-firebase.js` | Configuração do Firebase e login anônimo. |
 | `fatura-padrao.js` | Layout único de fatura e de fechamento em PDF (`speedboy.fatura/v1`), compartilhado entre o app e a página do cliente. |
 | `sw.js` | Service worker: abre offline, e **nunca** troca de versão sozinho. A `VERSION` é gerada por `scripts/bump-versao.mjs` a partir do conteúdo — não edite à mão. |
@@ -83,13 +93,14 @@ que se procura mais:
 | o fechamento e o PDF | `§ 26`, `§ 27` |
 | corrigir uma entrega antiga | `§ 25b` |
 | o modo FULL e os repasses | `§ 29`, `§ 30`, `§ 31` |
+| a foto da folha que vira parada | `§ 43` (e o `speedboy-documento.js`) |
 | sincronizar entre os celulares | `§ 7` (merge) e `§ 35` (Firebase) |
-| o que acontece ao abrir o app | `§ 43`, no fim do arquivo |
+| o que acontece ao abrir o app | `§ 44`, no fim do arquivo |
 
-**`§ 43` é a única parte do arquivo em que a ordem das linhas muda o
+**`§ 44` é a única parte do arquivo em que a ordem das linhas muda o
 comportamento.** O resto são declarações de função, que o JavaScript iça
 para o topo — mover uma função de lugar é seguro; mover uma linha de
-`§ 43`, não.
+`§ 44`, não.
 
 ---
 

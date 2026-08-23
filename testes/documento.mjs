@@ -11,7 +11,8 @@
      o nome do cliente na mesma linha sai perfeito;
    • o timbre do escritório vira uma linha de texto ("MM FERNANDO
      MIRANDA") logo acima do nome, candidata a ser lida como cliente;
-   • o CPF ganha espaço no meio: "147.267 .777-73", "...067-4 6";
+   • o CPF ganha espaço no meio: "147.267 .777-73", "...067-4 6" — e
+     mesmo assim precisa ser reconhecido, para ser descartado;
    • o nome quebra no meio da linha e continua na de baixo;
    • o telefone do escritório está impresso em TODA folha;
    • o CEP tem 8 dígitos e o CPF 11, iguais em forma a telefone;
@@ -59,7 +60,6 @@ declaro que estou ciente/recebi as informações acima.`,
     espera: {
       cliente: 'JOANA PEREIRA DOS REIS',
       responsavel: 'MARTA PEREIRA DA COSTA REIS',
-      cpf: '111.222.333-44',
       telefones: ['27981891234'],
       rua: 'RUA GOVERNADOR VALADARES', numero: '14',
       bairro: 'Parque Residencial Tubarão', cidade: 'SRR', cep: '29171-727'
@@ -89,7 +89,6 @@ que estou ciente/recebi as informações acima.`,
     espera: {
       cliente: 'PRE ANTONIO BATISTA NEVES',
       responsavel: 'LUCIA BATISTA NEVES',
-      cpf: '111.222.333-44',
       telefones: ['27988483123'],
       rua: 'R. Lisboa', numero: '238',
       bairro: 'Parque Residencial Tubarão', cidade: 'SRR', cep: '29171-710',
@@ -117,7 +116,6 @@ que estou ciente/recebi as informações acima.`,
     espera: {
       cliente: 'PAULO SERGIO DE ALMEIDA',
       responsavel: '',
-      cpf: '111.222.333-44',
       telefones: ['27988041234', '27996211234', '27998961234'],
       rua: 'Rua das Palmeiras', numero: '260',
       bairro: 'Vista da Serra', cidade: 'SRR', cep: '29176-392',
@@ -150,7 +148,6 @@ AVALIAÇÃO SOCIAL: 17/11/2026 (Terça-feira) às 11:00`,
     espera: {
       cliente: 'RENATO LIMA SOARES',
       responsavel: '',
-      cpf: '',
       telefones: ['27999623123', '27996981234'],
       rua: 'Rua Alfredo Galeno', numero: '191',
       bairro: 'Vila Nova de Colares', cidade: 'SRR', cep: '',
@@ -179,7 +176,6 @@ informações acima. ;`,
     espera: {
       cliente: 'CARLOS EDUARDO NUNES',
       responsavel: 'BEATRIZ NUNES DA CRUZ',
-      cpf: '111.222.333-44',
       telefones: ['27997341234', '27998241234', '27999701234', '27992931234', '27999561234'],
       rua: 'Rua Santa Cecília', numero: '535', complemento: 'caixa 2',
       bairro: 'São Francisco', cidade: 'SRR', cep: '29190-000'
@@ -196,7 +192,6 @@ for (const folha of FOLHAS) {
 
   ok(d.cliente === e.cliente, `${rotulo} cliente = "${e.cliente}" (leu "${d.cliente}")`);
   ok(d.responsavel === e.responsavel, `${rotulo} responsável = "${e.responsavel}" (leu "${d.responsavel}")`);
-  ok(d.cpf === e.cpf, `${rotulo} CPF = "${e.cpf}" (leu "${d.cpf}")`);
 
   const tels = d.telefones.map(t => t.numero);
   ok(JSON.stringify(tels) === JSON.stringify(e.telefones),
@@ -236,6 +231,21 @@ for (const folha of FOLHAS) {
   const d = doc.lerDocumento(folha.texto);
   const tem = d.telefones.some(t => t.numero.indexOf('3065') !== -1);
   ok(!tem, `[${folha.nome}] o telefone do escritório ficou de fora`);
+}
+
+// ── 2b. O CPF NÃO PODE SAIR DA FOLHA ─────────────────────────
+/* Entregar não depende do CPF, então o app não o coleta: ele não volta no
+   documento lido, não vai para as observações da parada e não chega ao
+   localStorage. O que não é guardado não vaza. Reconhecer o número
+   continua sendo necessário — é o que impede que os onze dígitos entrem
+   como telefone do cliente e que o nome de quem assina se perca. */
+for (const folha of FOLHAS) {
+  const d = doc.lerDocumento(folha.texto);
+  const p = doc.paradaDoDocumento(d);
+  const numeros = JSON.stringify(d) + ' ' + JSON.stringify(p);
+  ok(numeros.indexOf('111.222.333-44') === -1 && numeros.indexOf('11122233344') === -1,
+    `[${folha.nome}] o CPF não aparece em lugar nenhum do que o app guarda`);
+  ok(d.cpf === undefined, `[${folha.nome}] o documento lido não tem campo de CPF`);
 }
 
 // ── 3. CPF E CEP NÃO PODEM VIRAR TELEFONE ────────────────────
@@ -298,8 +308,8 @@ for (const folha of FOLHAS) {
   ok(p.street === 'RUA GOVERNADOR VALADARES' && p.number === '14' &&
      p.neighborhood === 'Parque Residencial Tubarão' && p.city === 'SRR',
     'a parada leva rua, número, bairro e cidade');
-  ok(p.notes.indexOf('CPF 111.222.333-44') !== -1 && p.notes.indexOf('MARTA') !== -1,
-    'as observações levam CPF e responsável, que é o que identifica quem assina');
+  ok(p.notes.indexOf('MARTA') !== -1,
+    'as observações levam o responsável, que é quem assina o recebimento');
 
   // Segundo endereço: a tela oferece, esta função entrega
   const d3 = doc.lerDocumento(FOLHAS[2].texto);

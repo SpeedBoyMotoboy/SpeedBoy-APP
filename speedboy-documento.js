@@ -22,7 +22,9 @@
 
    • CPF tem 11 dígitos, telefone celular também. Separar os dois por
      tamanho pega o CPF como telefone. O que separa de verdade é o DDD e
-     o 9 na frente do número — ver ehTelefone().
+     o 9 na frente do número — ver ehTelefone(). O CPF é reconhecido para
+     ser DESCARTADO: nada aqui devolve o número dele, porque entregar não
+     depende disso.
 
    • O telefone do escritório (27) 3065-3080 está impresso em TODA folha,
      dentro das observações. Sem descartá-lo, metade das paradas nasceria
@@ -71,6 +73,12 @@
     return '';
   }
 
+  /* A assinatura do pé da folha ("Eu, FULANO, inscrito no CPF..., declaro
+     que estou ciente") não é continuação de nada — é o fim do assunto.
+     Sem fechar o bloco aqui, ela entrava inteira dentro do MOTIVO, e com
+     ela o número do CPF ia parar nas observações da parada. */
+  var FIM_DE_BLOCO = /^EU,? [A-Z]|DECLARO|CIENTE\/RECEBI|INFORMACOES ACIMA|CONFORME CLAUSULA|TELEFONE ATUALIZADO/;
+
   /* Divide a folha em blocos rotulados. Devolve na ordem em que
      aparecem, porque a ordem importa: o primeiro endereço da folha é o
      do contrato mesmo quando o rótulo dele saiu ilegível. */
@@ -96,6 +104,8 @@
           }
         }
       }
+
+      if (!achado && FIM_DE_BLOCO.test(chaveDeRotulo(linha))) atual = null;
 
       if (achado) {
         atual = { campo: achado.campo, tipo: achado.tipo, linhas: [limpo(linha.slice(corte + 1))] };
@@ -305,7 +315,7 @@
   /* Timbre e cabeçalho não são nome de cliente. Procurados em qualquer
      posição da linha: numa das folhas o timbre saiu "MM FERNANDO
      MIRANDA", com o logo virando letra. */
-  var CABECALHOS = /AUSENCIA DE CONTATO|FERNANDO MIRANDA|ADVOGADOS|DECLARO|CIENTE\/RECEBI|INFORMACOES ACIMA/;
+  var CABECALHOS = /AUSENCIA DE CONTATO|FERNANDO MIRANDA|ADVOGADOS|DECLARO|CIENTE\/RECEBI|INFORMACOES ACIMA|^EU,? |INSCRIT[OA]/;
 
   /* "| VE RIQUELMY DA CRUZ DA SILVA": quando o rótulo CLIENTE é comido
      pelo OCR, sobra lixo na frente do nome. Só caem fora tokens com
@@ -352,24 +362,32 @@
     };
   }
 
+  /* Rede de segurança, independente do formato da folha: qualquer texto
+     que o documento devolva sai sem o número. A folha de amanhã pode ter
+     o CPF num lugar novo — a garantia não pode depender do layout. */
+  function semCpf(t) {
+    return String(t || '').replace(new RegExp(RE_CPF.source, 'g'), '•••.•••.•••-••');
+  }
+
   // ── LEITURA ─────────────────────────────────────────────────
   function lerDocumento(texto) {
     var bs = blocos(texto);
     var doc = {
-      cliente: '', responsavel: '', cpf: '', assinante: '',
+      cliente: '', responsavel: '', assinante: '',
       telefones: [], enderecos: [],
       motivo: '', observacoes: '', compromissos: [],
-      revisar: [], confianca: 0, texto: String(texto || '')
+      revisar: [], confianca: 0, texto: semCpf(texto)
     };
 
     // ── assinatura: "Eu, FULANO, inscrito no CPF: 000.000.000-00"
     var assin = String(texto || '').match(/\bEu,?\s+([A-ZÀ-Ú][A-Za-zÀ-ú\s.]{5,80}?)\s*,\s*inscrit/i);
     if (assin) doc.assinante = limpo(assin[1]).replace(/[\s.,;|]+$/, '');
-    var cpf = String(texto || '').match(new RegExp('CPF\\s*:?\\s*(' + RE_CPF.source.replace(/\\b/g, '') + ')', 'i'));
-    if (cpf) {
-      var d = cpf[1].replace(/\D/g, '');
-      if (d.length === 11) doc.cpf = d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6, 9) + '-' + d.slice(9);
-    }
+    /* O número do CPF é reconhecido, mas NUNCA é devolvido: o motoboy não
+       precisa dele para entregar, e o que não é coletado não vaza, não vai
+       para o localStorage e não entra na fatura. A folha continua com ele
+       impressa — quem precisa conferir, confere no papel. Aqui ele serve
+       só para duas coisas: achar o nome de quem assina e impedir que os
+       onze dígitos sejam lidos como telefone do cliente. */
 
     bs.forEach(function (b) {
       if (b.campo === 'cliente') {
@@ -386,9 +404,9 @@
         e.tipo = b.tipo || (doc.enderecos.length ? 'assertiva' : 'contrato');
         if (e.rua) doc.enderecos.push(e);
       } else if (b.campo === 'motivo') {
-        doc.motivo = b.texto;
+        doc.motivo = semCpf(b.texto);
       } else if (b.campo === 'observacoes') {
-        doc.observacoes = b.texto;
+        doc.observacoes = semCpf(b.texto);
       } else if (b.campo === 'pericia' || b.campo === 'avaliacao') {
         var c = lerCompromisso(b.texto);
         if (c) { c.tipo = b.campo === 'pericia' ? 'Perícia' : 'Avaliação social'; doc.compromissos.push(c); }
@@ -462,7 +480,6 @@
     var end = doc.enderecos[indiceEndereco || 0] || doc.enderecos[0] || {};
     var notas = [];
     if (doc.responsavel) notas.push('Responsável: ' + doc.responsavel);
-    if (doc.cpf)         notas.push('CPF ' + doc.cpf);
     if (doc.motivo)      notas.push(doc.motivo.replace(/\s+/g, ' ').slice(0, 160));
     doc.compromissos.forEach(function (c) {
       notas.push(c.tipo + ' ' + [c.data, c.hora].filter(Boolean).join(' às '));

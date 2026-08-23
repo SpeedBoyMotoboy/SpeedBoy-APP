@@ -5859,7 +5859,6 @@ function renderDocs(){
     if(alerta)     marcas.push('<span class="doc-marca doc-marca-alerta">⚠️ confira o nome</span>');
     if(!end.rua)   marcas.push('<span class="doc-marca doc-marca-alerta">⚠️ sem endereço</span>');
     if(!tel)       marcas.push('<span class="doc-marca doc-marca-alerta">⚠️ sem telefone</span>');
-    if(d.cpf)      marcas.push(`<span class="doc-marca">CPF ${esc(d.cpf)}</span>`);
     d.compromissos.forEach(c=>marcas.push(
       `<span class="doc-marca">${esc(c.tipo)} ${esc(c.data)}${c.hora?' às '+esc(c.hora):''}</span>`));
     /* "já usada" e não "já virou parada": pelo caminho do formulário a

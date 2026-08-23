@@ -50,7 +50,10 @@ Dentro do app, a aba **Documento** lê uma folha fotografada e monta a parada
 sozinha — nome, telefone e endereço saem da foto. Nasceu de um cliente que
 manda pilhas de folhas "AUSÊNCIA DE CONTATO", uma por pessoa a visitar. O
 reconhecimento roda **no próprio celular**: a foto não sai do aparelho, porque
-a folha traz CPF e endereço de terceiros.
+a folha traz dados de terceiros. Pelo mesmo motivo o **CPF impresso na folha é
+reconhecido só para ser descartado** — ele não vai para a parada nem para o
+`localStorage`; reconhecê-lo é o que impede os onze dígitos de entrarem como
+telefone do cliente.
 
 Nenhuma delas tem login. O que separa os dados é o **código da sala**
 (`SB-XXXX`), que viaja no link.

@@ -173,13 +173,21 @@ OCR**, um a um:
   ao lado sai perfeito** — daí o segundo caminho pela assinatura do fim da folha
 - o timbre do escritório vira uma linha de texto logo acima do nome, candidata
   a ser lida como cliente
-- o CPF ganha espaço no meio: `147.267 .777-73`, `...067-4 6`
+- o CPF ganha espaço no meio: `147.267 .777-73`, `...067-4 6` — e mesmo
+  assim precisa ser reconhecido, **para ser descartado**
 - o nome quebra no fim da linha e continua na de baixo
 - o bairro vem abreviado (`Parque Res. de Tubarão`) ou sem o numeral que a
   lista oficial tem (`Vista da Serra` × `Vista da Serra I`)
 
-Três regras valem por si:
+Quatro regras valem por si:
 
+- **o CPF não sai da folha.** Entregar não depende dele, então o app não o
+  coleta: o número não volta no documento lido, não entra nas observações da
+  parada e não chega ao `localStorage`. O que não é guardado não vaza. A
+  assinatura do pé da folha (`Eu, FULANO, inscrito no CPF..., declaro`) fecha o
+  bloco anterior — sem isso ela entrava inteira dentro do MOTIVO, com CPF e
+  tudo —, e há ainda uma rede de segurança que apaga o número de qualquer texto
+  devolvido, independente do layout da folha de amanhã.
 - **o telefone do escritório nunca vira telefone do cliente.** O (27) 3065-3080
   está impresso em toda folha, dentro das observações. Sem descartá-lo, metade
   das paradas nasceria com o telefone do advogado — e o motoboy ligaria para o

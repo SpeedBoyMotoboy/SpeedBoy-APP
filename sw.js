@@ -15,7 +15,7 @@
    conteúdo dos arquivos — não edite à mão.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION = '20260823-dc3999ed';                       // gerado por scripts/bump-versao.mjs
+const VERSION = '20260823-f1b1d649';                       // gerado por scripts/bump-versao.mjs
 const CACHE   = 'speedboy-' + VERSION;
 
 // Casca do app: o que precisa estar disponível para abrir offline.

@@ -551,7 +551,9 @@ await secao('Aba Documento: a folha lida vira parada', async () => {
     'VALADARES, 14, 29171-727, PARQUE RESIDENCIAL DE',
     'TUBARÃO.',
     'MOTIVO DO CONTATO: Processo Previdenciário',
-    'OBSERVAÇÕES: CONTATO COM O ESCRITORIO (27)3065-3080.'
+    'OBSERVAÇÕES: CONTATO COM O ESCRITORIO (27)3065-3080.',
+    'Eu, JOANA PEREIRA DOS REIS, inscrito no CPF: 111.222.333-44, declaro',
+    'que estou ciente/recebi as informações acima.'
   ].join('\n');
 
   const abriu = await page.evaluate(() => {
@@ -581,6 +583,7 @@ await secao('Aba Documento: a folha lida vira parada', async () => {
     'o bairro abreviado na folha aparece com o nome oficial da lista');
   ok(/\(27\) 98189-1234/.test(lido.texto), 'o telefone do cliente aparece formatado');
   ok(!/3065/.test(lido.texto), 'o telefone do escritório NÃO aparece como telefone do cliente');
+  ok(!/111\.222|11122233344/.test(lido.texto), 'o CPF impresso na folha não aparece na tela');
 
   const parada = await page.evaluate(() => {
     document.querySelector('.doc-acao-forte').click();
@@ -591,6 +594,7 @@ await secao('Aba Documento: a folha lida vira parada', async () => {
       number: s.number, neighborhood: s.neighborhood, city: s.city,
       notes: s.notes, done: s.done, value: s.value,
       guardado: JSON.parse(localStorage.getItem('sb_stops') || '[]').length,
+      gravado: (localStorage.getItem('sb_stops') || '') + (localStorage.getItem('sb_docs') || ''),
       marcado: document.querySelector('.doc-card').textContent
     };
   });
@@ -602,6 +606,10 @@ await secao('Aba Documento: a folha lida vira parada', async () => {
     `a parada nasce com o endereço completo (${parada.street}, ${parada.number}, ${parada.neighborhood}, ${parada.city})`);
   ok(parada.value === 0, 'a taxa fica em branco — quem define o valor é você, não a foto');
   ok(parada.guardado === 1, 'a parada foi gravada no localStorage, não só na tela');
+  /* Entregar não depende do CPF, então o app não o guarda — nem na parada,
+     nem na folha lida que fica no aparelho. */
+  ok(!/111\.222|11122233344/.test(parada.gravado),
+    'o CPF não foi parar em nada que o app grava no aparelho');
   ok(/já usada/.test(parada.marcado), 'a folha fica marcada, para não virar parada duas vezes');
 
   // Abrir no formulário preenche os campos e deixa revisar antes de salvar

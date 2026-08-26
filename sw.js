@@ -15,7 +15,7 @@
    conteúdo dos arquivos — não edite à mão.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION = '20260812-da1a8186';                       // gerado por scripts/bump-versao.mjs
+const VERSION = '20260826-a0ec7075';                       // gerado por scripts/bump-versao.mjs
 const CACHE   = 'speedboy-' + VERSION;
 
 // Casca do app: o que precisa estar disponível para abrir offline.
@@ -35,6 +35,7 @@ const SHELL = [
   './speedboy.css',
   './speedboy-app.css',
   './fatura-padrao.js',
+  './speedboy-documento.js',
   './fatura.html',
   './offline.html',
   './icones/icone-192.png',
@@ -56,6 +57,31 @@ const NUNCA_CACHEAR = [
 ];
 
 const ehDinamico = url => NUNCA_CACHEAR.some(h => url.includes(h));
+
+/* O leitor de documento (Tesseract) vem da CDN e são alguns MB. Guardar
+   em cache é o que faz a aba Documento funcionar sem sinal depois da
+   primeira vez — e num cache PRÓPRIO, que sobrevive à troca de versão do
+   app: baixar tudo de novo a cada atualização, na rua, no 3G, seria pior
+   que não guardar.
+
+   O nome não começa com "speedboy-" de propósito: o activate apaga todo
+   cache com esse prefixo, e este não pode ir junto. */
+const CACHE_OCR = 'sb-ocr-v1';
+const OCR_HOSTS = ['cdn.jsdelivr.net', 'tessdata.projectnaptha.com'];
+const ehOcr = url => OCR_HOSTS.some(h => url.includes(h));
+
+async function cacheDeOcr(req) {
+  const cache  = await caches.open(CACHE_OCR);
+  const cached = await cache.match(req);
+  if (cached) return cached;
+
+  const res = await fetch(req);
+  /* Resposta opaca (script carregado sem CORS) não pode ser guardada — o
+     cache.put lança. O navegador ainda a guarda no cache HTTP dele, que
+     é o que segura o núcleo wasm entre sessões. */
+  if (res && res.ok && res.type !== 'opaque') cache.put(req, res.clone()).catch(() => {});
+  return res;
+}
 
 // ── INSTALL ────────────────────────────────────────────────────
 // Sem skipWaiting(): o SW novo fica em waiting até o usuário mandar trocar.
@@ -138,6 +164,9 @@ self.addEventListener('fetch', e => {
 
   // Dados vivos passam direto, sem tocar no cache
   if (ehDinamico(url)) return;
+
+  // Leitor de documento: cache próprio, primeiro o guardado
+  if (ehOcr(url)) { e.respondWith(cacheDeOcr(req)); return; }
 
   const mesmaOrigem = url.startsWith(self.location.origin);
 

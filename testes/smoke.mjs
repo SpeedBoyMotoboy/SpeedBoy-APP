@@ -98,7 +98,7 @@ await secao('index.html carrega e as telas existem', async () => {
   ok(reais.length === 0, 'index.html carrega sem erro de JavaScript' + (reais.length ? '\n     ' + reais.join('\n     ') : ''));
 
   const telas = await page.$$eval('.screen', els => els.map(e => e.id));
-  ok(telas.length === 8, `8 telas presentes (achou ${telas.length}: ${telas.join(', ')})`);
+  ok(telas.length === 9, `9 telas presentes (achou ${telas.length}: ${telas.join(', ')})`);
 
   ok(await page.isVisible('#homeScreen'), 'tela inicial visível ao abrir');
 
@@ -530,6 +530,157 @@ await secao('Config dobrável e primeiro uso', async () => {
   });
   ok(entrou.sala === 'SB-A1B2', `o código digitado em minúsculo é aceito (${entrou.sala})`);
   ok(!entrou.cartao, 'depois de entrar, o cartão de boas-vindas não volta');
+
+  await ctx.close();
+});
+
+// ── 7f2. Aba Documento: folha lida vira parada ───────────────
+/* A leitura da FOTO não entra aqui: o OCR são megabytes vindos de uma CDN
+   e o teste roda sem rede. O que se testa é todo o resto do caminho —
+   texto da folha → campos → parada na lista —, que é onde mora o erro que
+   chegaria ao motoboy. O texto abaixo é fictício, com os defeitos reais
+   do OCR (ver testes/documento.mjs). */
+await secao('Aba Documento: a folha lida vira parada', async () => {
+  const { page, ctx } = await abrir('/index.html');
+
+  const FOLHA = [
+    'AUSÊNCIA DE CONTATO',
+    'CLIENTE: JOANA PEREIRA DOS REIS',
+    'TELEFONE DO CONTRATO: (27) 9818-91234',
+    'ENDEREÇO DO CONTRATO: RUA DAS PALMEIRAS',
+    'FLORIDAS, 14, 29171-101, PARQUE RESIDENCIAL DE',
+    'TUBARÃO.',
+    'MOTIVO DO CONTATO: Processo Previdenciário',
+    'OBSERVAÇÕES: CONTATO COM O ESCRITORIO (27)3065-3080.',
+    'Eu, JOANA PEREIRA DOS REIS, inscrito no CPF: 111.222.333-44, declaro',
+    'que estou ciente/recebi as informações acima.'
+  ].join('\n');
+
+  const abriu = await page.evaluate(() => {
+    goNav('docScreen', 'nav-doc');
+    return {
+      tela: document.querySelector('.screen.active').id,
+      vazio: document.getElementById('docLista').textContent,
+      leitor: typeof window.SpeedBoy.doc.lerDocumento === 'function'
+    };
+  });
+  ok(abriu.tela === 'docScreen', 'a aba Documento abre pela barra de baixo');
+  ok(/Nenhuma folha lida/.test(abriu.vazio), 'sem folha nenhuma, a aba explica o que fazer');
+  ok(abriu.leitor, 'speedboy-documento.js carregou junto com a página');
+
+  const lido = await page.evaluate((folha) => {
+    document.getElementById('docTexto').value = folha;
+    docLerTextoColado();
+    const card = document.querySelector('.doc-card');
+    return {
+      cards: document.querySelectorAll('.doc-card').length,
+      texto: card ? card.textContent.replace(/\s+/g, ' ') : ''
+    };
+  }, FOLHA);
+  ok(lido.cards === 1, `a folha colada vira um cartão (achou ${lido.cards})`);
+  ok(/JOANA PEREIRA DOS REIS/.test(lido.texto), 'o cartão mostra o nome do cliente');
+  ok(/Parque Residencial Tubarão/.test(lido.texto),
+    'o bairro abreviado na folha aparece com o nome oficial da lista');
+  ok(/\(27\) 98189-1234/.test(lido.texto), 'o telefone do cliente aparece formatado');
+  ok(!/3065/.test(lido.texto), 'o telefone do escritório NÃO aparece como telefone do cliente');
+  ok(!/111\.222|11122233344/.test(lido.texto), 'o CPF impresso na folha não aparece na tela');
+
+  const parada = await page.evaluate(() => {
+    document.querySelector('.doc-acao-forte').click();
+    const s = stops[stops.length - 1] || {};
+    return {
+      total: stops.length,
+      name: s.name, phone: s.phone, street: s.street,
+      number: s.number, neighborhood: s.neighborhood, city: s.city,
+      notes: s.notes, done: s.done, value: s.value, origem: s.origem,
+      guardado: JSON.parse(localStorage.getItem('sb_stops') || '[]').length,
+      gravado: (localStorage.getItem('sb_stops') || '') + (localStorage.getItem('sb_docs') || ''),
+      marcado: document.querySelector('.doc-card').textContent
+    };
+  });
+  ok(parada.total === 1, `criar a parada põe uma entrega na lista (achou ${parada.total})`);
+  ok(parada.name === 'JOANA PEREIRA DOS REIS' && parada.phone === '27981891234',
+    'a parada nasce com nome e telefone da folha');
+  ok(parada.street === 'RUA DAS PALMEIRAS FLORIDAS' && parada.number === '14' &&
+     parada.neighborhood === 'Parque Residencial Tubarão' && parada.city === 'SRR',
+    `a parada nasce com o endereço completo (${parada.street}, ${parada.number}, ${parada.neighborhood}, ${parada.city})`);
+  ok(parada.value === 45, `a taxa nasce com o valor do contrato (R$ ${parada.value})`);
+  ok(parada.notes === '', 'a parada não leva observação: o motivo da diligência fica na folha');
+  ok(parada.origem === 'doc', 'a parada nasce marcada como vinda de folha, que é o que o contador conta');
+  ok(parada.guardado === 1, 'a parada foi gravada no localStorage, não só na tela');
+  /* Entregar não depende do CPF, então o app não o guarda — nem na parada,
+     nem na folha lida que fica no aparelho. */
+  ok(!/111\.222|11122233344/.test(parada.gravado),
+    'o CPF não foi parar em nada que o app grava no aparelho');
+  ok(/já usada/.test(parada.marcado), 'a folha fica marcada, para não virar parada duas vezes');
+
+  /* Contador do contrato fixo: o cliente paga um valor fechado por um
+     pacote de demandas, e passar do combinado é trabalhar de graça. */
+  const contrato = await page.evaluate(() => {
+    const n = docContagem();
+    const cartao = document.querySelector('.doc-contrato').textContent.replace(/\s+/g, ' ');
+    return { n, cartao, total: document.getElementById('docTotal').value };
+  });
+  ok(contrato.n.criadas === 1 && contrato.n.restam === 49,
+    `o contador conta a parada criada da folha (${contrato.n.criadas} de ${contrato.n.total}, faltam ${contrato.n.restam})`);
+  ok(contrato.total === '50', 'o pacote começa em 50 demandas');
+  ok(/de 45,00|R\$ 45/.test(contrato.cartao) || contrato.n.valor === 45,
+    'o valor por demanda aparece no cartão');
+
+  /* A virada do dia copia TODAS as paradas para o histórico e mantém as
+     pendentes na lista. Sem deduplicar por identidade, a mesma parada
+     seria contada duas vezes e o pacote "acabaria" na metade. */
+  const semDobra = await page.evaluate(() => {
+    saveToHistory(new Date().toLocaleDateString('pt-BR'));
+    return docContagem();
+  });
+  ok(semDobra.criadas === 1,
+    `parada que está na lista E no histórico conta uma vez só (contou ${semDobra.criadas})`);
+
+  // Novo lote: zera a contagem sem mexer nas paradas já criadas
+  const lote = await page.evaluate(() => {
+    cfg.contratoDoc.desde = new Date(Date.now() + 86400000).toLocaleDateString('pt-BR');
+    return { contagem: docContagem().criadas, paradas: stops.length };
+  });
+  ok(lote.contagem === 0 && lote.paradas === 1,
+    'começar um lote novo zera o contador e não mexe nas paradas já criadas');
+
+  // Abrir no formulário preenche os campos e deixa revisar antes de salvar
+  const form = await page.evaluate(() => {
+    docAbrirFormulario(docsLidos[0].id);
+    return {
+      tela: document.querySelector('.screen.active').id,
+      nome: document.getElementById('fName').value,
+      bairro: document.getElementById('fBairro').value,
+      cidade: document.getElementById('fCity').value,
+      valor: document.getElementById('fValue').value,
+      origem: document.getElementById('fOrigem').value
+    };
+  });
+  ok(form.tela === 'addScreen', 'o outro caminho abre o formulário da parada');
+  ok(form.nome === 'JOANA PEREIRA DOS REIS' && form.bairro === 'Parque Residencial Tubarão' && form.cidade === 'SRR',
+    `o formulário abre preenchido, inclusive o bairro (${form.bairro || 'vazio'})`);
+  ok(form.valor === '45' || form.valor === '45,00', `o formulário abre com a taxa do contrato (${form.valor})`);
+  /* Salvo pelo formulário, a parada precisa continuar marcada como vinda
+     de folha — senão sai da conta do contrato justamente quando foi
+     preciso corrigir alguma coisa à mão. */
+  ok(form.origem === 'doc', 'a marca de origem sobrevive ao caminho do formulário');
+  const salvoNoForm = await page.evaluate(() => {
+    saveStop();
+    const s = stops[stops.length - 1];
+    return { origem: s.origem, valor: s.value, contagem: docContagem().criadas };
+  });
+  ok(salvoNoForm.origem === 'doc' && salvoNoForm.valor === 45,
+    'salvar pelo formulário guarda origem e valor do contrato');
+
+  // Foto do chão não pode virar parada com nome inventado
+  const lixo = await page.evaluate(() => {
+    const antes = document.querySelectorAll('.doc-card').length;
+    document.getElementById('docTexto').value = 'oi bom dia tudo bem';
+    docLerTextoColado();
+    return { antes, depois: document.querySelectorAll('.doc-card').length };
+  });
+  ok(lixo.antes === lixo.depois, 'texto que não é folha não entra na lista');
 
   await ctx.close();
 });

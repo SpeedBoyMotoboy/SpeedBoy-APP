@@ -34,6 +34,7 @@ const RASTREADOS = [
   'speedboy.css',
   'speedboy-app.css',
   'fatura-padrao.js',
+  'speedboy-documento.js',
   'manifest.json',
   'manifest-motoboy.json',
   'icones/icone-192.png',

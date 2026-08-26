@@ -317,6 +317,19 @@ for (const arq of PAGINAS) {
     for (const arq of ['index.html', 'motoboy.html', 'manifest.json', 'manifest-motoboy.json']) {
       ok(shell.includes(arq), `sw.js: ${arq} está na casca cacheada (o app instalado abre sem sinal)`);
     }
+
+    /* Arquivo servido cru que NÃO entra no cálculo da versão é pior que
+       arquivo esquecido: ele é cacheado pelo service worker e nunca mais
+       trocado, porque a VERSION não muda quando ele muda. O
+       speedboy-documento.js ficou de fora e o celular instalado teria
+       continuado lendo as folhas com o leitor velho. */
+    const bump = fs.readFileSync(path.join(RAIZ, 'scripts/bump-versao.mjs'), 'utf8');
+    const rastreados = bump.slice(bump.indexOf('const RASTREADOS'), bump.indexOf('];', bump.indexOf('const RASTREADOS')));
+    const naLista = [...shell.matchAll(/'\.\/([\w.-]+\.(?:js|css|html|json))'/g)].map(m => m[1]);
+    const foraDaVersao = naLista.filter(a => a !== 'offline.html' && !rastreados.includes(`'${a}'`));
+    ok(foraDaVersao.length === 0,
+      'todo arquivo cacheado entra no cálculo da versão do service worker' +
+      (foraDaVersao.length ? ` — fora: ${foraDaVersao.join(', ')}` : ''));
   }
 
   // Convite para instalar: sem ele o navegador só oferece num menu escondido
@@ -403,7 +416,7 @@ for (const arq of PAGINAS) {
 }
 
 // ── 8. Arquivos .js soltos ────────────────────────────────────
-for (const arq of ['sw.js', 'speedboy-firebase.js', 'speedboy-core.js', 'fatura-padrao.js', 'scripts/bump-versao.mjs', 'scripts/gerar-icones.mjs']) {
+for (const arq of ['sw.js', 'speedboy-firebase.js', 'speedboy-core.js', 'speedboy-documento.js', 'fatura-padrao.js', 'scripts/bump-versao.mjs', 'scripts/gerar-icones.mjs']) {
   try {
     execFileSync(process.execPath, ['--check', path.join(RAIZ, arq)], { stdio: 'pipe' });
     ok(true, `${arq}: sintaxe valida`);

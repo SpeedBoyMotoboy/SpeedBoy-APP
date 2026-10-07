@@ -108,6 +108,19 @@ body{max-width:480px;margin:0 auto;padding-bottom:130px;}
 @keyframes spin{to{transform:rotate(360deg)}}
 .error-wrap{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;padding:40px 24px;text-align:center;}
 .error-wrap.show{display:flex;}
+/* ── Painel fixo (Márcia): uma tela, botões grandes, nada para aprender ── */
+.fx-ajuda{display:block;margin:14px 16px 0;background:#25d366;color:#fff;border:none;border-radius:12px;padding:14px;font-weight:800;font-size:15px;text-align:center;text-decoration:none;cursor:pointer;width:calc(100% - 32px);}
+.fx-card{background:var(--card);border:2px solid var(--accent);border-radius:var(--radius);padding:16px;margin-bottom:12px;}
+.fx-card.done{border-color:var(--green);opacity:.6;}
+.fx-nome{font-weight:800;font-size:18px;line-height:1.3;}
+.fx-end{font-size:15px;margin-top:6px;line-height:1.45;}
+.fx-info{font-size:13px;color:var(--muted);margin-top:4px;line-height:1.45;}
+.fx-btns{display:flex;gap:8px;margin-top:12px;}
+.fx-btns .btn-act{min-width:0;font-size:14px;text-decoration:none;}
+.fx-entregue{width:100%;margin-top:10px;background:var(--green);color:#000;border:none;border-radius:12px;padding:18px;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;letter-spacing:.5px;cursor:pointer;}
+.fx-ok{margin-top:10px;font-size:14px;font-weight:700;color:var(--green);}
+.fx-vazio{text-align:center;padding:40px 20px;color:var(--muted);font-size:16px;line-height:1.6;}
+.aviso-obrig{background:rgba(255,82,82,.12);border:1.5px solid var(--red);color:var(--text);border-radius:12px;padding:12px;font-size:14px;font-weight:600;line-height:1.5;margin-bottom:12px;}
 .toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--card2);border:1px solid var(--border);color:var(--text);padding:10px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:600;opacity:0;transition:all .25s;pointer-events:none;max-width:92%;text-align:center;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 .toast.success{border-color:var(--green);color:var(--green);}
@@ -137,8 +150,9 @@ body{max-width:480px;margin:0 auto;padding-bottom:130px;}
 </div>
 <div id="mainWrap" style="display:none;">
   <div class="aviso-cache" id="avisoCache" style="display:none;">📴 Sem sinal — esta é a lista da última vez que o app conectou. O que você marcar é enviado quando o sinal voltar.</div>
+  <a class="fx-ajuda" id="fxAjuda" style="display:none;" target="_blank" rel="noopener">💬 Falar com o Luan</a>
   <div class="summary" id="summaryBar"></div>
-  <div class="tools">
+  <div class="tools" id="toolsBar">
     <button type="button" class="btn-tool" id="btnOtimizar" onclick="otimizarRota()">⚡ Otimizar rota</button>
   </div>
   <div class="stops-wrap" id="stopsWrap"></div>
@@ -186,6 +200,7 @@ body{max-width:480px;margin:0 auto;padding-bottom:130px;}
       <button type="button" class="modal-x" onclick="fecharEntrega()">✕</button>
     </div>
     <div class="modal-sub" id="entregaSub"></div>
+    <div class="aviso-obrig" id="avisoObrigatorio" style="display:none;">⚠️ A foto e o nome de quem recebeu são <strong>obrigatórios</strong>. Sem eles a entrega <strong>não é paga</strong>.</div>
     <div id="campoRecebedor">
       <div class="rotulo">Quem recebeu</div>
       <input class="campo" id="entregaRecebedor" placeholder="Nome de quem recebeu" maxlength="60" oninput="validarEntrega()" />
@@ -219,20 +234,31 @@ var CHAVE_ULTIMO='sb_moto_ultimo';
 function ultimoRepasse(){
   try{ return JSON.parse(localStorage.getItem(CHAVE_ULTIMO)||'null'); }catch(e){ return null; }
 }
-function guardarRepasse(room,id){
-  try{ localStorage.setItem(CHAVE_ULTIMO,JSON.stringify({room:room,id:id})); }catch(e){}
+function guardarRepasse(dados){
+  try{ localStorage.setItem(CHAVE_ULTIMO,JSON.stringify(dados)); }catch(e){}
 }
 
-var _daURL=!!(params.get('room')&&params.get('id'));
-var _ultimo=_daURL?null:(ultimoRepasse()||{});
-var ROOM=(params.get('room')||_ultimo.room||'').toUpperCase();
-var REPASS_ID=params.get('id')||_ultimo.id||'';
+/* Dois tipos de link abrem esta página:
+   • &id=RP-...      — um repasse: um lote de entregas, um link por dia;
+   • &painel=FX-...  — o painel FIXO de uma entregadora (a Márcia). O link
+     não muda nunca: a loja manda entrega direto para ele, a qualquer hora,
+     e cada entrega mora num nó próprio de /repass com painel=FX-... */
+var _daURL=!!(params.get('room')&&(params.get('id')||params.get('painel')));
+var _ultimo=_daURL?{}:(ultimoRepasse()||{});
+function _param(k){ return _daURL?(params.get(k)||''):(_ultimo[k]||''); }
+var ROOM=_param('room').toUpperCase();
+var REPASS_ID=_param('id');
+var PAINEL=_param('painel');
+var NOME_FIXO=_param('nome');
+var TEL_CENTRAL=String(_param('tel')).replace(/\D/g,'');
 var db=null;
 var repassData=null;
 var _salvando=false;
 
+function modoFixo(){ return !!PAINEL; }
+
 // Última lista recebida, por repasse. É o que faz o painel abrir sem sinal.
-function chaveCache(){ return 'sb_moto_cache_'+ROOM+'_'+REPASS_ID; }
+function chaveCache(){ return 'sb_moto_cache_'+ROOM+'_'+(PAINEL||REPASS_ID); }
 function guardarCache(dados){
   try{ localStorage.setItem(chaveCache(),JSON.stringify(dados)); }catch(e){}
 }
@@ -241,10 +267,11 @@ function lerCache(){
 }
 
 function init(){
-  if(!ROOM||!REPASS_ID){showError();return;}
-  guardarRepasse(ROOM,REPASS_ID);
+  if(!ROOM||!(REPASS_ID||PAINEL)){showError();return;}
+  guardarRepasse({room:ROOM,id:REPASS_ID,painel:PAINEL,nome:NOME_FIXO,tel:TEL_CENTRAL});
   SpeedBoy.aplicarTema('sb_moto_theme','themeBtn',ROTULOS_TEMA);
   prepararInstalacao();
+  if(modoFixo()) prepararPainelFixo();
 
   /* A lista guardada entra na tela ANTES de falar com o servidor. Sem sinal
      no meio da rua, o motoboy continua com os endereços do dia em vez de um
@@ -259,7 +286,7 @@ function init(){
   // Best-effort enquanto as regras antigas (permissivas) estiverem publicadas.
   window.speedboyLoginAnonimo()
     .catch(function(e){ console.warn('Login anônimo falhou (seguindo mesmo assim):', e); })
-    .then(function(){ ouvirRepasse(); });
+    .then(function(){ if(modoFixo()) ouvirPainelFixo(); else ouvirRepasse(); });
 }
 
 function aplicarRepasse(dados,doCache){
@@ -291,6 +318,141 @@ function ouvirRepasse(){
     console.warn('sem acesso ao repasse:',e);
     if(!repassData) showError();
   });
+}
+
+/* ── PAINEL FIXO ─────────────────────────────────────────────
+   A entregadora fixa (Márcia) recebe entregas direto da loja, pelo link
+   da loja com &para=FX-... — sem o Luan no meio. Cada entrega é um nó
+   próprio em /repass: confirmar uma regrava só aquele nó, então a loja
+   lançando outra no mesmo instante não apaga nada.
+
+   Feito para quem não é de tecnologia: uma tela, uma lista, e em cada
+   entrega só três coisas — ir até lá, ligar, e ENTREGUEI. Sem rota
+   otimizada, sem tela de problema, sem valor nenhum: problema se resolve
+   no botão verde de falar com o Luan. */
+var _nosFixos={};   // id do nó → payload, como está no banco
+
+function prepararPainelFixo(){
+  document.querySelector('.hero-tag').textContent='Suas entregas';
+  if(NOME_FIXO) document.getElementById('motoName').textContent=NOME_FIXO;
+  var ajuda=document.getElementById('fxAjuda');
+  if(TEL_CENTRAL){
+    ajuda.href='https://wa.me/'+(TEL_CENTRAL.length>11?TEL_CENTRAL:'55'+TEL_CENTRAL)+
+      '?text='+encodeURIComponent('Oi Luan, aqui é '+(NOME_FIXO||'a motoboy')+' — preciso de ajuda com uma entrega.');
+    ajuda.style.display='';
+  }
+  document.getElementById('toolsBar').style.display='none';
+}
+
+function ouvirPainelFixo(){
+  db.ref('rooms/'+ROOM+'/repass').on('value',aplicarSnapshotFixo,function(e){
+    console.warn('sem acesso ao painel:',e);
+    if(!repassData) showError();
+  });
+}
+function aplicarSnapshotFixo(snap){
+  if(_salvando)return;
+  var raw=snap.val()||{};
+  var nos={};
+  Object.keys(raw).forEach(function(id){
+    try{
+      var v=typeof raw[id]==='string'?JSON.parse(raw[id]):raw[id];
+      if(v&&v.painel===PAINEL) nos[id]=v;
+    }catch(e){}
+  });
+  _nosFixos=nos;
+  var dados=montarPainelFixo(nos);
+  guardarCache(dados);
+  aplicarRepasse(dados,false);
+}
+
+/* Pendentes primeiro, na ordem em que a loja mandou; depois as feitas
+   HOJE. As de ontem somem da tela — já foram para o fechamento. */
+function montarPainelFixo(nos){
+  var hoje=new Date().toDateString();
+  var lista=[], nome=NOME_FIXO;
+  Object.keys(nos).forEach(function(id){
+    var rp=nos[id]||{};
+    if(!nome&&rp.motoboy) nome=rp.motoboy;
+    (rp.deliveries||[]).forEach(function(d,i){
+      if(d.done){
+        var q=new Date(d.doneAt);
+        if(isNaN(q)||q.toDateString()!==hoje)return;
+      }
+      var c=JSON.parse(JSON.stringify(d));
+      c._no=id; c._ni=i; c._criado=rp.createdAt||'';
+      lista.push(c);
+    });
+  });
+  lista.sort(function(a,b){
+    if(!!a.done!==!!b.done) return a.done?1:-1;
+    if(a.done) return String(b.doneAt||'').localeCompare(String(a.doneAt||''));
+    return String(a._criado).localeCompare(String(b._criado));
+  });
+  return {motoboy:nome||'Motoboy', fixo:true, hideTaxa:true, askReceiver:true, askPhoto:true, deliveries:lista};
+}
+
+/* Grava a confirmação só no nó daquela entrega. O nó guardado aqui é a
+   base: só os campos da confirmação mudam, o resto fica como a loja
+   mandou. */
+function salvarEntregaFixa(s){
+  var no=_nosFixos[s&&s._no];
+  if(!no) return Promise.reject(new Error('entrega não encontrada'));
+  var copia=JSON.parse(JSON.stringify(no));
+  var d=(copia.deliveries||[])[s._ni];
+  if(!d) return Promise.reject(new Error('entrega não encontrada'));
+  ['done','doneAt','receivedBy','proofId'].forEach(function(k){
+    if(s[k]===undefined||s[k]==='') delete d[k]; else d[k]=s[k];
+  });
+  _salvando=true;
+  return db.ref('rooms/'+ROOM+'/repass/'+s._no).set(JSON.stringify(copia))
+    .then(function(){
+      _salvando=false;
+      _nosFixos[s._no]=copia;
+      var dados=montarPainelFixo(_nosFixos);
+      guardarCache(dados);
+      repassData=dados;
+      // Entrega nova que a loja mandou DURANTE a gravação foi ignorada
+      // pelo listener; relê o que o banco já tem para ela não sumir.
+      db.ref('rooms/'+ROOM+'/repass').once('value',aplicarSnapshotFixo);
+    },function(e){ _salvando=false; console.error('salvarEntregaFixa:',e); throw e; });
+}
+
+function renderFixo(){
+  var items=repassData.deliveries||[];
+  var faltam=items.filter(function(d){return !d.done;}).length;
+  document.getElementById('summaryBar').innerHTML=
+    '<div class="summary-item"><div class="summary-lbl">Faltam</div><div class="summary-val ac">'+faltam+'</div></div>'+
+    '<div class="summary-item"><div class="summary-lbl">Feitas hoje</div><div class="summary-val gr">'+(items.length-faltam)+'</div></div>';
+  var wrap=document.getElementById('stopsWrap');
+  if(!items.length){
+    wrap.innerHTML='<div class="fx-vazio">🙌 Nenhuma entrega agora.<br>Quando chegar entrega nova, ela aparece aqui sozinha.</div>';
+    return;
+  }
+  wrap.innerHTML=items.map(function(s,i){
+    var info=[];
+    if(s.complement) info.push('🏢 '+esc(s.complement));
+    if(s.reference)  info.push('📌 '+esc(s.reference));
+    if(s.neighborhood||s.city) info.push('🏙️ '+esc([s.neighborhood,s.city].filter(Boolean).join(' · ')));
+    if(s.timeFrom||s.timeTo) info.push('⏰ '+esc(s.timeFrom||'?')+' até '+esc(s.timeTo||'?'));
+    if(s.notes) info.push('💬 '+esc(s.notes));
+    if(s.store) info.push('🏪 '+esc(s.store));
+    var fone=String(s.phone||'').replace(/\D/g,'');
+    var corpo=s.done
+      ? '<div class="fx-ok">✅ Entregue '+esc(s.doneAt?hora(s.doneAt):'')+(s.receivedBy?' · Recebido por '+esc(s.receivedBy):'')+'</div>'
+      : '<div class="fx-btns">'+
+          '<button type="button" class="btn-act" onclick="navegarParada('+i+',\'waze\')" style="background:#33ccff;color:#001a26;">🚗 Waze</button>'+
+          '<button type="button" class="btn-act" onclick="navegarParada('+i+',\'gmaps\')" style="background:#4285f4;color:#fff;">🗺️ Maps</button>'+
+          (fone?'<a class="btn-act" href="tel:'+esc(fone)+'" style="background:var(--card2);color:var(--text);border:1px solid var(--border);">📞 Ligar</a>':'')+
+        '</div>'+
+        '<button type="button" class="fx-entregue" onclick="toggleDone('+i+')">✅ ENTREGUEI</button>';
+    return '<div class="fx-card'+(s.done?' done':'')+'">'+
+      '<div class="fx-nome">'+(i+1)+'. '+esc(s.name||'Sem nome')+'</div>'+
+      '<div class="fx-end">📍 '+esc(s.address||'')+'</div>'+
+      (info.length?'<div class="fx-info">'+info.join('<br>')+'</div>':'')+
+      corpo+
+    '</div>';
+  }).join('');
 }
 
 /* ── INSTALAR NA TELA INICIAL ──────────────────────────────
@@ -374,6 +536,7 @@ function ocultarTaxa(){ return !!(repassData && repassData.hideTaxa); }
 
 function renderStops(){
   if(!repassData||!repassData.deliveries)return;
+  if(modoFixo()){ renderFixo(); document.getElementById('proximaBar').classList.remove('visible'); return; }
   var items=repassData.deliveries;
   var total=0,doneCount=0,probCount=0;
   items.forEach(function(s){
@@ -598,6 +761,9 @@ function toggleDone(i){
   if(!repassData||!repassData.deliveries)return;
   var s=repassData.deliveries[i];
   if(!s)return;
+  // No painel fixo não há "reabrir": um toque errado não pode desfazer
+  // uma entrega já comprovada. Engano se resolve com o Luan.
+  if(s.done&&modoFixo())return;
   if(s.done){
     // Reabrir: some tudo que a confirmação tinha gravado
     s.done=false;
@@ -616,6 +782,7 @@ function abrirEntrega(i){
   document.getElementById('entregaRecebedor').value='';
   document.getElementById('campoRecebedor').style.display=repassData.askReceiver?'':'none';
   document.getElementById('campoFoto').style.display=repassData.askPhoto?'':'none';
+  document.getElementById('avisoObrigatorio').style.display=modoFixo()?'':'none';
   var previa=document.getElementById('fotoPrevia');
   previa.style.display='none'; previa.removeAttribute('src');
   document.getElementById('fotoLabel').innerHTML='📷 Tirar foto (com data, hora e local)<input type="file" accept="image/*" capture="environment" onchange="carregarFoto(this)" style="display:none">';
@@ -739,6 +906,8 @@ function confirmarEntrega(){
       .then(function(){return proofId;})
       .catch(function(e){
         console.error('comprovante:',e);
+        // No painel fixo a foto é o que paga a entrega: sem ela, não registra
+        if(modoFixo()) throw e;
         showToast('Foto não subiu — entrega registrada mesmo assim','error');
         return '';
       });
@@ -753,15 +922,21 @@ function confirmarEntrega(){
        quem despachou não pode continuar marcando alerta vermelho numa
        parada que já chegou. */
     delete s.problem;
-    return salvarRepasse();
+    return salvarRepasse(s);
   }).then(function(){
     fecharEntrega();
     renderStops();
     showToast('✅ Entrega confirmada!','success');
   }).catch(function(e){
-    console.error(e); showToast('Erro ao salvar — tente de novo','error');
+    console.error(e);
+    if(modoFixo()){
+      // Não registrou: a entrega volta a ser pendente, para tentar de novo
+      s.done=false; delete s.doneAt; delete s.receivedBy; delete s.proofId;
+      showToast('Não enviou — confira o sinal e tente de novo','error');
+    }else showToast('Erro ao salvar — tente de novo','error');
   }).then(function(){
     btn.disabled=false; btn.textContent='✅ Marcar como entregue';
+    validarEntrega();
   });
 }
 
@@ -900,7 +1075,8 @@ function toggleMCard(i){
   if(!was)c.classList.add('expanded');
 }
 
-function salvarRepasse(){
+function salvarRepasse(entrega){
+  if(modoFixo()) return db ? salvarEntregaFixa(entrega) : Promise.reject(new Error('sem conexão'));
   if(!db||!ROOM||!REPASS_ID||!repassData)return Promise.resolve();
   /* _coords existe só para calcular a rota; _lat/_lng ficam, porque é o que
      abre o Waze no ponto exato depois. */

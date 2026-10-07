@@ -98,7 +98,7 @@ await secao('index.html carrega e as telas existem', async () => {
   ok(reais.length === 0, 'index.html carrega sem erro de JavaScript' + (reais.length ? '\n     ' + reais.join('\n     ') : ''));
 
   const telas = await page.$$eval('.screen', els => els.map(e => e.id));
-  ok(telas.length === 9, `9 telas presentes (achou ${telas.length}: ${telas.join(', ')})`);
+  ok(telas.length === 10, `10 telas presentes (achou ${telas.length}: ${telas.join(', ')})`);
 
   ok(await page.isVisible('#homeScreen'), 'tela inicial visível ao abrir');
 
@@ -1172,6 +1172,116 @@ await secao('Sincronização offline', async () => {
     'a pendência sobrevive ao fechamento do app');
 
   await ctx.close();
+});
+
+// ── 9c. Painel fixo: a KS manda direto para a Márcia ─────────
+/* A KS chamava a Márcia no WhatsApp e a entrega nunca entrava no app. Três
+   pontas, e cada uma tem o seu jeito de quebrar em silêncio:
+   • o link da loja precisa mandar sem valor nenhum e sem fila de aceite;
+   • o painel dela precisa ser simples e EXIGIR foto e nome — é o que paga;
+   • o app precisa trazer a entrega UMA vez, com a taxa da loja, e nunca
+     ressuscitá-la depois de apagada. */
+await secao('Painel fixo: link da loja → painel da Márcia → app', async () => {
+  // Link da loja
+  const loja = await abrir('/pedido.html?room=SB-TEST&store=KS&para=FX-TEST1&nome=M%C3%A1rcia');
+  const l = await loja.page.evaluate(() => ({
+    para: window.PARA, tag: document.querySelector('.hero-tag').textContent,
+    badge: document.getElementById('storeSpan').textContent,
+    pagamento: getComputedStyle(document.querySelector('.campo-pagamento')).display
+  }));
+  ok(l.para === 'FX-TEST1' && /Márcia/.test(l.tag) && /Márcia/.test(l.badge),
+    'o link da loja mostra para quem a entrega vai');
+  ok(l.pagamento === 'none', 'e não pede valor nenhum — só a entrega');
+  const lojaFalsa = await loja.page.evaluate(() => {
+    const u = new URLSearchParams('para=../stops');
+    return /^FX-[A-Z0-9]{4,12}$/.test(u.get('para'));
+  });
+  ok(!lojaFalsa, 'destino fora do formato FX-... é ignorado (não vira caminho no banco)');
+  await loja.ctx.close();
+
+  // Painel da Márcia
+  const { page, ctx } = await abrir('/motoboy.html?room=SB-TEST&painel=FX-TEST1&nome=M%C3%A1rcia&tel=27999990000');
+  const m = await page.evaluate(() => {
+    window.__xss = false;
+    const ontem = new Date(Date.now() - 86400000).toISOString();
+    _nosFixos = {
+      'FX-TEST1_a': { motoboy: 'Márcia', painel: 'FX-TEST1', createdAt: new Date().toISOString(),
+        deliveries: [{ stopId: 'fx_a', name: '<img src=x onerror="window.__xss=true">Ana',
+          address: 'R. das Flores, 10', phone: '27988887777', store: 'KS', taxa: 25, done: false }] },
+      'FX-TEST1_b': { motoboy: 'Márcia', painel: 'FX-TEST1', createdAt: ontem,
+        deliveries: [{ stopId: 'fx_b', name: 'Velha', address: 'R. X', done: true, doneAt: ontem }] }
+    };
+    repassData = montarPainelFixo(_nosFixos);
+    document.getElementById('mainWrap').style.display = 'block';
+    renderStops();
+    const wrap = document.getElementById('stopsWrap');
+    const r = {
+      xss: window.__xss, texto: wrap.textContent,
+      resumo: document.getElementById('summaryBar').textContent,
+      otimizar: getComputedStyle(document.getElementById('toolsBar')).display,
+      ajuda: document.getElementById('fxAjuda').href,
+      ajudaVisivel: getComputedStyle(document.getElementById('fxAjuda')).display !== 'none'
+    };
+    toggleDone(0);
+    r.aviso = getComputedStyle(document.getElementById('avisoObrigatorio')).display !== 'none';
+    r.avisoTxt = document.getElementById('avisoObrigatorio').textContent;
+    r.btnSemNada = document.getElementById('btnConfirmarEntrega').disabled;
+    document.getElementById('entregaRecebedor').value = 'Porteiro';
+    validarEntrega();
+    r.btnSoNome = document.getElementById('btnConfirmarEntrega').disabled;
+    return r;
+  });
+  ok(!m.xss, 'nome de cliente com marcação NÃO executa nada no painel fixo');
+  ok(/Ana/.test(m.texto) && /ENTREGUEI/.test(m.texto), 'a entrega aparece com o botão ENTREGUEI');
+  ok(!/R\$/.test(m.texto) && !/R\$/.test(m.resumo), 'nenhum valor aparece para ela');
+  ok(!/Problema/.test(m.texto) && m.otimizar === 'none', 'sem tela de problema nem rota otimizada — só o essencial');
+  ok(!/Velha/.test(m.texto), 'a entrega feita ontem já não ocupa a tela');
+  ok(m.ajudaVisivel && /wa\.me\/5527999990000/.test(m.ajuda), 'o botão verde fala direto com o Luan');
+  ok(m.aviso && /não é paga/.test(m.avisoTxt), 'ao confirmar, avisa que sem foto e nome a entrega não é paga');
+  ok(m.btnSemNada && m.btnSoNome, 'e não deixa confirmar sem a foto, mesmo com o nome');
+  await ctx.close();
+
+  // O app do Luan
+  const app = await abrir('/index.html');
+  const a = await app.page.evaluate(() => {
+    stops = []; saveStops();
+    cfg.fixa = { id: 'FX-TEST1', nome: 'Márcia', loja: 'KS', tel: '' };
+    repassesData = {
+      'FX-TEST1_k1': { motoboy: 'Márcia', painel: 'FX-TEST1', trackKey: 'k1', createdAt: new Date().toISOString(),
+        deliveries: [{ stopId: 'fx_k1', name: 'Bia', address: 'R. Y, 2', store: 'KS', city: 'Vitória', cityId: 'VIX', done: false }] }
+    };
+    const r = {};
+    r.importou = importarEntregasFixas();
+    const s = stops.find(x => x._id === 'fx_k1');
+    r.taxa = s && s.value; r.trackKey = s && s._trackKey; r.via = s && s.viaPainel;
+    r.deNovo = importarEntregasFixas();
+    r.full = resumoRepasses().repasses;
+    // Márcia confirma no painel dela
+    repassesData['FX-TEST1_k1'].deliveries[0] = { ...repassesData['FX-TEST1_k1'].deliveries[0],
+      done: true, doneAt: new Date().toISOString(), receivedBy: 'Bia', proofId: 'PF-1' };
+    aplicarConfirmacoesRepasse();
+    const s2 = stops.find(x => x._id === 'fx_k1');
+    r.done = s2.done; r.por = s2.deliveredBy;
+    r.conta = contagemFixa('FX-TEST1');
+    goNav('motoboysScreen', 'nav-motoboys');
+    r.tela = document.getElementById('fixaPainel').textContent;
+    r.aba = !!document.getElementById('nav-motoboys') && !document.getElementById('nav-motoboys').classList.contains('hidden');
+    // Apagada na lista, não volta
+    stops = stops.filter(x => x._id !== 'fx_k1'); saveStops();
+    r.voltou = importarEntregasFixas();
+    return r;
+  });
+  ok(a.importou === 1, 'a entrega mandada pela loja entra na lista do dia');
+  ok(a.taxa === 25, `com a taxa da KS por cidade, só do lado do Luan (veio ${a.taxa})`);
+  ok(a.trackKey === 'k1' && a.via === 'FX-TEST1', 'e ligada ao acompanhamento da loja e ao painel');
+  ok(a.deNovo === 0, 'o mesmo snapshot de novo não duplica');
+  ok(a.full === 0, 'o painel fixo não conta como repasse do modo FULL');
+  ok(a.done && a.por === 'Márcia', 'o "entregue" dela volta para a parada, com o nome dela');
+  ok(a.conta.pagas === 1 && a.conta.semProva === 0, 'com foto e nome, conta como entrega a pagar no mês');
+  ok(a.aba, 'a aba Motoboys existe fora do modo FULL');
+  ok(/Márcia/.test(a.tela) && /Bia/.test(a.tela) && /Pagar no mês/.test(a.tela), 'e mostra o painel da Márcia');
+  ok(a.voltou === 0, 'entrega apagada da lista não ressuscita no snapshot seguinte');
+  await app.ctx.close();
 });
 
 /* ── 10. Servidor fora do ar: navegação nova cai no offline.html ──

@@ -113,6 +113,7 @@ body.light .theme-toggle{background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.15)
 .loading.show{display:flex;}
 .spinner{width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
+body.para-fixo .campo-pagamento{display:none;}
 .loading-text{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;color:var(--accent);}
 
 /* CLIENT HISTORY */
@@ -259,6 +260,13 @@ var params     = new URLSearchParams(window.location.search);
 var ROOM       = (params.get('room') || '').toUpperCase();
 var STORE_NAME = params.get('store') || '';
 var LUAN_PHONE = params.get('phone') || '5527999165959'; // Número do Luan para WhatsApp
+/* Link da loja DIRETO para a entregadora fixa (&para=FX-...&nome=Márcia).
+   O pedido não passa pela fila de aceite do Luan: cai na hora no painel
+   dela e, ao mesmo tempo, na lista do app — é o que faz a entrega que a
+   loja mandava "por fora" passar a ser contada. Sem valor nenhum no
+   formulário: aqui só se registra a entrega. */
+var PARA       = /^FX-[A-Z0-9]{4,12}$/.test(params.get('para') || '') ? params.get('para') : '';
+var PARA_NOME  = PARA ? (params.get('nome') || 'Motoboy') : '';
 
 var db         = null;
 var stopCount  = 0;
@@ -284,8 +292,13 @@ function getAllBairros(city)  { return SpeedBoy.bairrosDaCidade(city, escopoBair
 // ═══════════════════════════════════════════════════
 function init() {
   // Mostra nome da loja no badge
+  if (PARA) {
+    document.body.classList.add('para-fixo');
+    document.querySelector('.hero-tag').textContent = 'Entregas para ' + PARA_NOME;
+    document.querySelector('.loading-text').textContent = 'Enviando para ' + PARA_NOME + '...';
+  }
   if (STORE_NAME) {
-    document.getElementById('storeSpan').textContent = STORE_NAME;
+    document.getElementById('storeSpan').textContent = STORE_NAME + (PARA ? ' → 🛵 ' + PARA_NOME : '');
     document.getElementById('heroBadge').classList.add('show');
     document.title = 'SPEEDBOY — ' + STORE_NAME;
   }
@@ -426,7 +439,7 @@ window.addStop = function() {
           '<input class="field-input" id="' + id + '_phone" type="tel" placeholder="(XX) XXXXX-XXXX" oninput="window.maskPhone(this)" maxlength="15" />' +
         '</div>' +
       '</div>' +
-      '<div class="field-group">' +
+      '<div class="field-group campo-pagamento">' +
         '<div class="field-label">Pagamento <span class="req">*</span></div>' +
         '<div class="pay-row">' +
           '<button type="button" class="pay-btn" id="' + id + '_paid_yes" onclick="window.selectPay(\'' + id + '\',\'paid\')">✅ Já pago</button>' +
@@ -609,7 +622,8 @@ window.submitPedido = function() {
     var isPaid  = yesBtn && yesBtn.classList.contains('paid');
     var isNoBtn = document.getElementById(id + '_paid_no');
     var hasPay  = (yesBtn && (yesBtn.classList.contains('paid') || (isNoBtn && isNoBtn.classList.contains('due'))));
-    var productVal = valEl ? parseMoney(valEl.value) : 0;
+    var productVal = (valEl && !PARA) ? parseMoney(valEl.value) : 0;
+    if (PARA) isPaid = false;
 
     // Data
     var delivDate = '';
@@ -659,22 +673,58 @@ window.submitPedido = function() {
     .then(function(){ enviarPedido(newStops); });
 }
 
-function enviarPedido(newStops) {
+// Pedido normal: fila de aceite do Luan.
+function enviarParaPendentes(newStops) {
   var pendingRef = db.ref('rooms/' + ROOM + '/pending');
-  var pushRefs = [];
-  var promises = newStops.map(function(s) {
-    var ref = pendingRef.push(JSON.stringify(s));
-    pushRefs.push(ref);
-    return ref;
-  });
+  var refs = newStops.map(function(s) { return pendingRef.push(JSON.stringify(s)); });
+  return { keys: refs.map(function(r){ return r.key; }), promise: Promise.all(refs) };
+}
 
-  Promise.all(promises)
+/* Pedido para a entregadora fixa. Cada entrega vira um nó próprio em
+   /repass (o mesmo caminho dos repasses, que já tem regra no banco), com
+   painel=FX-... — é por ele que o painel dela acha as suas. A chave serve
+   também de chave de acompanhamento: o app do Luan devolve por ela o
+   "entregue", a hora, quem recebeu e o comprovante. */
+function enviarParaFixa(newStops) {
+  var agora = new Date().toISOString();
+  var keys = [];
+  var promises = newStops.map(function(s) {
+    var key = db.ref('rooms/' + ROOM + '/repass').push().key;
+    keys.push(key);
+    var entrega = {
+      stopId: 'fx_' + key,
+      name: s.name, address: s.address, complement: s.complement, reference: s.reference,
+      phone: s.phone, store: s.store, city: s.city, cityId: s.cityId,
+      neighborhood: s.neighborhood, street: s.street, number: s.number,
+      serviceType: s.serviceType, deliveryDate: s.deliveryDate,
+      timeFrom: s.timeFrom, timeTo: s.timeTo, notes: s.notes,
+      taxa: 0, done: false
+    };
+    var no = {
+      motoboy: PARA_NOME, painel: PARA, trackKey: key, createdAt: agora,
+      hideTaxa: true, askReceiver: true, askPhoto: true,
+      deliveries: [entrega]
+    };
+    var acompanhamento = { status: 'aceito', updatedAt: agora,
+      info: { name: s.name, address: s.address, store: s.store } };
+    return Promise.all([
+      db.ref('rooms/' + ROOM + '/repass/' + PARA + '_' + key).set(JSON.stringify(no)),
+      db.ref('rooms/' + ROOM + '/tracking/' + key).set(JSON.stringify(acompanhamento))
+    ]);
+  });
+  return { keys: keys, promise: Promise.all(promises) };
+}
+
+function enviarPedido(newStops) {
+  var envio = PARA ? enviarParaFixa(newStops) : enviarParaPendentes(newStops);
+
+  envio.promise
     .then(function() {
       document.getElementById('loading').classList.remove('show');
       document.getElementById('mainWrap').style.display = 'none';
       
       lastSubmittedStops = newStops;
-      lastSubmittedKeys = pushRefs.map(function(r){ return r.key; });
+      lastSubmittedKeys = envio.keys;
 
       // Resumo com status badge
       var html = newStops.map(function(s, i) {
@@ -687,8 +737,9 @@ function enviarPedido(newStops) {
         var typeIcon = s.serviceType === 'retirada' ? '📦 Retirada' : s.serviceType === 'troca' ? '🔄 Troca' : '🛵 Entrega';
         var dateStr  = s.deliveryDate ? ' · 📅 ' + s.deliveryDate : '';
         var key = lastSubmittedKeys[i] || '';
-        var editBtn = key ? '<button type="button" class="client-req-btn edit-btn" onclick="window.openEditModal(\'' + key + '\',' + i + ')">✏️ Editar entrega</button>' : '';
-        var cancelBtn = key ? '<button type="button" class="client-req-btn cancel-btn" onclick="window.requestCancel(\'' + key + '\',\'' + s.name.replace(/'/g,"\\'") + '\')">❌ Cancelar</button>' : '';
+        var podeMexer = key && !PARA;
+        var editBtn = podeMexer ? '<button type="button" class="client-req-btn edit-btn" onclick="window.openEditModal(\'' + key + '\',' + i + ')">✏️ Editar entrega</button>' : '';
+        var cancelBtn = podeMexer ? '<button type="button" class="client-req-btn cancel-btn" onclick="window.requestCancel(\'' + key + '\',\'' + s.name.replace(/'/g,"\\'") + '\')">❌ Cancelar</button>' : '';
         return '<div class="success-item" id="si_' + key + '">' +
           '<strong>' + typeIcon + ' ' + (i+1) + '. ' + s.name + '</strong>' + dateStr + '<br>' +
           '<span style="font-size:11px;color:var(--muted)">' + s.address + timeStr + valStr + '</span><br>' +
@@ -1015,7 +1066,7 @@ function addToClientHistory(stops, keys) {
       notes:s.notes, timeFrom:s.timeFrom, timeTo:s.timeTo,
       serviceType:s.serviceType, city:s.city, deliveryDate:s.deliveryDate,
       productValue:s.productValue, productPaid:s.productPaid,
-      key:(keys&&keys[i])||'', cancelled:false
+      key:(keys&&keys[i])||'', cancelled:false, fixo:!!PARA
     }; })
   };
   hist.unshift(entry);
@@ -1043,7 +1094,7 @@ function renderClientHistory() {
       var finalized = s.finalized || (s.key && isFinalized(s.key));
       var badge   = s.cancelled ? ' <span class="status-badge status-cancelled">❌ Cancelada</span>'
                   : finalized   ? ' <span class="status-badge status-entregue">✅ Entregue</span>' : '';
-      var actions = (s.key && !s.cancelled && !finalized)
+      var actions = (s.key && !s.cancelled && !finalized && !s.fixo)
         ? '<div class="hist-actions">' +
             '<button type="button" class="client-req-btn edit-btn" onclick="window.histEdit(' + hi + ',' + i + ')">✏️ Atualizar</button>' +
             '<button type="button" class="client-req-btn cancel-btn" onclick="window.histCancel(' + hi + ',' + i + ')">❌ Cancelar</button>' +

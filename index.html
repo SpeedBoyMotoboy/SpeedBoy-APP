@@ -538,6 +538,19 @@
   </div>
 </div>
 
+<!-- ══ MOTOBOYS (aba fixa: o painel da entregadora fixa) ══
+     Fora do modo FULL de propósito: a KS manda entrega para a Márcia todo
+     dia, não só em dia de pico. -->
+<div class="screen" id="motoboysScreen">
+  <div class="config-body">
+    <div class="screen-title">
+      <button type="button" class="back-btn" onclick="goNav('homeScreen','nav-home')">←</button>
+      🛵 Motoboys
+    </div>
+    <div id="fixaPainel"></div>
+  </div>
+</div>
+
 <!-- ══ DOCUMENTO (aba: foto da folha vira parada) ══ -->
 <div class="screen" id="docScreen">
   <div class="config-body">
@@ -819,6 +832,7 @@
   <!-- Só existe no modo FULL: em dia normal ninguém repassa entrega, e um
        quinto item rouba largura dos quatro que se usa sempre. -->
   <button type="button" class="nav-btn hidden" id="nav-repasses" onclick="goNav('repassesScreen','nav-repasses')"><span class="icon">🏍️</span>Repasses</button>
+  <button type="button" class="nav-btn"        id="nav-motoboys" onclick="goNav('motoboysScreen','nav-motoboys')"><span class="icon">🛵</span>Motoboys</button>
   <button type="button" class="nav-btn"        id="nav-doc"     onclick="goNav('docScreen','nav-doc')"><span class="icon">📄</span>Documento</button>
   <button type="button" class="nav-btn"        id="nav-finance" onclick="goNav('financeScreen','nav-finance')"><span class="icon">💰</span>Ganhos</button>
   <button type="button" class="nav-btn"        id="nav-report"  onclick="goNav('reportScreen','nav-report')"><span class="icon">📊</span>Fechamento</button>
@@ -901,6 +915,7 @@
        § 29  Modo FULL  ← o interruptor e o que ele muda
        § 30  Repassar entregas
        § 31  Aba Repasses: o que está na rua, ao vivo
+       § 31b Aba Motoboys: painel fixo (Márcia ← KS direto)
 
      CONFIGURAÇÃO
        § 32  Links das lojas
@@ -1394,6 +1409,7 @@ const TELAS = {
   linkgenScreen: { slug: 'links',      nav: null          },
   repassScreen:  { slug: 'repasse',    nav: null          },
   repassesScreen:{ slug: 'repasses',   nav: 'nav-repasses'},
+  motoboysScreen:{ slug: 'motoboys',   nav: 'nav-motoboys'},
   docScreen:     { slug: 'documento',  nav: 'nav-doc'     }
 };
 const TELA_POR_SLUG = Object.fromEntries(
@@ -1498,6 +1514,7 @@ function goNav(screenId, navId, viaHistorico) {
   if(screenId==='linkgenScreen') renderLinks();
   if(screenId==='repassScreen')  renderRepassList();
   if(screenId==='repassesScreen')renderRepasses();
+  if(screenId==='motoboysScreen')renderMotoboys();
   if(screenId==='configScreen')  loadConfig();
 
   /* Voltando: devolve o dedo onde ele estava. Indo para uma tela nova:
@@ -4043,7 +4060,7 @@ function resumoRepasses(){
   let repasses=0,total=0,entregues=0,problemas=0;
   Object.values(repassesData).forEach(rp=>{
     const ds=(rp&&rp.deliveries)||[];
-    if(!ds.length)return;
+    if(!ds.length||rp.painel)return;   // painel fixo mora na aba Motoboys
     repasses++;
     ds.forEach(d=>{ total++; if(d.done)entregues++; if(d.problem&&!d.done)problemas++; });
   });
@@ -4065,9 +4082,12 @@ function listenRepasses(){
       });
       repassesData=novo;
       salvarRepassesLocal();
+      importarEntregasFixas();
       aplicarConfirmacoesRepasse();
       avisarProblemasNovos();
+      limparPainelFixo();
       if(_telaAtual==='repassesScreen') renderRepasses();
+      if(_telaAtual==='motoboysScreen') renderMotoboys();
       atualizarBarraFull();
     }catch(e){ sbLogError('listener de repasses',e); }
   },err=>sbLogError('listener de repasses',err));
@@ -4170,7 +4190,7 @@ function renderRepasses(){
   const el=document.getElementById('repassesList');
   const res=document.getElementById('repassesResumo');
   if(!el)return;
-  const ids=Object.keys(repassesData).sort((a,b)=>
+  const ids=Object.keys(repassesData).filter(id=>!(repassesData[id]&&repassesData[id].painel)).sort((a,b)=>
     String(repassesData[b]?.createdAt||'').localeCompare(String(repassesData[a]?.createdAt||'')));
   const r=resumoRepasses();
   res.innerHTML = ids.length
@@ -4315,6 +4335,294 @@ async function abrirProva(proofId, titulo){
 }
 function fecharProva(){ fecharModal('provaModal'); }
 document.getElementById('provaModal').addEventListener('click',e=>{if(e.target===e.currentTarget)fecharProva();});
+
+/* ═══════════════════════════════════════════════════════
+   § 31b — ABA MOTOBOYS — painel fixo (Márcia ← KS direto)
+
+   A KS chamava a Márcia direto no WhatsApp ("mais três aqui") e essas
+   entregas nunca passavam pelo app: ninguém contava, ninguém cobrava.
+
+   Agora a entregadora fixa tem um painel com link que não muda
+   (motoboy.html?painel=FX-...), e a loja tem um link próprio
+   (pedido.html?...&para=FX-...) que manda a entrega direto para ela —
+   sem fila de aceite. Cada entrega vira um nó em /repass com
+   painel=FX-..., e daqui ela:
+
+   • entra na lista do dia como parada da loja, com a taxa automática da
+     loja (só aqui: a Márcia não vê valor nenhum);
+   • volta como entregue pelo mesmo caminho dos repasses (stopId), com
+     hora, quem recebeu e a foto;
+   • conta no mês da Márcia: com foto E nome de quem recebeu, a entrega é
+     paga; sem, aparece separada.
+   ═══════════════════════════════════════════════════════ */
+const FIXA_IMPORTADAS='sb_fixa_importadas';
+
+function getFixa(){
+  const f=cfg.fixa;
+  return (f&&typeof f==='object'&&/^FX-[A-Z0-9]{4,12}$/.test(f.id||'')) ? f : null;
+}
+
+function criarPainelFixo(){
+  const nome=(document.getElementById('fxNome')?.value||'').trim()||'Márcia';
+  const loja=(document.getElementById('fxLoja')?.value||'').trim()||'KS';
+  const tel=(document.getElementById('fxTel')?.value||'').replace(/\D/g,'');
+  const id='FX-'+(Date.now().toString(36)+Math.random().toString(36).slice(2)).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(-6);
+  cfg.fixa={id,nome,loja,tel};
+  saveCfg();
+  renderMotoboys();
+  toast('✅ Painel de '+nome+' criado','success');
+}
+
+function editarTelFixa(){
+  const f=getFixa(); if(!f)return;
+  const novo=prompt('WhatsApp de '+f.nome+' (com DDD):', f.tel||'');
+  if(novo===null)return;
+  cfg.fixa={...f, tel:String(novo).replace(/\D/g,'')};
+  saveCfg(); renderMotoboys();
+}
+
+/* O link da Márcia não muda nunca. Leva o nome dela e o WhatsApp do Luan,
+   para o botão verde "Falar com o Luan" do painel. */
+function linkPainelFixo(){
+  const f=getFixa(); if(!f)return '';
+  const room=localStorage.getItem('sb_room_code')||'';
+  const fone=(cfg.prestTel||'').replace(/\D/g,'');
+  const q=new URLSearchParams({room, painel:f.id, nome:f.nome, ...(fone?{tel:fone}:{})});
+  return 'https://speedboymotoboy.github.io/SpeedBoy-APP/motoboy.html?'+q.toString();
+}
+// O link da loja é o link normal dela, com o destino junto
+function linkLojaParaFixa(){
+  const f=getFixa(); if(!f)return '';
+  const base=buildLink(f.loja);
+  if(!base)return '';
+  return base+'&'+new URLSearchParams({para:f.id, nome:f.nome}).toString();
+}
+
+function enviarLinkFixa(quem){
+  const f=getFixa(); if(!f)return;
+  if(!localStorage.getItem('sb_room_code')){ toast('Configure o Firebase primeiro','error'); return; }
+  let msg, fone='';
+  if(quem==='motoboy'){
+    msg=`🛵 *SPEEDBOY*\n\nOi ${f.nome}! Este é o seu painel de entregas. Salve este link — ele não muda:\n\n${linkPainelFixo()}\n\nEm cada entrega: tire a foto e escreva o nome de quem recebeu. *Sem a foto e o nome, a entrega não é paga.*`;
+    fone=f.tel||'';
+  }else{
+    msg=`🛵 *SPEEDBOY*\n\nOlá, ${f.loja}! Para mandar entrega para a ${f.nome}, use este link (é só preencher e enviar):\n\n${linkLojaParaFixa()}\n\nAssim a entrega fica registrada e vocês acompanham: hora, quem recebeu e foto.`;
+  }
+  const url=fone?`https://wa.me/55${fone}?text=${encodeURIComponent(msg)}`:`https://wa.me/?text=${encodeURIComponent(msg)}`;
+  window.open(url,'_blank');
+}
+function copiarLinkFixa(quem){
+  const l=localStorage.getItem('sb_room_code') ? (quem==='motoboy'?linkPainelFixo():linkLojaParaFixa()) : '';
+  if(!l){ toast('Configure o Firebase primeiro','error'); return; }
+  navigator.clipboard?.writeText(l).then(()=>toast('📋 Link copiado!','success')).catch(()=>toast(l,''));
+}
+
+/* A entrega da loja vira parada do dia. A taxa automática da loja entra
+   aqui, do lado do Luan — é o que a loja paga; no painel dela não aparece. */
+function paradaDaEntregaFixa(rpId, rp, d){
+  const city=resolveCityCode(d.cityId||d.city||'');
+  const loja=d.store||'';
+  const criado=new Date(rp.createdAt);
+  const s={
+    _id:d.stopId, name:d.name||'', address:d.address||'', complement:d.complement||'',
+    reference:d.reference||'', phone:d.phone||'', store:loja, city,
+    neighborhood:d.neighborhood||'', street:d.street||'', number:d.number||'',
+    serviceType:d.serviceType||'entrega', deliveryDate:d.deliveryDate||'',
+    timeFrom:d.timeFrom||'', timeTo:d.timeTo||'', notes:d.notes||'',
+    productValue:0, productPaid:false, value:0, paid:false,
+    done:false, status:'confirmed', _order:stops.length,
+    _addedDate:(isNaN(criado)?new Date():criado).toLocaleDateString('pt-BR'),
+    _repassId:rpId, repassadaPara:rp.motoboy||'Motoboy', viaPainel:rp.painel
+  };
+  if(rp.trackKey) s._trackKey=rp.trackKey;
+  const LOJA=loja.toUpperCase();
+  if(LOJA==='KS' && KS_TAXAS_BY_CITY[city]) s.value=KS_TAXAS_BY_CITY[city];
+  if(LOJA==='ARITANA'){ const m=detectarTaxaAritana(d.address||''); if(m) s.value=m.taxa; }
+  return s;
+}
+
+/* Traz para a lista o que a loja mandou para o painel fixo. Uma entrega
+   entra UMA vez: o que já foi importado (neste aparelho), excluído
+   (tombstone) ou arquivado no histórico não volta — senão a virada do dia
+   e o "apagar" ressuscitariam entregas velhas. */
+function importarEntregasFixas(){
+  const temFixa=Object.values(repassesData).some(rp=>rp&&rp.painel);
+  if(!temFixa)return 0;
+  const naLista=new Set(stops.map(idDaParada));
+  const tombs=getTombs();
+  const vistas=sbRead(FIXA_IMPORTADAS,{})||{};
+  const noHistorico=new Set();
+  history.forEach(dia=>((dia&&dia.stops)||[]).forEach(s=>{ if(s&&s._id) noHistorico.add(s._id); }));
+  const agora=Date.now(), limite=agora-30*24*3600*1000;
+  let novas=0, ultimo=null;
+  Object.entries(repassesData).forEach(([rpId,rp])=>{
+    if(!rp||!rp.painel||!Array.isArray(rp.deliveries))return;
+    rp.deliveries.forEach(d=>{
+      const id=d&&d.stopId;
+      if(!id)return;
+      if(naLista.has(id)){ if(!vistas[id]) vistas[id]=agora; return; }
+      if(vistas[id]||tombs[id]||noHistorico.has(id))return;
+      const criado=new Date(rp.createdAt||0).getTime();
+      if(!(criado>limite))return;
+      const s=paradaDaEntregaFixa(rpId,rp,d);
+      stops.push(s); naLista.add(id); vistas[id]=agora;
+      novas++; ultimo={rp,s};
+    });
+  });
+  // Poda: 60 dias bastam — passado disso a entrega nem é mais importada
+  Object.keys(vistas).forEach(k=>{ if(!(vistas[k]>agora-60*24*3600*1000)) delete vistas[k]; });
+  try{ localStorage.setItem(FIXA_IMPORTADAS,JSON.stringify(vistas)); }catch(e){}
+  if(!novas)return 0;
+  saveStops();
+  if(_telaAtual==='homeScreen') renderHome();
+  const quem=ultimo.rp.motoboy||'motoboy', loja=ultimo.s.store||'A loja';
+  toast(`🛵 ${loja} mandou ${novas} entrega(s) para ${quem}`,'success');
+  sendNotify('🛵 SPEEDBOY — Entrega para '+quem,
+    novas===1?`${loja}: ${ultimo.s.name||''}`:`${loja} mandou ${novas} entregas`,'fixa');
+  return novas;
+}
+
+/* O nó de uma entrega já feita, importada e com mais de 3 dias só ocupa
+   espaço: o que importa já está na parada (e no fechamento). Uma vez por
+   abertura do app. */
+let _fixaLimpa=false;
+async function limparPainelFixo(){
+  if(_fixaLimpa||!fbDb)return;
+  _fixaLimpa=true;
+  const vistas=sbRead(FIXA_IMPORTADAS,{})||{};
+  const corte=Date.now()-3*24*3600*1000;
+  const velhos=Object.entries(repassesData).filter(([,rp])=>{
+    const ds=(rp&&rp.painel&&rp.deliveries)||[];
+    return ds.length && ds.every(d=>d.done && vistas[d.stopId] && new Date(d.doneAt).getTime()<corte);
+  }).map(([id])=>id);
+  if(!velhos.length)return;
+  try{
+    const room=localStorage.getItem('sb_room_code')||'';
+    const {ref:r,remove}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
+    for(const id of velhos) await remove(r(fbDb,'rooms/'+room+'/repass/'+id));
+  }catch(e){ sbLogError('limpar painel fixo',e); }
+}
+
+/* Tirar do painel: a loja desistiu, ou mandou duas vezes. Some da tela
+   da Márcia; a parada na lista do Luan fica como está (apagar lá é
+   outra decisão). */
+async function tirarDoPainelFixo(rpId){
+  const rp=repassesData[rpId]; if(!rp)return;
+  const d=(rp.deliveries||[])[0]||{};
+  const ok=await confirmarAcao({
+    titulo:'Tirar do painel?',
+    texto:`"${d.name||'Entrega'}" some do painel de ${rp.motoboy||'motoboy'}.`,
+    detalhe:'Use quando a loja desistiu ou mandou repetido. Na sua lista de entregas ela continua — apague lá se for o caso.',
+    botao:'Tirar', perigo:true
+  });
+  if(!ok)return;
+  try{
+    const room=localStorage.getItem('sb_room_code')||'';
+    const {ref:r,remove}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
+    await remove(r(fbDb,'rooms/'+room+'/repass/'+rpId));
+    delete repassesData[rpId]; salvarRepassesLocal();
+    renderMotoboys();
+    toast('Tirada do painel','success');
+  }catch(e){ sbLogError('tirar do painel',e); toast('Erro — confira o sinal','error'); }
+}
+
+/* O mês da Márcia, contado das paradas (hoje) e do histórico — não dos
+   nós, que são limpos depois de 3 dias. Paga = foto E nome de quem
+   recebeu: a regra que o painel dela anuncia. */
+function contagemFixa(painelId){
+  const agora=new Date();
+  const mesmoMes=br=>{ const d=parseDate(br||''); return d && !isNaN(d) && d.getMonth()===agora.getMonth() && d.getFullYear()===agora.getFullYear(); };
+  const todas=[...stops, ...history.flatMap(dia=>(dia&&dia.stops)||[])];
+  const vistos=new Set();
+  let pagas=0, semProva=0;
+  todas.forEach(s=>{
+    if(!s||s.viaPainel!==painelId||!s.done)return;
+    const id=idDaParada(s);
+    if(vistos.has(id))return; vistos.add(id);
+    if(!mesmoMes(s._doneDate||s._addedDate))return;
+    if(s.proofId&&s.receivedBy) pagas++; else semProva++;
+  });
+  return {pagas, semProva};
+}
+
+function renderMotoboys(){
+  const el=document.getElementById('fixaPainel');
+  if(!el)return;
+  const f=getFixa();
+  if(!f){
+    el.innerHTML=`<div class="cfg-section">
+      <div class="cfg-title" style="margin-bottom:6px;">🛵 Painel fixo de entregadora</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px;">A loja manda a entrega direto para ela, por um link. Cai no painel dela e aqui na sua lista ao mesmo tempo — e só conta como paga com foto e nome de quem recebeu.</div>
+      <div class="field-group"><div class="field-label">Nome da entregadora</div><input class="field-input" id="fxNome" value="Márcia" /></div>
+      <div class="field-group"><div class="field-label">Loja que manda direto</div><input class="field-input" id="fxLoja" value="KS" /></div>
+      <div class="field-group"><div class="field-label">WhatsApp dela (opcional)</div><input class="field-input" id="fxTel" type="tel" placeholder="(XX) XXXXX-XXXX" oninput="maskPhone(this)" maxlength="15" /></div>
+      <button type="button" class="btn-save" onclick="criarPainelFixo()" style="background:var(--accent);">✅ Criar painel</button>
+    </div>`;
+    return;
+  }
+  const hoje=new Date().toDateString();
+  const itens=[];
+  Object.entries(repassesData).forEach(([rpId,rp])=>{
+    if(!rp||rp.painel!==f.id)return;
+    (rp.deliveries||[]).forEach(d=>{
+      if(d.done){ const q=new Date(d.doneAt); if(isNaN(q)||q.toDateString()!==hoje)return; }
+      itens.push({rpId,rp,d});
+    });
+  });
+  itens.sort((a,b)=>(!!a.d.done-!!b.d.done) ||
+    (a.d.done ? String(b.d.doneAt||'').localeCompare(String(a.d.doneAt||''))
+              : String(a.rp.createdAt||'').localeCompare(String(b.rp.createdAt||''))));
+  const naRua=itens.filter(x=>!x.d.done).length;
+  const c=contagemFixa(f.id);
+  const lista=itens.length ? itens.map(({rpId,rp,d})=>{
+    const est=d.done?'ok':'wait';
+    const linhas=[];
+    if(d.address) linhas.push('📍 '+esc(d.address));
+    const chegou=rp.createdAt?new Date(rp.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
+    if(chegou) linhas.push('📨 '+esc(d.store||'Loja')+' mandou às '+esc(chegou));
+    if(d.done){
+      const h=d.doneAt?new Date(d.doneAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
+      linhas.push('⏰ '+esc(h)+(d.receivedBy?' · ✋ Recebido por '+esc(d.receivedBy):''));
+      if(!(d.proofId&&d.receivedBy)) linhas.push('<span class="fx-sem-prova">⚠️ Sem foto ou sem nome — não conta como paga</span>');
+    }
+    const botoes=[
+      d.proofId?`<button type="button" class="sc-btn blue" style="padding:7px 10px;" onclick="abrirProva('${escJs(d.proofId)}','${escJs(d.name||'')}')">📷 Ver comprovante</button>`:'',
+      d.done?'':`<button type="button" class="sc-btn" style="padding:7px 10px;color:var(--red);border-color:rgba(255,82,82,.45);" onclick="tirarDoPainelFixo('${escJs(rpId)}')">🗑️ Tirar do painel</button>`
+    ].filter(Boolean).join(' ');
+    return `<div class="rp-item">
+      <div class="rp-item-top">
+        <div style="min-width:0;">
+          <div class="rp-item-nome">${esc(d.name||'Sem nome')}</div>
+          <div class="rp-item-sub">${linhas.join('<br>')}</div>
+        </div>
+        <span class="rp-sel ${est}">${SEL_REPASSE[est]}</span>
+      </div>
+      ${botoes?`<div style="margin-top:7px;display:flex;gap:7px;flex-wrap:wrap;">${botoes}</div>`:''}
+    </div>`;
+  }).join('') : `<div class="rp-vazio">Nada no painel agora.<br>Quando a ${esc(f.loja)} mandar entrega pelo link, ela aparece aqui e na lista do dia.</div>`;
+
+  el.innerHTML=`<div class="cfg-section">
+    <div class="fx-cab">
+      <div><div class="fx-cab-nome">🛵 ${esc(f.nome)}</div><div class="fx-cab-sub">Entregas da ${esc(f.loja)}, direto para ela</div></div>
+    </div>
+    <div class="fx-stats">
+      <div class="rstat"><div class="rstat-lbl">Na rua</div><div class="rstat-val ac">${naRua}</div></div>
+      <div class="rstat"><div class="rstat-lbl">Entregues hoje</div><div class="rstat-val gr">${itens.length-naRua}</div></div>
+      <div class="rstat"><div class="rstat-lbl">Pagar no mês</div><div class="rstat-val gr">${c.pagas}</div></div>
+      <div class="rstat"><div class="rstat-lbl">Sem comprovante</div><div class="rstat-val" style="color:${c.semProva?'var(--red)':'var(--muted)'}">${c.semProva}</div></div>
+    </div>
+    <div class="fx-links">
+      <button type="button" class="sc-btn wpp" onclick="enviarLinkFixa('motoboy')">📲 Link p/ ${esc(f.nome)}</button>
+      <button type="button" class="sc-btn wpp" onclick="enviarLinkFixa('loja')">🏪 Link p/ ${esc(f.loja)}</button>
+      <button type="button" class="sc-btn blue" onclick="copiarLinkFixa('motoboy')">📋 Copiar link dela</button>
+      <button type="button" class="sc-btn blue" onclick="copiarLinkFixa('loja')">📋 Copiar link da loja</button>
+    </div>
+    ${lista}
+    <div style="text-align:center;margin-top:10px;">
+      <button type="button" onclick="editarTelFixa()" style="background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;">WhatsApp de ${esc(f.nome)}: ${f.tel?esc(fmtPhone(f.tel)):'não informado'}</button>
+    </div>
+  </div>`;
+}
 
 // ═══════════════════════════════════════════════════════
 //  § 32 — LINKS DAS LOJAS

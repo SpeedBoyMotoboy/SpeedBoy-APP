@@ -43,7 +43,7 @@ isso o celular instalado continua servindo o código antigo do cache.
 |---|---|---|
 | `index.html` | você | O app. Paradas, ganhos, fechamento, configuração. |
 | `pedido.html` | as lojas | Pedem entrega por um link, acompanham o status, veem hora / quem recebeu / comprovante. |
-| `motoboy.html` | os motoboys | Painel de um repasse: lista, rota, problema na entrega, confirmação com foto. |
+| `motoboy.html` | os motoboys | Painel de um repasse: lista, rota, problema na entrega, confirmação com foto. Com `&painel=FX-...`, vira o **painel fixo** da Márcia: link que não muda, botões grandes, foto e nome obrigatórios. |
 | `fatura.html` | as lojas | Conferem uma fatura publicada e baixam o PDF. |
 
 Dentro do app, a aba **Documento** lê uma folha fotografada e monta a parada
@@ -54,6 +54,13 @@ a folha traz dados de terceiros. Pelo mesmo motivo o **CPF impresso na folha é
 reconhecido só para ser descartado** — ele não vai para a parada nem para o
 `localStorage`; reconhecê-lo é o que impede os onze dígitos de entrarem como
 telefone do cliente.
+
+**KS → Márcia direto.** A KS tem um segundo link (`pedido.html?...&para=FX-...`)
+que manda a entrega direto para o painel fixo da Márcia, sem fila de aceite e
+sem valor nenhum. Cada entrega vira um nó em `repass/` com `painel=FX-...`; o
+app traz ela para a lista do dia com a taxa automática da KS (só do lado do
+Luan) e conta no mês da Márcia — paga só com foto **e** nome de quem recebeu.
+Usa caminhos que já têm regra no banco: não precisa republicar as regras.
 
 Nenhuma delas tem login. O que separa os dados é o **código da sala**
 (`SB-XXXX`), que viaja no link.
@@ -93,6 +100,7 @@ que se procura mais:
 | o fechamento e o PDF | `§ 26`, `§ 27` |
 | corrigir uma entrega antiga | `§ 25b` |
 | o modo FULL e os repasses | `§ 29`, `§ 30`, `§ 31` |
+| a aba Motoboys / painel fixo da Márcia | `§ 31b` |
 | a foto da folha que vira parada | `§ 43` (e o `speedboy-documento.js`) |
 | sincronizar entre os celulares | `§ 7` (merge) e `§ 35` (Firebase) |
 | o que acontece ao abrir o app | `§ 44`, no fim do arquivo |

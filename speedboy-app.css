@@ -84,6 +84,16 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 .rp-acts .sc-btn{flex:1;min-width:90px;}
 .rp-prova{margin-top:7px;border:1px solid var(--border);border-radius:8px;max-width:100%;display:block;cursor:pointer;}
 .rp-vazio{color:var(--muted);text-align:center;padding:26px 16px;font-size:13px;line-height:1.7;}
+/* ══ MOTOBOYS — painel fixo (Márcia) ══ */
+.fx-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+.fx-cab-nome{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--accent);}
+.fx-cab-sub{font-size:12px;color:var(--muted);}
+.fx-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
+.fx-links{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px;}
+.fx-links .sc-btn{flex:1;min-width:130px;}
+.fx-sem-prova{font-size:11px;color:var(--red);font-weight:700;}
+/* Sete itens na barra (FULL ligado): o texto encolhe em vez de quebrar */
+.bottom-nav:has(#nav-repasses:not(.hidden)) .nav-btn{font-size:9.5px;padding-left:1px;padding-right:1px;letter-spacing:0;}
 .rp-opt{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:13px;cursor:pointer;}
 .rp-opt input{width:20px;height:20px;accent-color:var(--accent);flex-shrink:0;cursor:pointer;}
 /* Quem entregou, quando e quem recebeu — a linha que o fechamento passou
@@ -107,7 +117,7 @@ body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height
 /* env(safe-area-inset-bottom): sem isto a barra fica embaixo da faixa do
    iPhone e do gesto do Android, e o último item vira quase intocável. */
 .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--card);border-top:1px solid var(--border);display:flex;z-index:100;padding-bottom:env(safe-area-inset-bottom);}
-.nav-btn{flex:1;padding:14px 8px 12px;background:none;border:none;color:var(--muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-family:'Barlow',sans-serif;font-size:11px;font-weight:700;letter-spacing:.3px;transition:color .15s;min-height:60px;}
+.nav-btn{flex:1;min-width:0;padding:14px 2px 12px;background:none;border:none;color:var(--muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-family:'Barlow',sans-serif;font-size:11px;font-weight:700;letter-spacing:.3px;transition:color .15s;min-height:60px;}
 .nav-btn:active{background:rgba(127,127,127,.12);}
 .nav-btn.active{color:var(--accent);}
 .nav-btn .icon{font-size:20px;line-height:1;}

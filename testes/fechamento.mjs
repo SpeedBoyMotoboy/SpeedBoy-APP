@@ -257,16 +257,23 @@ function montarEdicao() {
    data que o fechamento MOSTRA (_doneDate) pode não ser o dia em que ela
    está guardada. */
 {
+  /* Datas relativas a hoje: com datas fixas o teste passou a falhar sozinho
+     quando elas saíram da janela de 60 dias. */
+  const diasAtras = n => {
+    const d = new Date(); d.setDate(d.getDate() - n);
+    return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+  };
+  const guardada = diasAtras(2), entregue = diasAtras(3);
   const { ctx, getReportData } = montar();
   ctx.history = [
-    { date: '05/07/2026', stops: [
-      { _id: 'a', name: 'Ana', value: '10', done: true, _doneDate: '04/07/2026' }
+    { date: guardada, stops: [
+      { _id: 'a', name: 'Ana', value: '10', done: true, _doneDate: entregue }
     ] }
   ];
   ctx.reportPeriod = '60d';
   const s = getReportData().allStops[0];
-  ok(s._date === '04/07/2026', 'o fechamento mostra a data em que foi entregue');
-  ok(s._bucket === '05/07/2026',
+  ok(s._date === entregue, 'o fechamento mostra a data em que foi entregue');
+  ok(s._bucket === guardada,
     'mas guarda o dia REAL onde a parada está — é por ele que a correção a encontra');
   ok(s._si === 0 && s._hoje === false, 'e o índice dentro daquele dia');
 }

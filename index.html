@@ -20,6 +20,23 @@
 <!-- Estilos só deste app. Saíram de um <style> de 472 linhas aqui dentro;
      a ordem importa: speedboy.css declara os tokens que este usa. -->
 <link rel="stylesheet" href="speedboy-app.css">
+<!-- Autocorreção: se o celular trouxe o index.html novo com um
+     speedboy-app.css de versão anterior (cache), os ícones da barra
+     viram blocos pretos. O CSS atual declara --sb-css-ok; sem ele,
+     as folhas são buscadas de novo, uma vez, sem cache. -->
+<script>
+window.addEventListener('load', function(){
+  try{
+    var ok = getComputedStyle(document.documentElement).getPropertyValue('--sb-css-ok').trim();
+    if (ok || sessionStorage.getItem('sb_css_recarregado')) return;
+    sessionStorage.setItem('sb_css_recarregado','1');
+    var v = Date.now();
+    document.querySelectorAll('link[rel="stylesheet"][href^="speedboy"]').forEach(function(l){
+      l.href = l.getAttribute('href').split('?')[0] + '?v=' + v;
+    });
+  }catch(e){}
+});
+</script>
 </head>
 <body>
 

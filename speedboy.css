@@ -16,26 +16,47 @@
    ═══════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ── superfícies ── */
-  --bg:      #0a0a0a;
-  --card:    #181818;
-  --card2:   #1f1f1f;
-  --border:  #2a2a2a;
+  /* ── superfícies: asfalto à noite ──
+     Um matiz só, subindo poucos pontos de luz por nível. Ninguém deve
+     "ver" a diferença entre card e card2 — só sentir o que está em cima. */
+  --bg:      #0b0b0c;
+  --card:    #161618;
+  --card2:   #1e1e21;
+  --border:  #2c2c30;
+  --campo:   #0f0f11;          /* inputs: um tom ABAIXO do card, afundados */
 
-  /* ── cores de marca e estado ── */
+  /* Bordas translúcidas: somem quando ninguém procura, aparecem quando
+     precisa. A borda sólida (--border) fica para trilho e divisória. */
+  --linha:   rgba(255,255,255,.07);
+  --linha-2: rgba(255,255,255,.13);
+
+  /* ── cores de marca e estado ──
+     Amarelo de faixa de pista: a ÚNICA cor de ação. As outras dizem
+     estado (entregue, problema, agendada), nunca enfeitam. */
   --accent:  #f5c518;
-  --accent2: #ff6b00;
-  --green:   #00e676;
-  --red:     #ff3d3d;
-  --blue:    #3b82f6;
+  --accent2: #ff7a1a;
+  --green:   #2fd67f;
+  --red:     #ff4d4d;
+  --blue:    #4c8dff;
+  --violeta: #a78bfa;
+  --sobre-accent: #121212;     /* texto em cima do amarelo */
 
-  /* ── texto ── */
-  --text:    #f0f0f0;
-  --muted:   #aaa;      /* 7,64:1 sobre --card — passa AA */
+  /* Fundos tingidos: a cor aparece como luz, não como tinta */
+  --accent-suave:  rgba(245,197,24,.12);
+  --accent2-suave: rgba(255,122,26,.13);
+  --green-suave:   rgba(47,214,127,.12);
+  --red-suave:     rgba(255,77,77,.12);
+  --blue-suave:    rgba(76,141,255,.13);
+  --violeta-suave: rgba(167,139,250,.13);
+
+  /* ── texto: quatro níveis ── */
+  --text:    #f2f2ef;
+  --muted:   #aaa;      /* 7,6:1 sobre --card — passa AA */
+  --apagado: #7c7c80;   /* só metadado curto ao lado de texto principal */
 
   /* ── forma ── */
   --radius:    14px;
-  --radius-sm: 9px;
+  --radius-sm: 10px;
   --radius-lg: 20px;
 
   /* ── espaçamento ── */
@@ -53,20 +74,35 @@
   /* ── movimento ── */
   --rapido: .15s;
   --normal: .25s;
+  --saida: cubic-bezier(.23,1,.32,1);
 }
 
+/* Tema claro: papel de recibo ao sol. Branco puro estoura a tela na rua;
+   o fundo levemente quente descansa o olho. */
 body.light {
-  --bg:      #ffffff;
-  --card:    #f5f5f5;
-  --card2:   #efefef;
-  --border:  #ddd;
+  --bg:      #f4f3ef;
+  --card:    #ffffff;
+  --card2:   #f0efea;
+  --border:  #dcdad3;
+  --campo:   #f7f6f2;
+  --linha:   rgba(20,18,10,.09);
+  --linha-2: rgba(20,18,10,.16);
   --accent:  #c9920a;
-  --accent2: #e05500;
-  --green:   #1a7a3f;
+  --accent2: #d9570a;
+  --green:   #17804a;
   --red:     #cc2233;
   --blue:    #1a65d6;
-  --text:    #000;
-  --muted:   #333;
+  --violeta: #6d4fd1;
+  --sobre-accent: #121212;
+  --accent-suave:  rgba(201,146,10,.13);
+  --accent2-suave: rgba(217,87,10,.11);
+  --green-suave:   rgba(23,128,74,.11);
+  --red-suave:     rgba(204,34,51,.09);
+  --blue-suave:    rgba(26,101,214,.10);
+  --violeta-suave: rgba(109,79,209,.10);
+  --text:    #141414;
+  --muted:   #4a4944;
+  --apagado: #77756e;
 }
 
 /* Quem preferir menos animação no sistema não deve levar animação. */

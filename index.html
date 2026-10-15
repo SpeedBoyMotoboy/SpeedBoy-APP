@@ -69,7 +69,7 @@
 
 <!-- NOTIFY HELP -->
 <div class="modal-overlay hidden" id="notifyHelpModal">
-  <div class="modal-sheet" style="max-height:90vh;overflow-y:auto;">
+  <div class="modal-sheet">
     <div class="modal-header">
       <div class="modal-name" id="notifyHelpTitle">🔔 Reativar notificações</div>
       <button type="button" class="modal-close" onclick="closeNotifyHelp()">✕</button>
@@ -80,15 +80,15 @@
 </div>
 
 <!-- HEADER -->
-<div class="header">
+<header class="header">
   <div class="logo">SPEED<span>BOY</span></div>
   <div class="header-right">
     <div id="syncRow"><div class="sync-dot" id="syncDot"></div><span class="sync-label" id="syncLabel"></span></div>
     <button type="button" class="btn-full" id="btnFull" onclick="alternarModoFull()" aria-pressed="false" title="Modo FULL — dia de muita demanda">FULL</button>
-    <button type="button" onclick="toggleTheme()" id="themeToggleBtn" style="background:none;border:none;font-size:18px;cursor:pointer;padding:2px 4px;" title="Alternar tema">☀️</button>
+    <button type="button" onclick="toggleTheme()" id="themeToggleBtn" class="btn-tema" title="Alternar tema" aria-label="Alternar tema claro/escuro">☀️</button>
     <div id="badgeCount" class="badge-count">0</div>
   </div>
-</div>
+</header>
 
 <!-- Fica fora das telas: uma versão nova pode ser detectada com o app em
      qualquer aba, e o aviso não pode depender de ele estar na inicial. -->
@@ -104,7 +104,7 @@
   <div class="notify-bar hidden" id="instalarBar">
     <div class="notify-bar-text" id="instalarTexto">📲 Instale o SpeedBoy na tela inicial — abre como aplicativo e funciona sem sinal.</div>
     <button type="button" class="btn-allow-notify" onclick="instalarApp()">Instalar</button>
-    <button type="button" onclick="dispensarInstalar()" aria-label="Dispensar" style="background:none;border:none;color:var(--muted);font-size:17px;cursor:pointer;padding:0 2px;line-height:1;">✕</button>
+    <button type="button" class="notify-x" onclick="dispensarInstalar()" aria-label="Dispensar">✕</button>
   </div>
   <div class="notify-bar hidden" id="notifyBar" onclick="onNotifyBar()">
     <div class="notify-bar-text" id="notifyBarText">🔔 Ative as notificações para ser avisado de novos pedidos</div>
@@ -115,32 +115,32 @@
     <div class="full-bar-txt" id="fullBarTxt"></div>
     <button type="button" class="full-bar-btn" onclick="goNav('repassesScreen','nav-repasses')">Ver repasses</button>
   </div>
+  <!-- Resumo do dia: quantas faltam, quanto rendeu. Preenchido pelo
+       renderHome — some quando a lista está vazia. -->
+  <div class="dia hidden" id="homeResumo"></div>
   <div class="home-top">
-    <button type="button" class="btn-add" onclick="goForm()">＋ Adicionar parada</button>
-    <button type="button" class="btn-cfg-icon" id="quickFabInline" onclick="openQuickPanel()" style="display:none;background:rgba(245,197,24,.15);border:1.5px solid var(--accent);color:var(--accent);font-size:20px;">⚡</button>
-    <button type="button" class="btn-cfg-icon" onclick="goNav('configScreen','nav-cfg')">⚙️</button>
+    <button type="button" class="btn-add" onclick="goForm()">＋ Nova parada</button>
+    <button type="button" class="btn-rapida" id="quickFabInline" onclick="openQuickPanel()" style="display:none;" title="Adição rápida" aria-label="Adição rápida">⚡</button>
   </div>
   <div class="pending-section" id="pendingSection">
     <div class="pending-header">
       <div class="pending-title">🔔 Pedidos da loja <span class="pending-badge" id="pendingBadge">0</span></div>
-      <button type="button" onclick="rejectAll()" style="background:none;border:none;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;">Recusar todos</button>
+      <button type="button" class="btn-texto" onclick="rejectAll()">Recusar todos</button>
     </div>
     <div id="pendingList"></div>
   </div>
-  <div class="sort-bar" id="sortBar">
+  <div class="sort-bar" id="sortBar" role="group" aria-label="Agrupar paradas por">
     <span class="sort-label">Agrupar:</span>
-    <button type="button" class="btn-sort on" id="grp-status"  onclick="setGroupBy('status')">📋 Status</button>
-    <button type="button" class="btn-sort"    id="grp-city"    onclick="setGroupBy('city')">🏙️ Cidade</button>
-    <button type="button" class="btn-sort"    id="grp-store"   onclick="setGroupBy('store')">🏪 Loja</button>
-    <button type="button" class="btn-sort"    id="grp-time"    onclick="setGroupBy('time')">⏰ Horário</button>
+    <button type="button" class="btn-sort on" id="grp-status"  onclick="setGroupBy('status')">Status</button>
+    <button type="button" class="btn-sort"    id="grp-city"    onclick="setGroupBy('city')">Cidade</button>
+    <button type="button" class="btn-sort"    id="grp-store"   onclick="setGroupBy('store')">Loja</button>
+    <button type="button" class="btn-sort"    id="grp-time"    onclick="setGroupBy('time')">Horário</button>
   </div>
   <div id="quickFab" style="display:none;"></div>
   <div class="stops-list" id="stopsList"></div>
   <div class="route-bar">
-    <div style="display:flex;gap:8px;">
-      <button type="button" class="btn-route" id="optimizeBtn" onclick="optimizeAndOpenRoute()" disabled style="flex:1.2;background:rgba(245,197,24,.12);border-color:var(--accent);color:var(--accent);">⚡ Otimizar Rota</button>
-      <button type="button" class="btn-route" onclick="goRepass()" style="flex:1;background:rgba(255,107,0,.12);border-color:var(--accent2);color:var(--accent2);">🏍️ Repassar</button>
-    </div>
+    <button type="button" class="btn-route" id="optimizeBtn" onclick="optimizeAndOpenRoute()" disabled>Otimizar rota</button>
+    <button type="button" class="btn-repassar" onclick="goRepass()">Repassar</button>
   </div>
 </div>
 
@@ -152,135 +152,140 @@
       <span id="formTitle">Nova parada</span>
     </div>
 
-    <!-- ROW 1: Taxa + Pago + Horário + Data -->
-    <div style="display:flex;gap:6px;margin-bottom:10px;align-items:flex-end;">
-      <div style="flex:1.2;">
-        <div class="field-label">Taxa (R$)</div>
-        <div class="money-input-wrap">
-          <span class="money-prefix">R$</span>
-          <input class="field-input" id="fValue" placeholder="0,00" type="text" inputmode="decimal" oninput="maskMoney(this)" style="padding:10px 10px 10px 34px;font-size:13px;" />
+    <!-- Atalho: colar a mensagem da loja e deixar o app preencher.
+         Fica em cima porque é o caminho mais rápido — digitar campo por
+         campo é o plano B. -->
+    <div class="form-colar">
+      <div class="paste-box">
+        <textarea class="paste-area" id="pasteArea" placeholder="Cole aqui a mensagem da loja…"></textarea>
+        <button type="button" class="btn-clear" onclick="document.getElementById('pasteArea').value=''" aria-label="Limpar">✕</button>
+      </div>
+      <button type="button" id="parseBtn" onclick="doParse()">Preencher</button>
+    </div>
+
+    <div class="form-bloco">
+      <div class="form-bloco-tit">Cliente</div>
+      <div class="field-row">
+        <div class="field-group f15">
+          <div class="field-label">Nome <span class="req">*</span></div>
+          <input class="field-input" id="fName" placeholder="Pedro Santos" autocomplete="off" />
+        </div>
+        <div class="field-group f12">
+          <div class="field-label">Serviço</div>
+          <select class="field-input" id="fServiceType">
+            <option value="entrega">🛵 Entrega</option>
+            <option value="retirada">📦 Retirada</option>
+            <option value="troca">🔄 Troca</option>
+          </select>
         </div>
       </div>
-      <button type="button" id="fPaidBtn" onclick="toggleFormPaid()" style="flex-shrink:0;width:42px;height:42px;border-radius:10px;border:1.5px solid var(--border);background:var(--card);color:var(--muted);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Pago?">✓</button>
-      <input type="hidden" id="fPaid" value="0" />
-      <div style="flex:1;">
-        <div class="field-label">De</div>
-        <input class="field-input" id="fTimeFrom" type="time" style="padding:10px 4px;font-size:12px;text-align:center;" />
-      </div>
-      <div style="flex:1;">
-        <div class="field-label">Até</div>
-        <input class="field-input" id="fTimeTo" type="time" style="padding:10px 4px;font-size:12px;text-align:center;" />
-      </div>
-      <div style="flex:1.3;">
-        <div class="field-label">Data</div>
-        <input class="field-input" id="fDelivDate" type="date" style="padding:10px 4px;font-size:12px;color:var(--text);" />
-      </div>
-    </div>
-
-    <!-- ROW 2: Loja (full) -->
-    <div class="field-group">
-      <div class="field-label">🏪 Loja de origem</div>
-      <select class="field-input" id="fStore" onchange="autoTaxaAritana();autoTaxaKS()"><option value="">— Sem loja específica —</option></select>
-    </div>
-
-    <!-- ROW 3: Nome + Tipo -->
-    <div class="field-row">
-      <div class="field-group" style="flex:2;">
-        <div class="field-label">Nome do cliente <span class="req">*</span></div>
-        <input class="field-input" id="fName" placeholder="Pedro Santos" />
-      </div>
-      <div class="field-group" style="flex:1.2;">
-        <div class="field-label">Tipo de serviço</div>
-        <select class="field-input" id="fServiceType">
-          <option value="entrega">🛵 Entrega</option>
-          <option value="retirada">📦 Retirada</option>
-          <option value="troca">🔄 Troca</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- ROW 4: Telefone + Cobrança + check -->
-    <div style="display:flex;gap:6px;margin-bottom:10px;align-items:flex-end;">
-      <div style="flex:2;">
+      <div class="field-group">
         <div class="field-label">Telefone <span class="req">*</span></div>
-        <input class="field-input" id="fPhone" placeholder="(XX) XXXXX-XXXX" type="tel" oninput="maskPhone(this)" maxlength="15" />
+        <input class="field-input" id="fPhone" placeholder="(27) 99999-9999" type="tel" oninput="maskPhone(this)" maxlength="15" />
       </div>
-      <div style="flex:1.3;">
-        <div class="field-label">Cobrar (R$)</div>
-        <div class="money-input-wrap">
-          <span class="money-prefix">R$</span>
-          <input class="field-input" id="fProductValue" placeholder="0,00" type="text" inputmode="decimal" oninput="maskMoney(this)" style="padding:10px 10px 10px 34px;font-size:13px;" />
+    </div>
+
+    <div class="form-bloco">
+      <div class="form-bloco-tit">Endereço</div>
+      <div class="field-row">
+        <div class="field-group">
+          <div class="field-label">Cidade <span class="req">*</span></div>
+          <select class="field-input" id="fCity" onchange="onCityChange();autoTaxaKS()">
+            <option value="">Selecione</option>
+            <option value="SRR">Serra</option>
+            <option value="VIX">Vitória</option>
+            <option value="VV">Vila Velha</option>
+            <option value="CCA">Cariacica</option>
+            <option value="VIA">Viana</option>
+            <option value="OUT">Outra</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <div class="field-label">Bairro <span class="req">*</span></div>
+          <div class="bairro-wrap">
+            <input class="field-input" id="fBairro" placeholder="Buscar…" autocomplete="off" oninput="filterBairros()" onfocus="filterBairros()" onblur="autoTaxaAritana()" />
+            <div class="bairro-list" id="fBairroList"></div>
+          </div>
         </div>
       </div>
-      <button type="button" id="fProductPaidBtn" onclick="toggleFormProductPaid()" style="flex-shrink:0;width:42px;height:42px;border-radius:10px;border:1.5px solid var(--border);background:var(--card);color:var(--muted);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Produto pago?">✓</button>
-      <input type="hidden" id="fProductPaid" value="0" />
-    </div>
-
-    <!-- ROW 5: Cidade + Bairro -->
-    <div class="field-row">
-      <div class="field-group">
-        <div class="field-label">Cidade <span class="req">*</span></div>
-        <select class="field-input" id="fCity" onchange="onCityChange();autoTaxaKS()">
-          <option value="">— Selecione —</option>
-          <option value="SRR">Serra</option>
-          <option value="VIX">Vitória</option>
-          <option value="VV">Vila Velha</option>
-          <option value="CCA">Cariacica</option>
-          <option value="VIA">Viana</option>
-          <option value="OUT">Outra</option>
-        </select>
+      <div class="field-row">
+        <div class="field-group f3">
+          <div class="field-label">Rua / Avenida <span class="req">*</span></div>
+          <input class="field-input" id="fRua" placeholder="Av. Central" />
+        </div>
+        <div class="field-group">
+          <div class="field-label">Nº</div>
+          <input class="field-input" id="fNumero" placeholder="890" inputmode="numeric" />
+        </div>
       </div>
-      <div class="field-group">
-        <div class="field-label">Bairro <span class="req">*</span></div>
-        <div class="bairro-wrap">
-          <input class="field-input" id="fBairro" placeholder="Digite para buscar..." autocomplete="off" oninput="filterBairros()" onfocus="filterBairros()" onblur="autoTaxaAritana()" />
-          <div class="bairro-list" id="fBairroList"></div>
+      <div class="field-row">
+        <div class="field-group">
+          <div class="field-label">Complemento</div>
+          <input class="field-input" id="fComplement" placeholder="Apto 42" />
+        </div>
+        <div class="field-group">
+          <div class="field-label">Referência</div>
+          <input class="field-input" id="fReference" placeholder="Perto da padaria" />
         </div>
       </div>
     </div>
 
-    <!-- ROW 6: Rua + Número -->
-    <div class="field-row">
-      <div class="field-group" style="flex:3;">
-        <div class="field-label">Rua / Avenida <span class="req">*</span></div>
-        <input class="field-input" id="fRua" placeholder="Av. Central" />
+    <div class="form-bloco">
+      <div class="form-bloco-tit">Loja e horário</div>
+      <div class="field-group">
+        <div class="field-label">Loja de origem</div>
+        <select class="field-input" id="fStore" onchange="autoTaxaAritana();autoTaxaKS()"><option value="">— Sem loja específica —</option></select>
       </div>
-      <div class="field-group" style="flex:1;">
-        <div class="field-label">Nº</div>
-        <input class="field-input" id="fNumero" placeholder="890" />
+      <div class="field-row">
+        <div class="field-group f2">
+          <div class="field-label">Data</div>
+          <input class="field-input" id="fDelivDate" type="date" />
+        </div>
+        <div class="field-group">
+          <div class="field-label">De</div>
+          <input class="field-input" id="fTimeFrom" type="time" />
+        </div>
+        <div class="field-group">
+          <div class="field-label">Até</div>
+          <input class="field-input" id="fTimeTo" type="time" />
+        </div>
       </div>
     </div>
 
-    <!-- ROW 7: Complemento + Referência -->
-    <div class="field-row">
-      <div class="field-group">
-        <div class="field-label">Complemento</div>
-        <input class="field-input" id="fComplement" placeholder="Apto 42, bloco C" />
+    <div class="form-bloco">
+      <div class="form-bloco-tit">Valores</div>
+      <div class="valor-linha">
+        <div class="field-group">
+          <div class="field-label">Taxa da entrega</div>
+          <div class="money-input-wrap">
+            <span class="money-prefix">R$</span>
+            <input class="field-input" id="fValue" placeholder="0,00" type="text" inputmode="decimal" oninput="maskMoney(this)" />
+          </div>
+        </div>
+        <button type="button" class="chk-btn" id="fPaidBtn" onclick="toggleFormPaid()" aria-pressed="false" title="Taxa já recebida?">Recebida</button>
+        <input type="hidden" id="fPaid" value="0" />
       </div>
-      <div class="field-group">
-        <div class="field-label">Referência</div>
-        <input class="field-input" id="fReference" placeholder="Próx. à padaria" />
+      <div class="valor-linha">
+        <div class="field-group">
+          <div class="field-label">Cobrar do cliente</div>
+          <div class="money-input-wrap">
+            <span class="money-prefix">R$</span>
+            <input class="field-input" id="fProductValue" placeholder="0,00" type="text" inputmode="decimal" oninput="maskMoney(this)" />
+          </div>
+        </div>
+        <button type="button" class="chk-btn" id="fProductPaidBtn" onclick="toggleFormProductPaid()" aria-pressed="false" title="Produto já pago?">Pago</button>
+        <input type="hidden" id="fProductPaid" value="0" />
       </div>
     </div>
 
-    <!-- ROW 8: Observações -->
     <div class="field-group">
       <div class="field-label">Observações</div>
-      <input class="field-input" id="fNotes" placeholder="Cuidado com o cachorro..." />
-    </div>
-
-    <!-- ROW 9: Colar dados + Processar -->
-    <div style="display:flex;gap:6px;margin-top:6px;margin-bottom:10px;align-items:stretch;">
-      <div style="flex:1;position:relative;">
-        <textarea class="paste-area" id="pasteArea" placeholder="Cole dados da entrega..." style="min-height:44px;height:44px;padding:11px 32px 11px 12px;font-size:12px;resize:none;"></textarea>
-        <button type="button" class="btn-clear" onclick="document.getElementById('pasteArea').value=''" style="top:8px;right:6px;width:22px;height:22px;font-size:11px;">✕</button>
-      </div>
-      <button type="button" id="parseBtn" onclick="doParse()" style="flex-shrink:0;background:var(--accent);color:#000;border:none;border-radius:10px;padding:0 14px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap;">🤖 Processar</button>
+      <input class="field-input" id="fNotes" placeholder="Cuidado com o cachorro…" />
     </div>
 
     <input type="hidden" id="editIdx" value="-1" />
     <input type="hidden" id="fAddress" />
-    <button type="button" class="btn-save" onclick="saveStop()">✅ Salvar parada</button>
+    <button type="button" class="btn-save" onclick="saveStop()">Salvar parada</button>
   </div>
 </div>
 
@@ -292,13 +297,13 @@
       <button type="button" class="modal-close" onclick="closeQuickPanel()">✕</button>
     </div>
     <div id="quickPanelBody"></div>
-    <button type="button" onclick="saveQuickPanel()" style="width:100%;margin-top:14px;padding:14px;background:var(--green);color:#000;border:none;border-radius:var(--radius);font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;cursor:pointer;letter-spacing:.5px;">✅ OK — Adicionar paradas</button>
+    <button type="button" class="btn-folha verde" onclick="saveQuickPanel()">Adicionar paradas</button>
   </div>
 </div>
 
 <!-- MODAL LOJA RÁPIDA -->
 <div class="modal-overlay hidden" id="qsModal">
-  <div class="modal-sheet" style="max-height:90vh;overflow-y:auto;">
+  <div class="modal-sheet">
     <div class="modal-header">
       <div class="modal-name" id="qsModalTitle">⚡ Nova loja rápida</div>
       <button type="button" class="modal-close" onclick="closeQsModal()">✕</button>
@@ -312,14 +317,14 @@
         </select>
         <input class="field-input" id="qsNameCustom" placeholder="Nome personalizado..." maxlength="40" style="margin-top:6px;display:none;" />
       </div>
-      <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:8px;">ENDEREÇOS DE ENTREGA</div>
+      <div class="rotulo-sec">Endereços de entrega</div>
       <div id="qsAddrList"></div>
-      <button type="button" onclick="openQsAddrForm(-1)" style="width:100%;padding:11px;background:var(--card2);border:1.5px dashed var(--border);border-radius:10px;color:var(--accent);font-weight:700;font-size:14px;cursor:pointer;margin-top:4px;">+ Adicionar endereço</button>
-      <button type="button" onclick="saveQsModal()" style="width:100%;margin-top:10px;padding:14px;background:var(--accent);color:#000;border:none;border-radius:var(--radius);font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;cursor:pointer;">💾 Salvar empresa</button>
+      <button type="button" class="btn-tracejado" onclick="openQsAddrForm(-1)">+ Adicionar endereço</button>
+      <button type="button" class="btn-folha" onclick="saveQsModal()">Salvar empresa</button>
     </div>
     <!-- Vista: editar um endereço -->
     <div id="qsAddrView" style="display:none;">
-      <div style="margin-bottom:14px;"><button type="button" onclick="closeQsAddrForm()" style="background:none;border:none;color:var(--accent);font-weight:700;font-size:14px;cursor:pointer;padding:0;">← Voltar</button></div>
+      <div style="margin-bottom:8px;"><button type="button" class="btn-voltar" onclick="closeQsAddrForm()">← Voltar</button></div>
       <div class="field" style="margin-bottom:10px;">
         <div class="field-label">Rótulo (identificação) <span class="req">*</span></div>
         <input class="field-input" id="qsAddrLabel" placeholder="Ex: PELLEGRINO – IBES VV" maxlength="50" />
@@ -376,7 +381,7 @@
         <div class="field-label">Observações</div>
         <input class="field-input" id="qsAddrNotes" placeholder="Ligar antes, etc." />
       </div>
-      <button type="button" onclick="saveQsAddrForm()" style="width:100%;padding:14px;background:var(--accent);color:#000;border:none;border-radius:var(--radius);font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;cursor:pointer;">✓ Salvar endereço</button>
+      <button type="button" class="btn-folha" onclick="saveQsAddrForm()">Salvar endereço</button>
     </div>
   </div>
 </div>
@@ -385,61 +390,59 @@
 <div class="modal-overlay hidden" id="expenseModal">
   <div class="modal-sheet">
     <div class="modal-header">
-      <div class="modal-name">💸 Adicionar Despesa</div>
+      <div class="modal-name">Nova despesa</div>
       <button type="button" class="modal-close" onclick="closeExpenseModal()">✕</button>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;">
-      <button type="button" class="pay-btn" id="expType_fuel"    onclick="setExpType('fuel')"   style="flex:1;padding:10px 4px;border-radius:10px;border:1px solid var(--border);background:var(--card2);color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;">⛽ Comb.</button>
-      <button type="button" class="pay-btn" id="expType_toll"    onclick="setExpType('toll')"   style="flex:1;padding:10px 4px;border-radius:10px;border:1px solid var(--border);background:var(--card2);color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;">🍔 Aliment.</button>
-      <button type="button" class="pay-btn" id="expType_maint"   onclick="setExpType('maint')"  style="flex:1;padding:10px 4px;border-radius:10px;border:1px solid var(--border);background:var(--card2);color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;">🔧 Manutenção</button>
-      <button type="button" class="pay-btn" id="expType_other"   onclick="setExpType('other')"  style="flex:1;padding:10px 4px;border-radius:10px;border:1px solid var(--border);background:var(--card2);color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;">📦 Outro</button>
+    <div class="exp-tipos">
+      <button type="button" class="pay-btn" id="expType_fuel"  onclick="setExpType('fuel')">⛽ Comb.</button>
+      <button type="button" class="pay-btn" id="expType_toll"  onclick="setExpType('toll')">🍔 Aliment.</button>
+      <button type="button" class="pay-btn" id="expType_maint" onclick="setExpType('maint')">🔧 Manut.</button>
+      <button type="button" class="pay-btn" id="expType_other" onclick="setExpType('other')">📦 Outro</button>
     </div>
     <input type="hidden" id="expTypeVal" value="fuel" />
     <div class="field-group">
       <div class="field-label">Valor (R$)</div>
-      <div class="money-input-wrap"><span class="money-prefix">R$</span><input class="field-input" id="expAmount" type="text" inputmode="decimal" placeholder="0,00" oninput="maskMoney(this)" style="padding-left:38px;" /></div>
+      <div class="money-input-wrap"><span class="money-prefix">R$</span><input class="field-input" id="expAmount" type="text" inputmode="decimal" placeholder="0,00" oninput="maskMoney(this)" /></div>
     </div>
     <div class="field-group">
       <div class="field-label">Observação</div>
       <input class="field-input" id="expNotes" placeholder="Ex: Posto Ipiranga, tanque cheio..." />
     </div>
-    <button type="button" class="btn-save" onclick="saveExpense()" style="margin-top:8px;">💾 Salvar despesa</button>
+    <button type="button" class="btn-save" onclick="saveExpense()">Salvar despesa</button>
   </div>
 </div>
 
 <!-- ══ FINANCE ══ -->
 <div class="screen" id="financeScreen">
   <div class="finance-body">
-    <div class="section-title">💰 Financeiro</div>
-    <div class="meta-row">
-      <div class="meta-lbl">META DO DIA (R$)</div>
-      <input class="meta-inp" id="metaInp" type="number" placeholder="0" oninput="updateMeta()" />
-    </div>
-    <div class="meta-bar-wrap" style="display:flex;">
-      <div class="meta-bar" id="metaBarDone" style="width:0%;flex-shrink:0;"></div>
-      <div class="meta-bar" id="metaBarPend" style="width:0%;flex-shrink:0;border-radius:0;opacity:.28;"></div>
-    </div>
-    <div id="metaPct" style="text-align:right;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;color:var(--accent);margin:-8px 0 12px;"></div>
-    <div class="meta-row">
-      <div class="meta-lbl">META SEMANAL (R$)</div>
-      <input class="meta-inp" id="metaWeekInp" type="number" placeholder="0" oninput="updateMetaWeek()" />
-    </div>
-    <div class="meta-bar-wrap" style="display:flex;">
-      <div class="meta-bar" id="metaBarWeekDone" style="width:0%;flex-shrink:0;background:var(--blue);"></div>
-      <div class="meta-bar" id="metaBarWeekPend" style="width:0%;flex-shrink:0;border-radius:0;background:var(--blue);opacity:.28;"></div>
-    </div>
-    <div id="metaWeekPct" style="text-align:right;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;color:var(--blue);margin:-8px 0 12px;"></div>
+    <div class="section-title">Ganhos</div>
     <div class="sum-grid" id="sumGrid"></div>
-    <div class="sum-grid" id="sumGrid2" style="margin-top:-4px;margin-bottom:16px;"></div>
+    <div class="sum-grid" id="sumGrid2"></div>
+    <div class="meta-card">
+      <div class="meta-row">
+        <div class="meta-lbl">Meta do dia</div>
+        <input class="meta-inp" id="metaInp" type="number" inputmode="decimal" placeholder="0" oninput="updateMeta()" aria-label="Meta do dia em reais" />
+      </div>
+      <div class="meta-trilho"><div class="meta-bar" id="metaBarDone"></div><div class="meta-bar pend" id="metaBarPend"></div></div>
+      <div id="metaPct" class="meta-pct"></div>
+    </div>
+    <div class="meta-card">
+      <div class="meta-row">
+        <div class="meta-lbl">Meta da semana</div>
+        <input class="meta-inp" id="metaWeekInp" type="number" inputmode="decimal" placeholder="0" oninput="updateMetaWeek()" aria-label="Meta da semana em reais" />
+      </div>
+      <div class="meta-trilho semana"><div class="meta-bar" id="metaBarWeekDone"></div><div class="meta-bar pend" id="metaBarWeekPend"></div></div>
+      <div id="metaWeekPct" class="meta-pct semana"></div>
+    </div>
     <div class="chart-box"><div class="chart-lbl">Ganhos — últimos 7 dias (recebido vs a receber)</div><canvas id="chart" height="140"></canvas></div>
     <!-- DESPESAS -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;">💸 Despesas de hoje</div>
-      <button type="button" onclick="openExpenseModal()" style="background:var(--red);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px;cursor:pointer;">+ Despesa</button>
+    <div class="sec-cab">
+      <div class="sec-cab-tit">Despesas de hoje</div>
+      <button type="button" class="btn-mini perigo" onclick="openExpenseModal()">+ Despesa</button>
     </div>
-    <div id="expenseList" style="margin-bottom:16px;"></div>
+    <div id="expenseList" class="bloco-lista"></div>
     <!-- BREAKDOWN MOTOBOY -->
-    <div id="motoboyBreak" style="margin-bottom:16px;"></div>
+    <div id="motoboyBreak" class="bloco-lista"></div>
     <div class="chart-box"><div class="chart-lbl">Proporção por loja — hoje</div><canvas id="donutChart" height="200"></canvas></div>
     <div class="store-break" id="storeBreak"></div>
   </div>
@@ -449,12 +452,12 @@
 <!-- ══ REPORT ══ -->
 <div class="screen" id="reportScreen">
   <div class="report-body">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-      <div class="section-title" style="margin:0;flex:1;">📊 Fechamento</div>
-      <button type="button" id="histSearchBtn" onclick="toggleHistSearch()" style="background:transparent;border:1px solid var(--border);color:var(--text);border-radius:10px;width:42px;height:42px;font-size:20px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;">🔍</button>
+    <div class="report-cab">
+      <div class="section-title">Fechamento</div>
+      <button type="button" class="btn-icone" id="histSearchBtn" onclick="toggleHistSearch()" aria-label="Buscar entrega">🔍</button>
     </div>
-    <div id="histSearchBox" style="display:none;margin-bottom:12px;">
-      <input class="finput" id="histSearch" type="search" placeholder="Nome, telefone, rua, bairro, cidade..." oninput="onHistSearch(this.value)" autofocus style="width:100%;box-sizing:border-box;">
+    <div id="histSearchBox" class="busca-box" style="display:none;">
+      <input class="finput" id="histSearch" type="search" placeholder="Nome, telefone, rua, bairro, cidade…" oninput="onHistSearch(this.value)">
     </div>
     <div id="histSearchResults" style="display:none;"></div>
     <div id="reportPeriodBody">
@@ -468,7 +471,7 @@
       <div id="reportMotoboys"></div>
       <div id="reportStores"></div>
       <div id="reportHistory"></div>
-      <button type="button" class="btn-pdf" id="btnPdf" onclick="genPDF()" style="margin-top:8px;">📄 Baixar PDF do período</button>
+      <button type="button" class="btn-pdf" id="btnPdf" onclick="genPDF()">📄 Baixar PDF do período</button>
     </div>
   </div>
 </div>
@@ -476,8 +479,8 @@
 <!-- ══ LINKS ══ -->
 <div class="screen" id="linkgenScreen">
   <div class="links-body">
-    <div class="section-title">🔗 Links das Lojas</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6;">Gere um link por loja. Mande pelo WhatsApp — elas abrem e fazem pedidos sem configurar nada.</div>
+    <div class="section-title">Links das lojas</div>
+    <div class="texto-ajuda">Gere um link por loja. Mande pelo WhatsApp — elas abrem e fazem pedidos sem configurar nada.</div>
     <div id="linksList"></div>
     <button type="button" class="btn-new-link" onclick="genLink()">🔗 Gerar link para nova loja</button>
   </div>
@@ -491,7 +494,7 @@
   <div class="config-body">
     <div class="screen-title">
       <button type="button" class="back-btn" onclick="goNav('homeScreen','nav-home')">←</button>
-      🏍️ Repassar entregas
+      Repassar entregas
     </div>
     <div class="field-group">
       <div class="field-label">Nome do motoboy</div>
@@ -505,20 +508,20 @@
          esconder a taxa: quem recebe muitas entregas de origens diferentes
          não precisa (nem deve) ver quanto cada loja pagou. -->
     <div class="cfg-section" style="margin-bottom:12px;">
-      <div class="cfg-title" style="margin-bottom:8px;">🔒 O que o motoboy vê e confirma</div>
+      <div class="cfg-title" style="margin-bottom:4px;">🔒 O que o motoboy vê e confirma</div>
       <label class="rp-opt"><input type="checkbox" id="rpOcultarTaxa" /> <span>Ocultar taxas de entrega (mostra todo o resto)</span></label>
       <label class="rp-opt"><input type="checkbox" id="rpPedirRecebedor" checked /> <span>Pedir o nome de quem recebeu</span></label>
       <label class="rp-opt"><input type="checkbox" id="rpPedirFoto" /> <span>Pedir foto com data, hora e local</span></label>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Selecione as entregas e ajuste o valor que vai pagar:</div>
+    <div class="rotulo-sec">Entregas — ajuste o valor que vai pagar</div>
     <div id="repassList"></div>
-    <button type="button" class="btn-save" onclick="sendRepassLink()" id="btnRepassLink" disabled style="margin-top:14px;background:var(--accent);">🔗 Gerar link para o motoboy</button>
-    <div id="repassLinkResult" style="display:none;margin-top:12px;background:var(--card);border:1px solid var(--accent);border-radius:var(--radius);padding:14px;">
-      <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;margin-bottom:6px;">Link gerado ✅</div>
-      <div id="repassLinkUrl" style="font-size:11px;color:var(--blue);word-break:break-all;line-height:1.5;margin-bottom:10px;"></div>
-      <div style="display:flex;gap:8px;">
-        <button type="button" onclick="copyRepassLink()" style="flex:1;background:var(--blue);color:#fff;border:none;border-radius:9px;padding:10px;font-weight:700;font-size:13px;cursor:pointer;">📋 Copiar</button>
-        <button type="button" onclick="shareRepassWpp()" style="flex:1;background:#25d366;color:#fff;border:none;border-radius:9px;padding:10px;font-weight:700;font-size:13px;cursor:pointer;">💬 WhatsApp</button>
+    <button type="button" class="btn-save amarelo" onclick="sendRepassLink()" id="btnRepassLink" disabled style="margin-top:14px;">🔗 Gerar link para o motoboy</button>
+    <div id="repassLinkResult" class="link-gerado">
+      <div class="rotulo-sec">Link gerado ✅</div>
+      <div id="repassLinkUrl" class="link-gerado-url"></div>
+      <div class="link-acts">
+        <button type="button" class="btn-copy-link" onclick="copyRepassLink()">📋 Copiar</button>
+        <button type="button" class="btn-wpp-link" onclick="shareRepassWpp()">💬 WhatsApp</button>
       </div>
     </div>
   </div>
@@ -530,11 +533,11 @@
   <div class="config-body">
     <div class="screen-title">
       <button type="button" class="back-btn" onclick="goNav('homeScreen','nav-home')">←</button>
-      🏍️ Repasses
+      Repasses
     </div>
     <div id="repassesResumo"></div>
     <div id="repassesList"></div>
-    <button type="button" class="btn-save" onclick="goRepass()" style="background:var(--accent);margin-top:14px;">＋ Novo repasse</button>
+    <button type="button" class="btn-save amarelo" onclick="goRepass()" style="margin-top:14px;">＋ Novo repasse</button>
   </div>
 </div>
 
@@ -545,7 +548,7 @@
   <div class="config-body">
     <div class="screen-title">
       <button type="button" class="back-btn" onclick="goNav('homeScreen','nav-home')">←</button>
-      🛵 Motoboys
+      Motoboys
     </div>
     <div id="fixaPainel"></div>
   </div>
@@ -556,7 +559,7 @@
   <div class="config-body">
     <div class="screen-title">
       <button type="button" class="back-btn" onclick="goNav('homeScreen','nav-home')">←</button>
-      📄 Documento
+      Documento
     </div>
 
     <div class="doc-explica">
@@ -598,7 +601,7 @@
      para conferir, e cada campo a mais é rolagem num formulário que se
      abre para arrumar uma coisa só. -->
 <div class="modal-overlay hidden" id="editHistModal">
-  <div class="modal-sheet" style="max-height:90vh;overflow-y:auto;">
+  <div class="modal-sheet">
     <div class="modal-header">
       <div class="modal-name">✏️ Corrigir entrega</div>
       <button type="button" class="modal-close" onclick="fecharEditHist()">✕</button>
@@ -682,7 +685,7 @@
 
 <!-- Comprovante da entrega em tamanho cheio -->
 <div class="modal-overlay hidden" id="provaModal">
-  <div class="modal-sheet" style="max-height:90vh;overflow-y:auto;">
+  <div class="modal-sheet">
     <div class="modal-header">
       <div class="modal-name" id="provaTitulo">📷 Comprovante</div>
       <button type="button" class="modal-close" onclick="fecharProva()">✕</button>
@@ -709,7 +712,7 @@
       </button>
       <div class="cfg-corpo" id="cfg-lojas">
         <div class="stores-list" id="storesList" style="flex-direction:column;align-items:stretch;gap:6px;"></div>
-        <div class="store-add-row"><input class="finput" id="newStore" placeholder="Nome da loja (ex: KS)" maxlength="30" /><button type="button" class="btn-store-add" onclick="addStore()">+ Adicionar</button></div>
+        <div class="store-add-row"><input class="finput" id="newStore" placeholder="Nova loja (ex: KS)" maxlength="30" /><button type="button" class="btn-store-add" onclick="addStore()">Adicionar</button></div>
       </div>
     </div>
     <div class="cfg-section">
@@ -735,7 +738,7 @@
       <div class="cfg-corpo" id="cfg-rapidas">
         <div class="info-box">Configure lojas que você atende sempre. Na tela de entregas, basta 1 toque para adicionar.</div>
         <div class="stores-list" id="quickStoresList"></div>
-        <button type="button" class="btn-store-add" onclick="addQuickStore()" style="width:100%;margin-top:6px;">⚡ Adicionar loja rápida</button>
+        <button type="button" class="btn-tracejado" onclick="addQuickStore()">+ Adicionar loja rápida</button>
       </div>
     </div>
     <div class="cfg-section">
@@ -744,7 +747,7 @@
         <span class="cfg-resumo" id="resumo-links"></span><span class="cfg-seta">▾</span>
       </button>
       <div class="cfg-corpo" id="cfg-links">
-        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6;">Gere um link por loja para clientes fazerem pedidos.</div>
+        <div class="texto-ajuda">Gere um link por loja para clientes fazerem pedidos.</div>
         <div id="linksListCfg"></div>
         <button type="button" class="btn-new-link" onclick="genLink()" style="width:100%;margin-top:6px;">🔗 Gerar link para nova loja</button>
       </div>
@@ -755,17 +758,17 @@
         <span class="cfg-resumo" id="resumo-sync"></span><span class="cfg-seta">▾</span>
       </button>
       <div class="cfg-corpo" id="cfg-sync">
-        <div id="fbEmbeddedNotice" style="display:none;background:rgba(0,200,100,.08);border:1px solid var(--green);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--green);margin-bottom:10px;">🔒 Firebase configurado internamente</div>
+        <div id="fbEmbeddedNotice" class="fb-ok" style="display:none;">🔒 Firebase configurado internamente</div>
         <div id="fbConfigSection">
           <div class="info-box">Cole o <strong style="color:var(--accent)">firebaseConfig</strong> do seu projeto Firebase para sincronizar com sua esposa em tempo real.</div>
           <div class="info-box warn">⚠️ Nunca compartilhe o celular com a chave inserida aqui.</div>
           <div class="field"><div class="flabel">Firebase Config (JSON)</div><textarea class="fb-textarea" id="cfgFb" placeholder='{"apiKey":"...","databaseURL":"...","projectId":"..."}'></textarea></div>
         </div>
         <div class="room-box">
-          <div><div style="font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--muted);margin-bottom:4px;">CÓDIGO DA SALA</div><div class="room-code" id="roomCode">——</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Compartilhe com sua esposa</div></div>
+          <div><div class="room-lbl">Código da sala</div><div class="room-code" id="roomCode">——</div><div class="room-sub">Compartilhe com sua esposa</div></div>
           <div id="fbRoomBtns" class="room-btns"><button type="button" class="btn-room" onclick="copyRoom()">📋 Copiar</button><button type="button" class="btn-room" onclick="newRoom()">🔄 Novo</button></div>
         </div>
-        <div id="fbJoinRow" class="fb-join-row"><input class="finput" id="cfgRoom" placeholder="SB-XXXX" style="letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;" /><button type="button" class="btn-join" onclick="joinRoom()">Entrar</button></div>
+        <div id="fbJoinRow" class="fb-join-row"><input class="finput input-sala" id="cfgRoom" placeholder="SB-XXXX" /><button type="button" class="btn-join" onclick="joinRoom()">Entrar</button></div>
         <div class="fb-status"><div class="sync-dot" id="cfgSyncDot"></div><span id="cfgSyncLbl">Firebase não configurado</span></div>
       </div>
     </div>
@@ -784,7 +787,7 @@
       </div>
     </div>
     <button type="button" class="btn-cfg-save" onclick="saveConfig()">💾 Salvar configurações</button>
-    <div class="cfg-section" style="margin-top:14px;">
+    <div class="cfg-section">
       <button type="button" class="cfg-cab compacto" onclick="dobrarSecao('backup')" aria-expanded="false" aria-controls="cfg-backup">
         <span class="cfg-title">💾 Backup</span>
         <span class="cfg-resumo" id="resumo-backup"></span><span class="cfg-seta">▾</span>
@@ -794,14 +797,14 @@
           <button type="button" class="btn-backup" onclick="exportBackup()">⬇️ Exportar backup</button>
           <label class="btn-backup" style="cursor:pointer;">⬆️ Importar backup<input type="file" accept=".json" onchange="importBackup(this.files[0])" style="display:none" /></label>
         </div>
-        <button type="button" class="btn-backup" onclick="deduplicateStops()" style="width:100%;margin-bottom:10px;background:rgba(59,130,246,.1);border-color:var(--blue);color:var(--blue);">🔧 Remover entregas duplicadas</button>
+        <button type="button" class="btn-backup largo" onclick="deduplicateStops()">🔧 Remover entregas duplicadas</button>
         <div class="info-box">🛟 O app guarda sozinho uma cópia por dia dos últimos 7 dias. Se algo der errado, volte por aqui.</div>
         <div id="autoBackupList"></div>
       </div>
     </div>
-    <div class="cfg-section">
+    <div class="cfg-section perigo">
       <button type="button" class="cfg-cab compacto" onclick="dobrarSecao('perigo')" aria-expanded="false" aria-controls="cfg-perigo">
-        <span class="cfg-title" style="color:var(--red);">⚠️ Zona de perigo</span>
+        <span class="cfg-title">⚠️ Zona de perigo</span>
         <span class="cfg-seta">▾</span>
       </button>
       <div class="cfg-corpo" id="cfg-perigo">
@@ -809,7 +812,7 @@
         <button type="button" class="danger-btn gray" onclick="clearHist()">🗑️ Apagar todo o histórico</button>
       </div>
     </div>
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);text-align:center;">
+    <div class="cfg-rodape">
       <!-- Baixar o app é um botão de verdade, não um link no rodapé: era
            discreto demais para uma coisa que se procura de propósito.
            O rótulo muda com o estado — "já instalado" também é resposta. -->
@@ -818,9 +821,9 @@
       <!-- Versão e "forçar atualização" na mesma linha: as duas juntas são
            uma linha de rodapé, e a Config precisa de folga para a próxima
            coisa que alguém acrescentar aqui. -->
-      <div style="display:flex;gap:10px;justify-content:center;align-items:center;margin-top:6px;">
-        <span id="appVersao" style="font-size:11px;color:var(--muted);letter-spacing:.5px;">versão —</span>
-        <button type="button" onclick="forcarAtualizacao()" style="background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;padding:2px 6px;">Forçar atualização</button>
+      <div class="cfg-versao">
+        <span id="appVersao">versão —</span>
+        <button type="button" onclick="forcarAtualizacao()">Forçar atualização</button>
       </div>
     </div>
   </div>
@@ -828,15 +831,15 @@
 
 <!-- BOTTOM NAV -->
 <nav class="bottom-nav">
-  <button type="button" class="nav-btn active" id="nav-home"    onclick="goNav('homeScreen','nav-home')"><span class="icon">📦</span>Entregas</button>
+  <button type="button" class="nav-btn active" id="nav-home"    onclick="goNav('homeScreen','nav-home')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/></svg>Entregas</button>
   <!-- Só existe no modo FULL: em dia normal ninguém repassa entrega, e um
        quinto item rouba largura dos quatro que se usa sempre. -->
-  <button type="button" class="nav-btn hidden" id="nav-repasses" onclick="goNav('repassesScreen','nav-repasses')"><span class="icon">🏍️</span>Repasses</button>
-  <button type="button" class="nav-btn"        id="nav-motoboys" onclick="goNav('motoboysScreen','nav-motoboys')"><span class="icon">🛵</span>Motoboys</button>
-  <button type="button" class="nav-btn"        id="nav-doc"     onclick="goNav('docScreen','nav-doc')"><span class="icon">📄</span>Documento</button>
-  <button type="button" class="nav-btn"        id="nav-finance" onclick="goNav('financeScreen','nav-finance')"><span class="icon">💰</span>Ganhos</button>
-  <button type="button" class="nav-btn"        id="nav-report"  onclick="goNav('reportScreen','nav-report')"><span class="icon">📊</span>Fechamento</button>
-  <button type="button" class="nav-btn"        id="nav-cfg"     onclick="goNav('configScreen','nav-cfg')"><span class="icon">⚙️</span>Config</button>
+  <button type="button" class="nav-btn hidden" id="nav-repasses" onclick="goNav('repassesScreen','nav-repasses')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h14M14 4l4 4-4 4"/><path d="M20 16H6M10 12l-4 4 4 4"/></svg>Repasses</button>
+  <button type="button" class="nav-btn"        id="nav-motoboys" onclick="goNav('motoboysScreen','nav-motoboys')"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="16.5" r="3"/><circle cx="18.5" cy="16.5" r="3"/><path d="M8.5 16.5h5.5l2.5-6H12M14.5 6.5h2.5l1.5 10"/><path d="M5.5 16.5 8 11h4"/></svg>Motoboys</button>
+  <button type="button" class="nav-btn"        id="nav-doc"     onclick="goNav('docScreen','nav-doc')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>Documento</button>
+  <button type="button" class="nav-btn"        id="nav-finance" onclick="goNav('financeScreen','nav-finance')"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10.5h18M15.5 15h2"/></svg>Ganhos</button>
+  <button type="button" class="nav-btn"        id="nav-report"  onclick="goNav('reportScreen','nav-report')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>Fechamento</button>
+  <button type="button" class="nav-btn"        id="nav-cfg"     onclick="goNav('configScreen','nav-cfg')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>Config</button>
 </nav>
 
 <!-- ═══════════════════════════════════════════════════════════════
@@ -1655,13 +1658,14 @@ function renderHome(){
   const list  = document.getElementById('stopsList');
   const badge = document.getElementById('badgeCount');
   const total = stops.length;
-  badge.textContent = total+' parada(s)';
+  badge.innerHTML = '<b>'+total+'</b>'+(total===1?'parada':'paradas');
   badge.classList.toggle('full', false);
   const _ob=document.getElementById('optimizeBtn'); if(_ob) _ob.disabled=total===0;
   document.getElementById('sortBar').classList.toggle('visible', total>1);
   renderQuickButtons();
 
   if(!total){
+    resumoDoDia([]);
     /* Aparelho novo: em vez da lista vazia sem saída, o caminho para
        entrar na sala de quem já usa. Antes era preciso achar o campo do
        código na Config, a 1116px do topo — 1,6 tela abaixo. */
@@ -1691,8 +1695,8 @@ function renderHome(){
   if(groupByMode==='status'){
     const pending = currentIndexed.filter(s=>!s.done);
     const done    = currentIndexed.filter(s=>s.done);
-    if(pending.length) groups.push({label:'⏳ Pendentes ('+pending.length+')',items:pending,color:'var(--accent)'});
-    if(done.length)    groups.push({label:'✅ Finalizadas ('+done.length+')',items:done,color:'var(--green)'});
+    if(pending.length) groups.push({label:'Pendentes ('+pending.length+')',items:pending,color:'var(--accent)'});
+    if(done.length)    groups.push({label:'Entregues ('+done.length+')',items:done,color:'var(--green)'});
   } else if(groupByMode==='city'){
     const map={};
     currentIndexed.forEach(function(s){const k=cityName(resolveCityCode(s.city||s.cityId))||'Sem cidade';if(!map[k])map[k]=[];map[k].push(s);});
@@ -1712,69 +1716,80 @@ function renderHome(){
     if(noTime.length) groups.push({label:'🕐 Sem horário ('+noTime.length+')',items:noTime,color:'var(--muted)'});
   }
 
+  // ── Resumo do dia (só entregas de hoje; agendadas não contam) ──
+  resumoDoDia(currentIndexed);
+
+  const tipoLbl=function(t){return t==='retirada'?'📦 Retirada':t==='troca'?'🔄 Troca':'🛵 Entrega';};
+  /* Valor editável direto na lista: toque, digite, saia do campo. */
+  const valorEditavel=function(val,pago,onblur){
+    if(!(val>0)) return '';
+    return `<div class="stop-val-wrap" onclick="event.stopPropagation()"><input type="text" class="stop-val-inp${pago?' pago':''}" value="${fmtMoney(val)}" onblur="${onblur}" inputmode="decimal" aria-label="Taxa da entrega" />${pago?'<span class="stop-val-ok" title="Taxa recebida">✓</span>':''}</div>`;
+  };
+  const enderecoHtml=function(s,comBairro){
+    const rua=[s.street,s.number,s.complement].filter(Boolean).join(' ');
+    if(!rua && !(comBairro&&s.neighborhood)) return '';
+    return `<div class="stop-addr">${esc(rua)}${comBairro&&s.neighborhood?`<span class="bairro">${rua?' · ':''}${esc(s.neighborhood)}</span>`:''}</div>`;
+  };
+
   let html='';
   let nextIdx = -1;
   groups.forEach(function(grp){
-    html+=`<div class="store-label" style="color:${grp.color}">${esc(grp.label)}</div>`;
+    html+=`<div class="store-label">${esc(grp.label)}</div>`;
     grp.items.forEach(function(s){
       const i=s._idx;
-      if(nextIdx === -1 && !s.done) nextIdx = i;
+      const ehProx = nextIdx === -1 && !s.done;
+      if(ehProx) nextIdx = i;
       const val=parseMoney(s.value);
       const valStr=val>0?fmtMoney(val):'';
       const cityLabel=cityName(resolveCityCode(s.city||s.cityId))||'';
       const prodVal=parseMoney(s.productValue);
-      const valInput=val>0?`<div style="display:flex;align-items:center;gap:3px;" onclick="event.stopPropagation()"><input type="text" value="${valStr}" onblur="updateStopValue(${i},this.value)" style="width:65px;text-align:right;background:transparent;border:none;border-bottom:1px solid var(--border);color:${s.paid?'var(--green)':'var(--accent)'};font-weight:800;font-size:13px;font-family:'Barlow Condensed',sans-serif;outline:none;padding:1px 2px;" inputmode="decimal" />${s.paid?`<span style="color:var(--green);font-size:15px;font-weight:900;line-height:1;">✓</span>`:''}</div>`:'';
-      html+=`<div class="stop-card ${s.done?'done':''}" id="sc${i}" onclick="toggleCard(${i})">
-        <div class="stop-header" style="align-items:flex-start;padding:12px 14px 10px;">
-          <div class="stop-num">${i+1}</div>
-          <div class="stop-info" style="flex:1;min-width:0;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      html+=`<div class="stop-card${s.done?' done':''}${ehProx?' prox':''}" id="sc${i}" onclick="toggleCard(${i})">
+        <div class="stop-header">
+          <div class="stop-num">${s.done?'✓':i+1}</div>
+          <div class="stop-info">
+            ${ehProx?'<span class="prox-tag">Próxima</span>':''}
+            <div class="stop-linha1">
               <div class="stop-name">${esc(s.name||'Sem nome')}</div>
-              ${valInput}
+              ${valorEditavel(val,s.paid,`updateStopValue(${i},this.value)`)}
             </div>
-            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:4px;">
-              ${s.store?`<span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:700;background:rgba(255,107,0,.18);color:#ff6b00;">🏪 ${esc(s.store)}</span>`:''}
-              ${cityLabel?`<span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:700;background:rgba(59,130,246,.15);color:#3b82f6;">${esc(cityLabel)}</span>`:''}
-              <span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:700;background:rgba(255,107,0,.15);color:#ff6b00;">${s.serviceType==='retirada'?'📦 Retirada':s.serviceType==='troca'?'🔄 Troca':'🛵 Entrega'}</span>
-              ${prodVal>0?`<span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:700;background:${s.productPaid?'rgba(0,230,118,.15)':'rgba(245,197,24,.12)'};color:${s.productPaid?'var(--green)':'var(--accent)'};">${s.productPaid?'✓ Cobrado':'💰 R$'+prodVal.toFixed(2).replace('.',',')}</span>`:''}
-              ${s.deliveryDate?`<span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:700;background:rgba(161,100,220,.15);color:#a164dc;">${esc(delivDateLabel(s.deliveryDate))}</span>`:''}
-              ${s.repassadaPara&&!s.done?`<span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:700;background:rgba(255,107,0,.18);color:var(--accent2);">🏍️ ${esc(s.repassadaPara)}</span>`:''}
-              ${s.problema&&!s.done?`<span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:800;background:rgba(255,82,82,.18);color:var(--red);">⚠️ ${esc(s.problema.titulo||'Problema')}</span>`:''}
+            ${enderecoHtml(s,true)}
+            ${(s.reference||s.notes)?`<div class="stop-ref">${esc([s.reference,s.notes].filter(Boolean).join(' · '))}</div>`:''}
+            ${s.problema&&!s.done&&s.problema.detalhe?`<div class="stop-prob">💬 ${esc(s.problema.detalhe)}</div>`:''}
+            ${s.done&&s.deliveredBy?`<div class="stop-quem">🏍️ ${esc(s.deliveredBy)}${horaDeISO(s.deliveredAt)?' · '+esc(horaDeISO(s.deliveredAt)):''}${s.receivedBy?' · recebeu '+esc(s.receivedBy):''}</div>`:''}
+            <div class="tags">
+              ${s.problema&&!s.done?`<span class="tag tag-prob">⚠️ ${esc(s.problema.titulo||'Problema')}</span>`:''}
+              ${s.store?`<span class="tag tag-loja">${esc(s.store)}</span>`:''}
+              ${cityLabel?`<span class="tag">${esc(cityLabel)}</span>`:''}
+              <span class="tag">${tipoLbl(s.serviceType)}</span>
+              ${(s.timeFrom||s.timeTo)?`<span class="tag">⏰ ${esc(s.timeFrom||'?')}${s.timeTo?'–'+esc(s.timeTo):''}</span>`:''}
+              ${prodVal>0?`<span class="tag ${s.productPaid?'tag-ok':'tag-cobrar'}">${s.productPaid?'✓ Cobrado':'Cobrar '+fmtMoney(prodVal)}</span>`:''}
+              ${s.deliveryDate?`<span class="tag tag-data">${esc(delivDateLabel(s.deliveryDate))}</span>`:''}
+              ${s.repassadaPara&&!s.done?`<span class="tag tag-repasse">🏍️ ${esc(s.repassadaPara)}</span>`:''}
             </div>
-            ${s.problema&&!s.done&&s.problema.detalhe?`<div style="font-size:12px;color:var(--red);margin-bottom:3px;">💬 ${esc(s.problema.detalhe)}</div>`:''}
-            ${s.done&&s.deliveredBy?`<div style="font-size:12px;color:var(--muted);margin-bottom:2px;">🏍️ ${esc(s.deliveredBy)}${horaDeISO(s.deliveredAt)?' · ⏰ '+esc(horaDeISO(s.deliveredAt)):''}${s.receivedBy?' · ✋ '+esc(s.receivedBy):''}</div>`:''}
-            ${(s.street||s.number||s.complement||s.neighborhood)?`<div style="font-size:13px;color:var(--muted);margin-bottom:2px;">${esc([s.street,s.number,s.complement].filter(Boolean).join(' '))}${s.neighborhood?`<span style="color:var(--muted);opacity:.75;"> · ${esc(s.neighborhood)}</span>`:''}</div>`:''}
-            ${(s.reference||s.notes)?`<div style="font-size:12px;color:var(--muted);opacity:.75;">${esc([s.reference,s.notes].filter(Boolean).join(' · '))}</div>`:''}
           </div>
-          <div class="stop-dot" style="margin-top:4px;flex-shrink:0;"></div>
         </div>
         <div class="stop-actions" onclick="event.stopPropagation()">
-          <button type="button" class="btn-quick-done" onclick="togDone(${i})">${s.done?'↩️ Reabrir':'✅ ENTREGUE'}</button>
-          <div class="act-row act-row-${s.phone&&val>0?'3':(s.phone||val>0?'2':'2')}">
-            <button type="button" class="btn-act ba-maps" onclick="openMapsWithAddress(${i})" style="background:#4285f4;color:#fff;font-weight:800;">🗺️ Navegar</button>
+          <button type="button" class="btn-quick-done${s.done?' reabrir':''}" onclick="togDone(${i})">${s.done?'↩️ Reabrir parada':'✓ ENTREGUE'}</button>
+          <div class="act-row">
+            <button type="button" class="btn-act ba-maps" onclick="openMapsWithAddress(${i})">🗺️ Navegar</button>
             ${s.phone?`<button type="button" class="btn-act ba-wpp" onclick="openWpp(${i})">💬 WhatsApp</button>`:''}
-            ${val>0?`<button type="button" class="btn-act ba-paid ${s.paid?'received':''}" onclick="togPaid(${i})">${s.paid?'💸 Recebida':'💰 Paga?'}</button>`:''}
-            ${s.productValue>0?`<button type="button" class="btn-act ba-paid ${s.productPaid?'received':''}" onclick="togProductPaid(${i})">${s.productPaid?'✅ Cobrado':'💳 Cobrar'}</button>`:''}
           </div>
-          <div class="act-row act-row-3">
+          ${(val>0||prodVal>0)?`<div class="act-row">
+            ${val>0?`<button type="button" class="btn-act ba-paid ${s.paid?'received':''}" onclick="togPaid(${i})">${s.paid?'✓ Taxa recebida':'💰 Taxa paga?'}</button>`:''}
+            ${prodVal>0?`<button type="button" class="btn-act ba-paid ${s.productPaid?'received':''}" onclick="togProductPaid(${i})">${s.productPaid?'✓ Cobrado':'💳 Cobrar'}</button>`:''}
+          </div>`:''}
+          <div class="act-row-quieta">
             <button type="button" class="btn-act-sec" onclick="goForm(${i})">✏️ Editar</button>
-            <button type="button" class="btn-act-sec" onclick="goRepass()" style="color:var(--accent);border-color:var(--accent);">🔄 Repassar</button>
-            <button type="button" class="btn-act-sec" onclick="delStop(${i})" style="color:var(--red);border-color:var(--red);">🗑️ Remover</button>
+            <button type="button" class="btn-act-sec" onclick="goRepass()">🔄 Repassar</button>
+            <button type="button" class="btn-act-sec perigo" onclick="delStop(${i})">🗑️ Remover</button>
           </div>
         </div>
         <div class="stop-detail">
           <div class="detail-grid">
-            ${s.phone?`<div class="detail-chip"><span class="detail-chip-lbl">📞 Telefone</span>${esc(fmtPhone(s.phone))}</div>`:''}
-            ${s.city?`<div class="detail-chip"><span class="detail-chip-lbl">🏙️ Cidade</span>${esc(cityName(resolveCityCode(s.city||s.cityId)))}</div>`:''}
-            ${s.deliveryDate?`<div class="detail-chip"><span class="detail-chip-lbl">📅 Data</span>${esc(s.deliveryDate)}</div>`:''}
-            ${(s.timeFrom||s.timeTo)?`<div class="detail-chip"><span class="detail-chip-lbl">⏰ Horário</span>${esc(s.timeFrom||'?')} – ${esc(s.timeTo||'?')}</div>`:''}
-            ${s.serviceType?`<div class="detail-chip"><span class="detail-chip-lbl">Tipo</span>${s.serviceType==='retirada'?'📦 Retirada':s.serviceType==='troca'?'🔄 Troca':'🛵 Entrega'}</div>`:''}
-            ${s.arrivedAt?`<div class="detail-chip"><span class="detail-chip-lbl">📨 Chegou</span>${esc(s.arrivedAt)}</div>`:''}
-            ${valStr?`<div class="detail-chip"><span class="detail-chip-lbl">💰 Taxa</span>${valStr} <span class="paid-badge ${s.paid?'yes':'no'}">${s.paid?'✓ Recebida':'A receber'}</span></div>`:''}
-            ${s.productValue>0?`<div class="detail-chip"><span class="detail-chip-lbl">💳 Produto</span>R$ ${parseMoney(s.productValue).toFixed(2).replace('.',',')} <span class="paid-badge ${s.productPaid?'yes':'no'}">${s.productPaid?'✓ Pago':'A cobrar'}</span></div>`:''}
-            ${s.complement?`<div class="detail-chip full"><span class="detail-chip-lbl">Complemento</span>${esc(s.complement)}</div>`:''}
-            ${s.reference?`<div class="detail-chip full"><span class="detail-chip-lbl">📍 Referência</span>${esc(s.reference)}</div>`:''}
-            ${s.notes?`<div class="detail-chip full"><span class="detail-chip-lbl">💬 Obs</span>${esc(s.notes)}</div>`:''}
+            ${s.phone?`<div class="detail-chip"><span class="detail-chip-lbl">Telefone</span>${esc(fmtPhone(s.phone))}</div>`:''}
+            ${s.arrivedAt?`<div class="detail-chip"><span class="detail-chip-lbl">Chegou</span>${esc(s.arrivedAt)}</div>`:''}
+            ${valStr?`<div class="detail-chip"><span class="detail-chip-lbl">Taxa</span><span>${valStr} <span class="paid-badge ${s.paid?'yes':'no'}">${s.paid?'recebida':'a receber'}</span></span></div>`:''}
+            ${prodVal>0?`<div class="detail-chip"><span class="detail-chip-lbl">Produto</span><span>${fmtMoney(prodVal)} <span class="paid-badge ${s.productPaid?'yes':'no'}">${s.productPaid?'pago':'a cobrar'}</span></span></div>`:''}
           </div>
         </div>
       </div>`;
@@ -1783,7 +1798,7 @@ function renderHome(){
 
   // ── Seção AGENDADAS (entregas de dias futuros) ──
   if(scheduledIndexed.length){
-    html+=`<div class="store-label" style="color:#a164dc;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">📅 AGENDADAS (${scheduledIndexed.length})</div>`;
+    html+=`<div class="store-label agendadas">📅 Agendadas (${scheduledIndexed.length})</div>`;
     // Agrupar por data
     const dGroups={};
     scheduledIndexed.forEach(function(s){
@@ -1793,44 +1808,43 @@ function renderHome(){
       dGroups[lbl].push(s);
     });
     Object.entries(dGroups).forEach(function([lbl,items]){
-      html+=`<div style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:4px 0 2px;color:#a164dc;opacity:.75;display:flex;align-items:center;gap:6px;">${lbl}<span style="flex:1;height:1px;background:rgba(161,100,220,.25);display:inline-block;"></span></div>`;
+      html+=`<div class="dia-sep">${esc(lbl)}</div>`;
       items.forEach(function(s){
         const i=s._idx;
         const val=parseMoney(s.value);
-        const valStr=val>0?fmtMoney(val):'';
         const cityLabel=cityName(resolveCityCode(s.city||s.cityId))||'';
-        const valInput=val>0?`<div style="display:flex;align-items:center;gap:3px;" onclick="event.stopPropagation()"><input type="text" value="${valStr}" onblur="updateStopValue(${i},this.value)" style="width:65px;text-align:right;background:transparent;border:none;border-bottom:1px solid var(--border);color:${s.paid?'var(--green)':'var(--accent)'};font-weight:800;font-size:13px;font-family:'Barlow Condensed',sans-serif;outline:none;padding:1px 2px;" inputmode="decimal" />${s.paid?`<span style="color:var(--green);font-size:15px;font-weight:900;line-height:1;">✓</span>`:''}</div>`:'';
-        html+=`<div class="stop-card ${s.done?'done':''}" id="sc${i}" onclick="toggleCard(${i})" style="border-color:rgba(161,100,220,.3);opacity:.9;">
-          <div class="stop-header" style="align-items:flex-start;padding:12px 14px 10px;">
-            <div class="stop-num" style="color:#a164dc;">${i+1}</div>
-            <div class="stop-info" style="flex:1;min-width:0;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        html+=`<div class="stop-card agendada${s.done?' done':''}" id="sc${i}" onclick="toggleCard(${i})">
+          <div class="stop-header">
+            <div class="stop-num">${i+1}</div>
+            <div class="stop-info">
+              <div class="stop-linha1">
                 <div class="stop-name">${esc(s.name||'Sem nome')}</div>
-                ${valInput}
+                ${valorEditavel(val,s.paid,`updateStopValue(${i},this.value)`)}
               </div>
-              <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:4px;">
-                ${cityLabel?`<span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:700;background:rgba(59,130,246,.15);color:#3b82f6;">${esc(cityLabel)}</span>`:''}
-                <span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:700;background:rgba(255,107,0,.15);color:#ff6b00;">${s.serviceType==='retirada'?'📦 Retirada':s.serviceType==='troca'?'🔄 Troca':'🛵 Entrega'}</span>
-                ${s.store?`<span style="padding:2px 9px;border-radius:5px;font-size:12px;font-weight:700;background:rgba(161,100,220,.12);color:#a164dc;">🏪 ${esc(s.store)}</span>`:''}
+              ${enderecoHtml(s,true)}
+              ${(s.reference||s.notes)?`<div class="stop-ref">${esc([s.reference,s.notes].filter(Boolean).join(' · '))}</div>`:''}
+              <div class="tags">
+                ${s.store?`<span class="tag tag-loja">${esc(s.store)}</span>`:''}
+                ${cityLabel?`<span class="tag">${esc(cityLabel)}</span>`:''}
+                <span class="tag">${tipoLbl(s.serviceType)}</span>
+                ${(s.timeFrom||s.timeTo)?`<span class="tag">⏰ ${esc(s.timeFrom||'?')}${s.timeTo?'–'+esc(s.timeTo):''}</span>`:''}
               </div>
-              ${(s.street||s.number||s.complement)?`<div style="font-size:13px;color:var(--muted);margin-bottom:2px;">${esc([s.street,s.number,s.complement].filter(Boolean).join(' '))}</div>`:''}
-              ${(s.reference||s.notes)?`<div style="font-size:12px;color:var(--muted);opacity:.75;">${esc([s.reference,s.notes].filter(Boolean).join(' · '))}</div>`:''}
             </div>
-            <div class="stop-dot" style="margin-top:4px;flex-shrink:0;background:rgba(161,100,220,.5);"></div>
           </div>
           <div class="stop-detail">
-            ${s.phone?`<div><strong>TEL</strong> ${esc(fmtPhone(s.phone))}</div>`:''}
-            ${s.complement?`<div><strong>COMPL</strong> ${esc(s.complement)}</div>`:''}
-            ${s.reference?`<div><strong>REF</strong> ${esc(s.reference)}</div>`:''}
-            ${(s.timeFrom||s.timeTo)?`<div><strong>HORÁRIO</strong> ⏰ ${esc(s.timeFrom||'?')} até ${esc(s.timeTo||'?')}</div>`:''}
-            ${s.notes?`<div><strong>OBS</strong> ${esc(s.notes)}</div>`:''}
+            <div class="detail-grid">
+              ${s.phone?`<div class="detail-chip"><span class="detail-chip-lbl">Telefone</span>${esc(fmtPhone(s.phone))}</div>`:''}
+              ${s.deliveryDate?`<div class="detail-chip"><span class="detail-chip-lbl">Data</span>${esc(s.deliveryDate)}</div>`:''}
+            </div>
           </div>
           <div class="stop-actions" onclick="event.stopPropagation()">
-            <div style="display:flex;gap:7px;flex-wrap:wrap;">
-              <button type="button" class="btn-act ba-maps" onclick="openMapsWithAddress(${i})" style="flex:1;background:#4285f4;color:#fff;font-weight:800;padding:14px;font-size:14px;">🗺️ NAVEGAR</button>
+            <div class="act-row">
+              <button type="button" class="btn-act ba-maps" onclick="openMapsWithAddress(${i})">🗺️ Navegar</button>
               ${s.phone?`<button type="button" class="btn-act ba-wpp" onclick="openWpp(${i})">💬 WhatsApp</button>`:''}
-              <button type="button" class="btn-act ba-edit" onclick="goForm(${i})">✏️ Editar</button>
-              <button type="button" class="btn-act ba-del" onclick="delStop(${i})">🗑️ Remover</button>
+            </div>
+            <div class="act-row-quieta">
+              <button type="button" class="btn-act-sec" onclick="goForm(${i})">✏️ Editar</button>
+              <button type="button" class="btn-act-sec perigo" onclick="delStop(${i})">🗑️ Remover</button>
             </div>
           </div>
         </div>`;
@@ -1850,9 +1864,9 @@ function renderHome(){
       const di=history.indexOf(day);
       day.stops.forEach(function(s,si){ hFlat.push({s,di,si,date:day.date}); });
     });
-    if(!hFlat.length){}else{
+    if(hFlat.length){
     const totalH=hFlat.length;
-    html+=`<div class="store-label" style="color:#888;margin-top:12px;border-top:1px solid var(--border);padding-top:10px;">🕓 ÚLTIMOS 30 DIAS (${totalH} entrega${totalH!==1?'s':''})</div>`;
+    html+=`<div class="store-label historico">🕓 Últimos 30 dias (${totalH} entrega${totalH!==1?'s':''})</div>`;
     // Group by day
     const dayMap={};
     hFlat.forEach(function(item){if(!dayMap[item.date])dayMap[item.date]=[];dayMap[item.date].push(item);});
@@ -1860,40 +1874,65 @@ function renderHome(){
       const items=dayMap[date];
       const dayTotal=items.reduce(function(a,{s}){return a+parseMoney(s.value);},0);
       const dayRec=items.filter(function({s}){return s.paid;}).reduce(function(a,{s}){return a+parseMoney(s.value);},0);
-      html+=`<div style="font-size:10px;font-weight:700;letter-spacing:.8px;padding:4px 0 2px;color:#666;display:flex;align-items:center;gap:6px;">${date}<span style="flex:1;height:1px;background:rgba(100,100,100,.2);display:inline-block;"></span><span style="color:${dayRec<dayTotal?'var(--accent)':'var(--green)'};">${fmtMoney(dayTotal)}</span></div>`;
-      items.forEach(function({s,di,si,date}){
+      html+=`<div class="dia-sep">${esc(date)}<span class="${dayRec<dayTotal?'pend':'ok'}">${fmtMoney(dayTotal)}</span></div>`;
+      items.forEach(function({s,di,si}){
       const val=parseMoney(s.value);
       const prodVal=parseMoney(s.productValue);
       const cityLabel=cityName(resolveCityCode(s.city||s.cityId))||'';
-      html+=`<div class="stop-card" style="opacity:.85;border-color:rgba(100,100,100,.25);">
-        <div class="stop-header" style="align-items:flex-start;padding:10px 14px 8px;">
-          <div style="flex:1;min-width:0;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+      /* Antes estes cartões não abriam (sem id nem onclick), e os botões
+         de taxa/cobrança dentro deles nunca apareciam. */
+      html+=`<div class="stop-card passada" onclick="this.classList.toggle('expanded')">
+        <div class="stop-header">
+          <div class="stop-info">
+            <div class="stop-linha1">
               <div class="stop-name">${esc(s.name||'Sem nome')}</div>
-              <div style="display:flex;align-items:center;gap:3px;" onclick="event.stopPropagation()">
-                ${val>0?`<input type="text" value="${fmtMoney(val)}" onblur="updateHistStopValue(${di},${si},this.value)" style="width:65px;text-align:right;background:transparent;border:none;border-bottom:1px solid var(--border);color:${s.paid?'var(--green)':'var(--accent)'};font-weight:800;font-size:13px;font-family:'Barlow Condensed',sans-serif;outline:none;padding:1px 2px;" inputmode="decimal" />${s.paid?`<span style="color:var(--green);font-size:15px;font-weight:900;line-height:1;">✓</span>`:''}`:''}
-              </div>
+              ${valorEditavel(val,s.paid,`updateHistStopValue(${di},${si},this.value)`)}
             </div>
-            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:3px;">
-              ${cityLabel?`<span style="padding:1px 7px;border-radius:5px;font-size:11px;font-weight:700;background:rgba(59,130,246,.12);color:#3b82f6;">${esc(cityLabel)}</span>`:''}
-              ${s.store?`<span style="padding:1px 7px;border-radius:5px;font-size:11px;font-weight:700;background:rgba(255,107,0,.12);color:#ff6b00;">${esc(s.store)}</span>`:''}
+            ${(s.street||s.neighborhood)?`<div class="stop-addr">${esc([s.street,s.number,s.neighborhood].filter(Boolean).join(' '))}</div>`:''}
+            <div class="tags">
+              ${s.store?`<span class="tag tag-loja">${esc(s.store)}</span>`:''}
+              ${cityLabel?`<span class="tag">${esc(cityLabel)}</span>`:''}
             </div>
-            ${(s.street||s.neighborhood)?`<div style="font-size:12px;color:var(--muted);">${esc([s.street,s.number,s.neighborhood].filter(Boolean).join(' '))}</div>`:''}
           </div>
         </div>
-        <div class="stop-actions" onclick="event.stopPropagation()">
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            ${val>0?`<button type="button" class="btn-act ba-paid ${s.paid?'received':''}" onclick="togHistPaid(${di},${si})" style="flex:1;">${s.paid?'💸 Taxa ok':'💰 Taxa?'}</button>`:''}
-            ${prodVal>0?`<button type="button" class="btn-act ba-paid ${s.productPaid?'received':''}" onclick="togHistProductPaid(${di},${si})" style="flex:1;">${s.productPaid?'✅ Cobrado':'💳 Cobrar'}</button>`:''}
+        ${(val>0||prodVal>0)?`<div class="stop-actions" onclick="event.stopPropagation()">
+          <div class="act-row">
+            ${val>0?`<button type="button" class="btn-act ba-paid ${s.paid?'received':''}" onclick="togHistPaid(${di},${si})">${s.paid?'✓ Taxa ok':'💰 Taxa paga?'}</button>`:''}
+            ${prodVal>0?`<button type="button" class="btn-act ba-paid ${s.productPaid?'received':''}" onclick="togHistProductPaid(${di},${si})">${s.productPaid?'✓ Cobrado':'💳 Cobrar'}</button>`:''}
           </div>
-        </div>
+        </div>`:''}
       </div>`;
       });  // end items.forEach
     });    // end Object.keys dayMap forEach
-    }      // end if(!hFlat.length)else
+    }      // end if(hFlat.length)
   }        // end if(history.length)
 
   list.innerHTML=html;
+}
+
+/* Resumo do dia no topo da inicial. O número que manda é quantas faltam;
+   o trilho embaixo é a estrada do dia, um trecho por parada. */
+function resumoDoDia(lista){
+  const el=document.getElementById('homeResumo');
+  if(!el) return;
+  if(!lista || !lista.length){ el.classList.add('hidden'); el.innerHTML=''; return; }
+  const feitas=lista.filter(s=>s.done).length;
+  const faltam=lista.length-feitas;
+  const total=lista.reduce((a,s)=>a+(parseMoney(s.value)||0),0);
+  const recebido=lista.filter(s=>s.paid).reduce((a,s)=>a+(parseMoney(s.value)||0),0);
+  const N=Math.min(lista.length,40);
+  let trilho='';
+  for(let k=0;k<N;k++){
+    const cls = k<feitas ? 'ok' : (k===feitas ? 'prox' : '');
+    trilho+=`<i class="${cls}"></i>`;
+  }
+  el.innerHTML=`<div class="dia-topo">
+      <div class="dia-num">${faltam===0?'Tudo entregue':faltam}<small>${faltam===0?'':(faltam===1?'parada falta':'paradas faltam')}</small></div>
+      <div class="dia-val">${fmtMoney(total)}<small>em taxas hoje</small></div>
+    </div>
+    <div class="dia-trilho" aria-hidden="true">${trilho}</div>
+    <div class="dia-pe"><span><b>${feitas}</b> de ${lista.length} entregues</span><span>${fmtMoney(recebido)} recebido</span></div>`;
+  el.classList.remove('hidden');
 }
 
 function toggleCard(i){
@@ -2007,31 +2046,20 @@ document.addEventListener('click',function(e){
 });
 
 // Toggle paid buttons
+/* O estado do botão mora na classe .on (speedboy-app.css), não em
+   style= solto: assim o tema claro e o escuro pintam igual. */
 function toggleFormPaid(){
-  const h=document.getElementById('fPaid');
-  const b=document.getElementById('fPaidBtn');
-  const on=h.value!=='1';
-  h.value=on?'1':'0';
-  b.style.background=on?'var(--green)':'var(--card)';
-  b.style.borderColor=on?'var(--green)':'var(--border)';
-  b.style.color=on?'#000':'var(--muted)';
+  setPaidBtnState('fPaidBtn','fPaid',document.getElementById('fPaid').value!=='1');
 }
 function toggleFormProductPaid(){
-  const h=document.getElementById('fProductPaid');
-  const b=document.getElementById('fProductPaidBtn');
-  const on=h.value!=='1';
-  h.value=on?'1':'0';
-  b.style.background=on?'var(--green)':'var(--card)';
-  b.style.borderColor=on?'var(--green)':'var(--border)';
-  b.style.color=on?'#000':'var(--muted)';
+  setPaidBtnState('fProductPaidBtn','fProductPaid',document.getElementById('fProductPaid').value!=='1');
 }
 function setPaidBtnState(btnId, hiddenId, val){
   const h=document.getElementById(hiddenId);
   const b=document.getElementById(btnId);
   h.value=val?'1':'0';
-  b.style.background=val?'var(--green)':'var(--card)';
-  b.style.borderColor=val?'var(--green)':'var(--border)';
-  b.style.color=val?'#000':'var(--muted)';
+  b.classList.toggle('on',!!val);
+  b.setAttribute('aria-pressed',val?'true':'false');
 }
 
 // City name ↔ code mapping
@@ -2611,7 +2639,7 @@ async function optimizeAndOpenRoute(){
     console.error(e);
     toast('Erro ao otimizar rota','error');
   }finally{
-    btn.disabled=false; btn.textContent='⚡ Otimizar Rota';
+    btn.disabled=false; btn.textContent='Otimizar rota';
   }
 }
 
@@ -2774,8 +2802,8 @@ function renderFinance(){
     metaBarDone.style.width=doneW+'%';
     metaBarPend.style.width=pendW+'%';
     metaBarDone.style.background=doneW>=100?'var(--green)':'var(--accent)';
-    pctEl.innerHTML='R$ '+todayDoneTotal.toFixed(2).replace('.',',')+' finalizado'+(todayPendTotal>0?' <span style="opacity:.65;font-weight:700;">+ R$ '+todayPendTotal.toFixed(2).replace('.',',')+' pendente</span>':'')+'  ·  '+pctRaw.toFixed(0)+'% da meta';
-    pctEl.style.color=doneW>=100?'var(--green)':'var(--accent)';
+    pctEl.innerHTML='<b>'+pctRaw.toFixed(0)+'%</b> · R$ '+todayDoneTotal.toFixed(2).replace('.',',')+' feito'+(todayPendTotal>0?' <span class="meta-pend">+ R$ '+todayPendTotal.toFixed(2).replace('.',',')+' pendente</span>':'');
+    pctEl.classList.toggle('batida',doneW>=100);
   } else {
     metaBarDone.style.width='0%';
     metaBarPend.style.width='0%';
@@ -2794,8 +2822,8 @@ function renderFinance(){
     metaBarWeekDone.style.width=doneWkW+'%';
     metaBarWeekPend.style.width=pendWkW+'%';
     metaBarWeekDone.style.background=doneWkW>=100?'var(--green)':'var(--blue)';
-    pctWkEl.innerHTML='R$ '+wkDoneTotal.toFixed(2).replace('.',',')+' finalizado'+(wkPendTotal>0?' <span style="opacity:.65;font-weight:700;">+ R$ '+wkPendTotal.toFixed(2).replace('.',',')+' pendente</span>':'')+'  ·  '+pctWkRaw.toFixed(0)+'% da meta semanal';
-    pctWkEl.style.color=doneWkW>=100?'var(--green)':'var(--blue)';
+    pctWkEl.innerHTML='<b>'+pctWkRaw.toFixed(0)+'%</b> · R$ '+wkDoneTotal.toFixed(2).replace('.',',')+' feito'+(wkPendTotal>0?' <span class="meta-pend">+ R$ '+wkPendTotal.toFixed(2).replace('.',',')+' pendente</span>':'');
+    pctWkEl.classList.toggle('batida',doneWkW>=100);
   } else {
     metaBarWeekDone.style.width='0%';
     metaBarWeekPend.style.width='0%';
@@ -2814,15 +2842,14 @@ function renderFinance(){
 
   // Summary grid 1
   document.getElementById('sumGrid').innerHTML=`
-    <div class="sum-card ac"><div class="sum-lbl">Hoje — Total</div><div class="sum-val ac">${fmtMoney(todayTotal)}</div><div class="sum-sub">${todayDone} entrega(s)</div></div>
-    <div class="sum-card gr"><div class="sum-lbl">Hoje — Recebido</div><div class="sum-val gr">${fmtMoney(todayRec)}</div><div class="sum-sub">A receber: ${fmtMoney(todayTotal-todayRec)}</div></div>
+    <div class="sum-card heroi"><div><div class="sum-lbl">Hoje</div><div class="sum-val">${fmtMoney(todayTotal)}</div><div class="sum-sub">${todayDone} entrega${todayDone===1?'':'s'}</div></div><div class="sum-heroi-lado"><b class="gr">${fmtMoney(todayRec)}</b><br>recebido<br><b class="ac">${fmtMoney(todayTotal-todayRec)}</b><br>a receber</div></div>
     <div class="sum-card"><div class="sum-lbl">Semana</div><div class="sum-val">${fmtMoney(wkTotal)}</div></div>
     <div class="sum-card"><div class="sum-lbl">Mês atual</div><div class="sum-val">${fmtMoney(mTotal)}</div></div>`;
   // Summary grid 2: despesas, lucro, projeção
   document.getElementById('sumGrid2').innerHTML=`
-    <div class="sum-card" style="border-color:var(--red)"><div class="sum-lbl">Despesas hoje</div><div class="sum-val" style="color:var(--red);">${fmtMoney(todayExpTotal)}</div><div class="sum-sub">${todayExps.length} item(ns)</div></div>
-    <div class="sum-card ${todayProfit>=0?'gr':''}" style="${todayProfit<0?'border-color:var(--red)':''}"><div class="sum-lbl">Lucro Líquido</div><div class="sum-val ${todayProfit>=0?'gr':''}" style="${todayProfit<0?'color:var(--red)':''};">${fmtMoney(todayProfit)}</div><div class="sum-sub">hoje</div></div>
-    <div class="sum-card ac" style="grid-column:span 2"><div class="sum-lbl">Projeção do mês</div><div class="sum-val ac">${fmtMoney(projection)}</div><div class="sum-sub">Baseado na média dos últimos 7 dias — ${daysLeft} dias restantes</div></div>`;
+    <div class="sum-card"><div class="sum-lbl">Despesas hoje</div><div class="sum-val ${todayExpTotal>0?'rd':''}">${fmtMoney(todayExpTotal)}</div><div class="sum-sub">${todayExps.length} ${todayExps.length===1?'item':'itens'}</div></div>
+    <div class="sum-card"><div class="sum-lbl">Lucro hoje</div><div class="sum-val ${todayProfit>=0?'gr':'rd'}">${fmtMoney(todayProfit)}</div><div class="sum-sub">taxas − despesas</div></div>
+    <div class="sum-card largo"><div class="sum-lbl">Projeção do mês</div><div class="sum-val">${fmtMoney(projection)}</div><div class="sum-sub">Pela média dos últimos 7 dias · faltam ${daysLeft} dias</div></div>`;
   drawChart(flatStops);
   // Expenses
   renderExpenses(todayExps);
@@ -2859,7 +2886,7 @@ function setExpType(t){
   _expType=t;
   ['fuel','toll','maint','other'].forEach(k=>{
     const b=document.getElementById('expType_'+k);
-    if(b){b.style.background=k===t?'var(--red)':'var(--card2)';b.style.color=k===t?'#fff':'var(--muted)';b.style.borderColor=k===t?'var(--red)':'var(--border)';}
+    if(b) b.classList.toggle('on',k===t);
   });
 }
 
@@ -3272,14 +3299,14 @@ function _renderSummary(d){
   const media=d.deliveries>0?d.total/d.deliveries:0;
   el.innerHTML=`
     <div class="report-sub" style="margin-bottom:10px;">${d.label} · ${d.range} · ${d.deliveries} entrega(s)${d.cancelled>0?` · ${d.cancelled} cancelada(s)`:''}</div>
-    <div class="rstat-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+    <div class="rstat-row rstat-row-3">
       <div class="rstat"><div class="rstat-lbl">Total</div><div class="rstat-val ac">${fmtMoney(d.total)}</div></div>
       <div class="rstat"><div class="rstat-lbl">Recebido</div><div class="rstat-val gr">${fmtMoney(d.received)}</div></div>
-      <div class="rstat"><div class="rstat-lbl">A Receber</div><div class="rstat-val" style="color:${d.pending>0?'var(--accent)':'var(--muted)'}">${fmtMoney(d.pending)}</div></div>
+      <div class="rstat"><div class="rstat-lbl">A Receber</div><div class="rstat-val${d.pending>0?' ac':' apagado'}">${fmtMoney(d.pending)}</div></div>
     </div>
-    <div class="rstat-row" style="margin-bottom:0;">
+    <div class="rstat-row">
       <div class="rstat"><div class="rstat-lbl">Entregas</div><div class="rstat-val">${d.deliveries}</div></div>
-      <div class="rstat"><div class="rstat-lbl">Tx. Média</div><div class="rstat-val" style="color:var(--muted)">${fmtMoney(media)}</div></div>
+      <div class="rstat"><div class="rstat-lbl">Tx. Média</div><div class="rstat-val apagado">${fmtMoney(media)}</div></div>
     </div>`;
 }
 
@@ -3443,7 +3470,7 @@ function toggleHistSearch(){
   const btn=document.getElementById('histSearchBtn');
   const open=box.style.display==='none';
   box.style.display=open?'':'none';
-  btn.style.background=open?'rgba(245,197,24,.15)':'transparent';
+  btn.classList.toggle('on',open);
   if(open){document.getElementById('histSearch').focus();}
   else{document.getElementById('histSearch').value='';onHistSearch('');}
 }
@@ -4552,11 +4579,11 @@ function renderMotoboys(){
   if(!f){
     el.innerHTML=`<div class="cfg-section">
       <div class="cfg-title" style="margin-bottom:6px;">🛵 Painel fixo de entregadora</div>
-      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px;">A loja manda a entrega direto para ela, por um link. Cai no painel dela e aqui na sua lista ao mesmo tempo — e só conta como paga com foto e nome de quem recebeu.</div>
+      <div class="texto-ajuda">A loja manda a entrega direto para ela, por um link. Cai no painel dela e aqui na sua lista ao mesmo tempo — e só conta como paga com foto e nome de quem recebeu.</div>
       <div class="field-group"><div class="field-label">Nome da entregadora</div><input class="field-input" id="fxNome" value="Márcia" /></div>
       <div class="field-group"><div class="field-label">Loja que manda direto</div><input class="field-input" id="fxLoja" value="KS" /></div>
       <div class="field-group"><div class="field-label">WhatsApp dela (opcional)</div><input class="field-input" id="fxTel" type="tel" placeholder="(XX) XXXXX-XXXX" oninput="maskPhone(this)" maxlength="15" /></div>
-      <button type="button" class="btn-save" onclick="criarPainelFixo()" style="background:var(--accent);">✅ Criar painel</button>
+      <button type="button" class="btn-save amarelo" onclick="criarPainelFixo()">Criar painel</button>
     </div>`;
     return;
   }
@@ -4609,7 +4636,7 @@ function renderMotoboys(){
       <div class="rstat"><div class="rstat-lbl">Na rua</div><div class="rstat-val ac">${naRua}</div></div>
       <div class="rstat"><div class="rstat-lbl">Entregues hoje</div><div class="rstat-val gr">${itens.length-naRua}</div></div>
       <div class="rstat"><div class="rstat-lbl">Pagar no mês</div><div class="rstat-val gr">${c.pagas}</div></div>
-      <div class="rstat"><div class="rstat-lbl">Sem comprovante</div><div class="rstat-val" style="color:${c.semProva?'var(--red)':'var(--muted)'}">${c.semProva}</div></div>
+      <div class="rstat"><div class="rstat-lbl">Sem comprovante</div><div class="rstat-val${c.semProva?' rd':' apagado'}">${c.semProva}</div></div>
     </div>
     <div class="fx-links">
       <button type="button" class="sc-btn wpp" onclick="enviarLinkFixa('motoboy')">📲 Link p/ ${esc(f.nome)}</button>
@@ -4845,7 +4872,7 @@ const _CLASSES_SYNC={synced:'synced',syncing:'syncing',error:'error',offline:'of
 function setSyncUI(status,label){
   const dots=[document.getElementById('syncDot'),document.getElementById('cfgSyncDot')];
   dots.forEach(d=>{if(d)d.className='sync-dot '+(_CLASSES_SYNC[status]||'');});
-  const sl=document.getElementById('syncLabel'); if(sl)sl.textContent=label;
+  const sl=document.getElementById('syncLabel'); if(sl){sl.textContent=label;sl.title=label;}
   const cl=document.getElementById('cfgSyncLbl'); if(cl)cl.textContent=label;
   const row=document.getElementById('syncRow'); if(row)row.classList.toggle('visible',status!=='off');
 }
@@ -5156,20 +5183,20 @@ function renderPending(){
     const typeIcon = s.serviceType==='retirada'?'📦 Retirada':'🛵 Entrega';
     const dateStr  = s.deliveryDate?`📅 ${esc(s.deliveryDate)}`:'';
     const timeStr  = (s.timeFrom||s.timeTo)?`⏰ ${esc(s.timeFrom||'?')}–${esc(s.timeTo||'?')}`:'';
-    const prodStr  = s.productValue>0?`· cobrar R$ ${parseMoney(s.productValue).toFixed(2).replace('.',',')}`:'';
-    const arrStr   = s.arrivedAt?`<div style="font-size:10px;color:var(--muted);margin-top:2px;">📨 Chegou às ${esc(s.arrivedAt)}</div>`:'';
+    const prodStr  = s.productValue>0?`💰 Cobrar R$ ${parseMoney(s.productValue).toFixed(2).replace('.',',')}`:'';
+    const arrStr   = s.arrivedAt?`<div class="pending-meta">📨 Chegou às ${esc(s.arrivedAt)}</div>`:'';
     const tags     = [typeIcon,dateStr,timeStr].filter(Boolean).join(' · ');
     return`<div class="pending-card" id="pc_${k}">
       <div class="pending-info">
+        ${s.store?`<div class="pending-store">${esc(s.store)}</div>`:''}
         <div class="pending-name">${esc(s.name||'Sem nome')}</div>
-        ${s.store?`<div style="font-size:12px;font-weight:700;color:#ff6b00;margin-bottom:2px;">🏪 ${esc(s.store)}</div>`:''}
-        <div class="pending-addr">${esc(s.address||'')}${s.neighborhood?` · <span style="opacity:.8;">${esc(s.neighborhood)}</span>`:''}</div>
-        ${tags?`<div style="font-size:11px;color:var(--accent);font-weight:700;margin-top:2px;">${tags}</div>`:''}
+        <div class="pending-addr">${esc(s.address||'')}${s.neighborhood?` · ${esc(s.neighborhood)}`:''}</div>
+        ${tags?`<div class="pending-meta">${tags}</div>`:''}
         ${arrStr}
-        ${prodStr?`<div class="pending-store">${prodStr}</div>`:''}
+        ${prodStr?`<div class="pending-meta cobrar">${prodStr}</div>`:''}
       </div>
-      <button type="button" class="btn-reject" onclick="rejectPending('${k}')">✕</button>
-      <button type="button" class="btn-accept" onclick="acceptPending('${k}')">✅ Aceitar</button>
+      <button type="button" class="btn-reject" onclick="rejectPending('${k}')" aria-label="Recusar">✕</button>
+      <button type="button" class="btn-accept" onclick="acceptPending('${k}')">Aceitar</button>
     </div>`;
   }).join('');
 }

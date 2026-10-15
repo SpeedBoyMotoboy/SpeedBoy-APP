@@ -15,7 +15,7 @@
    conteúdo dos arquivos — não edite à mão.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION = '20261015-0fa49229';                       // gerado por scripts/bump-versao.mjs
+const VERSION = '20261015-fbfda798';                       // gerado por scripts/bump-versao.mjs
 const CACHE   = 'speedboy-' + VERSION;
 
 // Casca do app: o que precisa estar disponível para abrir offline.
@@ -89,7 +89,11 @@ self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c =>
       // allSettled: um arquivo que falhe não pode abortar a instalação inteira
-      Promise.allSettled(SHELL.map(url => c.add(url)))
+      /* cache:'reload' pula o cache HTTP do navegador. Sem isto, o SW
+         novo podia guardar o speedboy-app.css VELHO (o GitHub Pages manda
+         guardar por 10 min) junto do index.html novo — e o app abria com
+         a marcação nova sem o estilo dela: ícones pretos, resumo cru. */
+      Promise.allSettled(SHELL.map(url => c.add(new Request(url, { cache: 'reload' }))))
     )
   );
 });
@@ -128,7 +132,9 @@ async function staleWhileRevalidate(req) {
   const cache  = await caches.open(CACHE);
   const cached = await cache.match(req);
 
-  const rede = fetch(req).then(res => {
+  /* no-cache: revalida com o servidor (ETag, quase de graça) em vez de
+     aceitar a cópia do cache HTTP, que pode estar uma versão atrás. */
+  const rede = fetch(req, { cache: 'no-cache' }).then(res => {
     if (res && res.ok && res.type === 'basic') cache.put(req, res.clone());
     return res;
   }).catch(() => null);

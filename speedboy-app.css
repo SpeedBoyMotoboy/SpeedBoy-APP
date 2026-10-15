@@ -34,6 +34,8 @@
    ═══════════════════════════════════════════════════════════════ */
 
 /* ══ 1. BASE ══ */
+/* Sinal de que ESTA versão do CSS carregou (ver autocorreção no index.html) */
+:root{--sb-css-ok:1;}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;overscroll-behavior-x:none;-webkit-font-smoothing:antialiased;}
 body{display:flex;flex-direction:column;max-width:520px;margin:0 auto;min-height:100vh;font-size:14px;line-height:1.45;}

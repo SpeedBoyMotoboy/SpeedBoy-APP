@@ -30,6 +30,9 @@ Ou individualmente:
 | `documento.mjs` | folha fotografada → campos da parada, com os defeitos reais do OCR (veja abaixo) |
 | `desfazer.mjs` | desfazer e confirmação (veja abaixo) |
 | `config.mjs` | Config dobrável e primeiro uso (veja abaixo) |
+| `parada.mjs` | editar parada sem perder identidade, taxa na lista, rota, taxa automática (veja abaixo) |
+| `pedido.mjs` | página da loja: envio sem sinal, tudo-ou-nada, status, validação (veja abaixo) |
+| `motoboy.mjs` | painel do motoboy: fila sem sinal, comprovante, gravação por parada (veja abaixo) |
 | `full.mjs` | modo FULL: repasse, problema na entrega e autoria (veja abaixo) |
 | `regras.mjs` | as regras do banco cobrem tudo que o app grava (veja abaixo) |
 | `lint.mjs` | guarda de regressão (veja abaixo) |
@@ -63,6 +66,85 @@ ficou vazio — senão o total dos dois dias continua errado. E `getReportData`
 passou a devolver `_bucket`/`_si`: a data que o fechamento MOSTRA (`_doneDate`)
 pode não ser o dia em que a parada está guardada, e é o dia real que a correção
 usa para encontrá-la de volta.
+
+### Uma lista só para o dinheiro
+
+Fechamento, fatura da loja, cobrança por WhatsApp e a tela de Ganhos varriam as
+paradas cada um com a sua regra. O mesmo dia dava **R$ 30 no fechamento e R$ 95
+na fatura**: a fatura não olhava se a parada tinha sido entregue. Hoje os quatro
+perguntam a `entregasFeitas()`, e o teste exige que os totais **batam**:
+
+- a fatura não cobra parada que está na rua, nem a que ficou para trás num dia
+  fechado, nem a mesma entrega duas vezes; a data é a da **entrega**
+- "7 dias" é o mesmo intervalo na tela e na fatura (`inicioPeriodo`) — antes a
+  fatura pegava um dia a mais
+- a cobrança inclui as entregas de hoje e leva a chave PIX
+- Ganhos conta só o entregue; o que está na rua aparece à parte; lucro desconta
+  o que vai para o motoboy do repasse; a projeção divide os últimos 7 dias por 7
+  (dividia pelo dia do mês: no dia 3 saía mais que dobrada)
+- **contas a receber**: por loja, tudo o que está em aberto, com a idade da
+  dívida mais antiga
+
+### O histórico guarda entrega feita — e não esquece dívida
+
+- a virada do dia copiava a lista **inteira** para o histórico, pendentes
+  incluídas. Uma entrega agendada para dali a cinco dias deixava cinco cópias, e
+  Ganhos somava as cinco. Agora só o que foi entregue é arquivado, e as cópias
+  antigas são varridas ao abrir o app
+- o histórico era cortado em 60 dias sem olhar o que saía. Entrega que a loja
+  não pagou sumia do "a receber" em silêncio. Depois de 60 dias sai o que foi
+  pago; **o que é devido fica até ser pago**
+
+## `parada.mjs` — editar não é recriar
+
+`saveStop()` montava um objeto novo só com os campos da tela e gravava por cima.
+Corrigir um telefone apagava `_id`, `_trackKey`, os dados do repasse, o
+comprovante e `_doneDate` — a confirmação do motoboy não achava mais a parada, a
+loja ficava em "aceito" para sempre e a entrega do painel fixo deixava de contar
+como paga. E gravava pelo **índice** de quando o formulário abriu: se a lista
+mudasse no meio, a edição caía em outra parada.
+
+Cobre ainda:
+
+- **a taxa na lista**: o campo mostra "R$ 35,00" e qualquer saída dele gravava
+  esse texto — lido como zero. Tocar na taxa apagava a taxa
+- **otimizar rota** trocava a lista pela cópia do começo do cálculo; parada que
+  chegasse no meio era apagada. E a rota de hoje levava as agendadas de amanhã
+- **taxa automática da Aritana** casava por pedaço de texto, com a rua junto
+  ("Rua Paulo Freire" → bairro "Paul"), e ignorava a cidade ("Centro" em Serra
+  recebia a taxa de Vila Velha)
+
+## `pedido.mjs` — a loja precisa saber se o pedido foi
+
+Roda o script real do `pedido.html` com dublês do Firebase.
+
+- sem sinal, "Enviando..." ficava para sempre. Agora há prazo de 15 s, o
+  formulário continua preenchido e o aviso diz que **não foi enviado**. Se o
+  sinal volta com a página aberta e a gravação sobe, a tela passa sozinha para
+  "Pedido enviado"
+- pedido com três endereços eram três gravações soltas: se uma falhava, as
+  outras já estavam na fila e "tentar de novo" duplicava. Agora é uma gravação
+  só, com as chaves geradas antes — reenviar usa as mesmas
+- **cancelado** aparecia como "Aguardando confirmação" e **recusado** como
+  "✅ Entregue". Cancelamento recusado pelo Luan deixava a loja em "solicitado"
+  para sempre; agora o app carimba `cancelNegado` no tracking e a página lê
+- pagamento marcado como obrigatório não era validado; a data padrão era UTC
+  (das 21h em diante, "amanhã")
+
+## `motoboy.mjs` — entrega confirmada sem sinal não pode se perder
+
+A entrega só é paga com a confirmação. Sem sinal, o botão ficava em
+"Enviando..." e recarregar a página perdia a confirmação e a foto — enquanto a
+faixa prometia "é enviado quando o sinal voltar".
+
+- a confirmação entra numa **fila no aparelho** antes de qualquer envio; o cartão
+  mostra "entregue — aguardando sinal"; a fila é reenviada ao abrir, no `online`
+  e a cada snapshot, sempre com o mesmo `proofId`
+- snapshot antigo do servidor não desfaz o que está na fila
+- o repasse normal regravava o nó **inteiro** com a cópia local: endereço
+  corrigido pelo dono enquanto o motoboy estava sem sinal voltava ao antigo.
+  Agora grava só os campos daquela parada, sobre o estado atual do servidor
+- foto recusada pelo servidor não é mais escondida por um aviso de sucesso
 
 ## `desfazer.mjs` — a lápide precisa sair junto
 
@@ -153,6 +235,10 @@ originais direto do histórico do git** (`git show origin/main:index.html` e
 `:pedido.html`) e compara cidade por cidade contra a lista de hoje. Reprova se
 algum bairro sumir, e confere que os 93 do cliente realmente entraram.
 
+Cobre também o dinheiro que se perdia no caminho: `parseMoney("R$ 35,00")` dava
+zero, "12.50" digitado virava R$ 1.250,00, e telefone com +55 era cortado no
+meio (o DDI virava DDD e o WhatsApp abria outra pessoa — hoje `numeroWpp`).
+
 Cobre também: formato único `{nome, bairros[]}`, os dois escopos de bairro
 personalizado (o do app e o de cada loja) sem vazar um no outro, `fmtPhone(null)`
 — que quebrava o `motoboy.html` — e a regra de que nenhuma página pode
@@ -215,6 +301,15 @@ antes da Etapa 3:
 - o merge é idempotente e os dois lados convergem para o mesmo conjunto
 - o carimbo só avança quando o conteúdo muda de verdade
 - `null` no meio do array (buraco vindo do Realtime Database) não derruba nada
+
+Dois acréscimos:
+
+- **entregas iguais não são a mesma entrega.** "+3" nas lojas rápidas criava
+  três paradas com o mesmo `_id` (derivado do conteúdo) e o merge ficava com uma
+- **o histórico também tem merge.** Cada aparelho gravava o histórico inteiro
+  por cima do banco; marcar "pago" num celular era desfeito pelo outro. Agora é
+  por entrega, vence o carimbo mais novo — e `carimbarHistorico` só avança o
+  carimbo do que mudou
 
 ## `lint.mjs` — guarda de regressão
 

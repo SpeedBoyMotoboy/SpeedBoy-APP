@@ -87,7 +87,9 @@ function carregar(ls) {
   ls.setItem('sb_stops', JSON.stringify([{ name: 'Caio' }]));
   const { api } = carregar(ls);
   api.sbAutoBackup();
-  const hoje = 'sb_bkp_' + new Date().toISOString().slice(0, 10);
+  // Data LOCAL: em UTC, das 21h em diante a chave já era a de amanhã.
+  const _d = new Date();
+  const hoje = 'sb_bkp_' + _d.getFullYear() + '-' + String(_d.getMonth() + 1).padStart(2, '0') + '-' + String(_d.getDate()).padStart(2, '0');
   ok(ls.getItem(hoje) !== null, 'com a cota cheia, a copia de hoje ainda e gravada');
 }
 

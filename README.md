@@ -78,7 +78,7 @@ Nenhuma delas tem login. O que separa os dados é o **código da sala**
 | `speedboy-documento.js` | Folha fotografada → campos da parada. Só texto: quem tira a foto e chama o OCR é o `§ 43` do `index.html`. Roda igual no Node, e é por isso que dá para testá-lo contra o texto real do OCR. |
 | `speedboy-firebase.js` | Configuração do Firebase e login anônimo. |
 | `fatura-padrao.js` | Layout único de fatura e de fechamento em PDF (`speedboy.fatura/v1`), compartilhado entre o app e a página do cliente. |
-| `sw.js` | Service worker: abre offline, e **nunca** troca de versão sozinho. A `VERSION` é gerada por `scripts/bump-versao.mjs` a partir do conteúdo — não edite à mão. |
+| `sw.js` | Service worker: abre offline, guarda o SDK do Firebase em cache próprio (sem ele o painel do motoboy não envia nada quando o sinal volta), e **nunca** troca de versão sozinho. A `VERSION` é gerada por `scripts/bump-versao.mjs` a partir do conteúdo — não edite à mão. |
 | `manifest.json` | O app instalável de quem despacha. |
 | `manifest-motoboy.json` | O painel instalável do motoboy. `start_url` diferente de propósito: repetido, um app substituiria o outro no aparelho. |
 | `database.rules.json` | Regras do Realtime Database. Publicar exige a ordem de `ROLLOUT-SEGURANCA.md`. |
@@ -98,6 +98,9 @@ que se procura mais:
 | taxa que se preenche sozinha | `§ 14` (KS) e `§ 15` (Aritana) |
 | rota / Waze / Google Maps | `§ 17` e `§ 18` |
 | o fechamento e o PDF | `§ 26`, `§ 27` |
+| o que conta como entrega feita (fechamento, fatura, cobrança, Ganhos) | `entregasFeitas()` em `§ 26` |
+| quem deve quanto, por loja | `contasAReceber()` em `§ 26` |
+| a chave PIX da fatura | `faturaPix()` em `§ 27` (Config → Dados da fatura) |
 | corrigir uma entrega antiga | `§ 25b` |
 | o modo FULL e os repasses | `§ 29`, `§ 30`, `§ 31` |
 | a aba Motoboys / painel fixo da Márcia | `§ 31b` |
@@ -130,9 +133,20 @@ rooms/SB-XXXX/
   location         última posição conhecida
 ```
 
+**Dinheiro tem uma fonte só.** Fechamento, fatura da loja, cobrança por
+WhatsApp e Ganhos leem de `entregasFeitas()`: só parada finalizada, uma vez
+cada, datada pelo dia da entrega. Uma tela que some taxa varrendo `stops` ou
+`history` por conta própria é regressão — foi assim que a fatura passou a cobrar
+entrega que ainda estava na rua.
+
+O histórico guarda **só entrega feita**. Os 60 dias mais recentes ficam
+inteiros; dos mais antigos fica o que ainda é devido — dívida só sai do
+histórico quando é paga (`apararHistorico`).
+
 Cada parada tem `_id` e `_upd`: identidade e carimbo da última alteração.
 É o que permite os dois celulares mexerem na mesma lista sem uma adição
-apagar a outra — ver `§ 7` e `testes/sync.mjs`.
+apagar a outra — ver `§ 7` e `testes/sync.mjs`. O histórico segue a mesma regra
+(`mergeHistorico`): por entrega, vence o carimbo mais novo.
 
 ---
 

@@ -124,6 +124,48 @@ const SB = janela.SpeedBoy;
   ok(SB.fmtMoney('abc') === 'R$ 0,00', 'valor inválido vira zero');
 }
 
+/* ── 6b. O dinheiro que se perdia no caminho ──────────────────
+   Três defeitos, todos silenciosos e todos indo parar na fatura:
+
+   • a taxa na lista é um campo que mostra "R$ 35,00". Tocar nele e sair
+     gravava parseMoney("R$ 35,00") — que dava ZERO, porque o parseFloat
+     tropeçava no "R$". Tocar na taxa apagava a taxa;
+   • digitar "12.50" (teclado numérico em inglês põe ponto, não vírgula)
+     virava R$ 1.250,00: a máscara jogava o ponto fora;
+   • "1.250,00" virava R$ 1,25: só a vírgula era trocada. */
+{
+  ok(SB.parseMoney('R$ 35,00') === 35, 'parseMoney lê o que o fmtMoney escreve (tocar na taxa não zera a taxa)');
+  ok(SB.parseMoney(SB.fmtMoney(27.5)) === 27.5, 'ida e volta: fmtMoney → parseMoney devolve o mesmo valor');
+  ok(SB.parseMoney('1.250,00') === 1250, 'milhar com ponto e centavos com vírgula');
+  ok(SB.parseMoney('1.250') === 1250, 'ponto seguido de três dígitos é milhar');
+  ok(SB.parseMoney('12.50') === 12.5 && SB.parseMoney('12.5') === 12.5, 'ponto seguido de um ou dois dígitos é centavo');
+  ok(SB.parseMoney(12.5) === 12.5 && SB.parseMoney(0) === 0, 'número passa intacto');
+  ok(SB.parseMoney('abc') === 0 && SB.parseMoney(NaN) === 0, 'lixo vira zero, nunca NaN');
+
+  const digita = v => { const el = { value: v }; SB.maskMoney(el); return el.value; };
+  ok(digita('12.50') === '12,50', `"12.50" digitado vira 12,50 e não 1250 (virou ${digita('12.50')})`);
+  ok(digita('12.') === '12,', 'o ponto recém-digitado já vira vírgula — senão o próximo dígito gruda');
+  ok(digita('12,505') === '12,50', 'continua cortando na segunda casa');
+  ok(digita('1.250,00') === '1250,00', 'milhar colado com vírgula perde só o ponto');
+  ok(digita('R$ 35,00') === '35,00', 'prefixo colado some');
+}
+
+/* ── 6c. WhatsApp: o DDI que virava DDD ───────────────────────
+   Cliente manda "+55 27 99916-5959". A máscara cortava em 11 dígitos e
+   guardava "55279991659" — DDD 55, número truncado — e todo link saía
+   wa.me/55 + isso: abria a conversa de outra pessoa, ou nenhuma. */
+{
+  ok(SB.numeroWpp('27999165959') === '5527999165959', 'celular com DDD ganha o 55');
+  ok(SB.numeroWpp('+55 (27) 99916-5959') === '5527999165959', 'número que já vem com 55 não ganha outro');
+  ok(SB.numeroWpp('2733334444') === '552733334444', 'fixo de 10 dígitos também');
+  ok(SB.numeroWpp('55999887766') === '5555999887766', 'DDD 55 (RS) com 11 dígitos não é confundido com DDI');
+  ok(SB.numeroWpp('123') === '' && SB.numeroWpp(null) === '', 'número incompleto não vira link para lugar nenhum');
+
+  const digita = v => { const el = { value: v }; SB.maskPhone(el); return el.value; };
+  ok(digita('+55 27 99916-5959') === '(27) 99916-5959', 'a máscara tira o DDI em vez de cortar o fim do número');
+  ok(digita('27999165959') === '(27) 99916-5959', 'e continua formatando o número comum');
+}
+
 // ── 7. Nenhuma página redeclara o que o núcleo já dá ─────────
 {
   const PAGINAS = ['index.html', 'pedido.html', 'motoboy.html'];

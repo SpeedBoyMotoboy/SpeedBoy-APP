@@ -171,7 +171,15 @@ body.para-fixo .campo-pagamento{display:none;}
 /* TOAST */
 .toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--card2);border:1px solid var(--border);color:var(--text);padding:10px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:600;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;max-width:92vw;text-align:center;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-.toast.error{border-color:var(--red);color:var(--red);}
+.toast.error{border-color:var(--red);color:var(--red);white-space:normal;border-radius:18px;}
+
+/* ERRO JUNTO DO CAMPO, AVISOS DE REDE E CONTATO */
+.campo-erro{color:var(--red);font-size:12px;font-weight:600;margin-top:6px;line-height:1.4;}
+.pay-row.error .pay-btn{border-color:var(--red);}
+.aviso-rede{display:none;margin:12px 16px 0;padding:12px 14px;border-radius:12px;border:1.5px solid var(--red);background:rgba(255,69,96,.1);color:var(--red);font-size:13px;font-weight:600;line-height:1.5;}
+.aviso-rede.show{display:block;}
+.falar-wrap{text-align:center;margin-top:16px;}
+.btn-falar{display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;background:rgba(0,230,118,.1);color:var(--green);border:1.5px solid rgba(0,230,118,.4);border-radius:var(--radius);font-family:'Barlow',sans-serif;font-weight:700;font-size:14px;padding:11px 20px;cursor:pointer;}
 .toast.success{border-color:var(--green);color:var(--green);}
 </style>
 </head>
@@ -187,8 +195,11 @@ body.para-fixo .campo-pagamento{display:none;}
   <div class="hero-badge" id="heroBadge">🏪 <span id="storeSpan"></span></div>
 </div>
 
+<div class="aviso-rede" id="avisoTracking" role="alert"></div>
+
 <div id="mainWrap">
   <div class="form-wrap">
+    <div class="falar-wrap" style="margin-top:0;"><a class="btn-falar js-falar" href="#" target="_blank" rel="noopener">💬 Falar com a SpeedBoy</a></div>
     <div class="sec-divider">ENTREGAS</div>
     <div class="stops-wrap" id="stopsWrap"></div>
     <button type="button" class="btn-add-stop" id="btnAdd" onclick="window.addStop()">
@@ -217,6 +228,7 @@ body.para-fixo .campo-pagamento{display:none;}
     <div id="histList"><div class="hist-empty">Nenhum pedido ainda.</div></div>
   </div>
 </div>
+<div class="aviso-rede" id="avisoEnvio" role="alert"></div>
 <div class="submit-wrap">
     <button type="button" class="btn-submit" id="btnSubmit" onclick="window.submitPedido()">
       🛵 Enviar para o Luan
@@ -229,17 +241,20 @@ body.para-fixo .campo-pagamento{display:none;}
   <div class="success-icon">🛵</div>
   <div class="success-title">Pedido enviado!</div>
   <div class="success-sub">O Luan já recebeu! Ele vai confirmar as entregas em instantes.</div>
+  <div class="success-sub" style="margin-top:8px;">Você acompanha o status de cada entrega aqui, nesta mesma página. Se fechar, abra o link de novo e veja em “Meu histórico de pedidos”.</div>
   <div class="success-list" id="successList"></div>
   <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
     <button type="button" class="btn-novo" onclick="window.resetForm()">+ Novo pedido</button>
     <button type="button" class="btn-whatsapp" id="btnWhatsApp" onclick="window.sendWhatsApp()" style="display:none;">💬 Avisar no WhatsApp</button>
   </div>
+  <div class="falar-wrap"><a class="btn-falar js-falar" href="#" target="_blank" rel="noopener">💬 Falar com a SpeedBoy</a></div>
 </div>
 
 <div class="error-wrap" id="errorWrap">
   <div style="font-size:64px;margin-bottom:16px">⚠️</div>
   <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;color:var(--red);margin-bottom:10px">Link inválido</div>
   <div style="font-size:13px;color:var(--muted);line-height:1.6;max-width:260px">Peça um novo link para o Luan.</div>
+  <div class="falar-wrap"><a class="btn-falar js-falar" href="#" target="_blank" rel="noopener">💬 Falar com a SpeedBoy</a></div>
 </div>
 
 <script>
@@ -275,6 +290,157 @@ var lastSubmittedKeys = [];
 var clientReqRoom = '';
 
 // ═══════════════════════════════════════════════════
+//  NÚCLEO TESTÁVEL — funções puras, sem DOM nem Firebase
+//  (testes/pedido.mjs roda o script inteiro num sandbox)
+// ═══════════════════════════════════════════════════
+var PRAZO_ENVIO_MS = 15000;   // sem sinal, o Firebase nunca resolve: damos 15 s
+
+/* Data LOCAL (aaaa-mm-dd). toISOString() devolve a data em UTC: depois das
+   21h em Brasília a loja pedia sem querer para "amanhã". */
+function dataLocalISO(d) {
+  function dois(n) { return (n < 10 ? '0' : '') + n; }
+  return d.getFullYear() + '-' + dois(d.getMonth() + 1) + '-' + dois(d.getDate());
+}
+
+/* Erro do Firebase/rede -> frase curta em português. Nunca devolve o texto
+   cru do SDK (vem em inglês, tipo "PERMISSION_DENIED: Permission denied"). */
+function traduzirErro(e) {
+  var cod = String((e && e.code) || '');
+  var tudo = (cod + ' ' + String((e && e.message) || e || '')).toLowerCase();
+  if (cod === 'sb/timeout') return 'Sem sinal ou conexão muito fraca.';
+  if (/permission_denied|permission denied/.test(tudo)) return 'Este link não tem permissão para enviar. Peça um link novo ao Luan.';
+  if (/network|offline|unavailable|failed to fetch|timeout|timed out|disconnected|load failed/.test(tudo)) return 'Sem conexão com a internet. Confira o sinal.';
+  return 'Algo deu errado. Tente de novo em instantes.';
+}
+
+/* Rejeita com code 'sb/timeout' se a promessa não resolver em `ms`. */
+function comTimeout(promessa, ms) {
+  return new Promise(function(resolve, reject) {
+    var t = setTimeout(function() {
+      var e = new Error('timeout'); e.code = 'sb/timeout'; reject(e);
+    }, ms);
+    Promise.resolve(promessa).then(
+      function(v) { clearTimeout(t); resolve(v); },
+      function(e) { clearTimeout(t); reject(e); });
+  });
+}
+
+/* Valida uma parada. Devolve { campo: 'mensagem' } — vazio = válida. */
+function validarParada(v) {
+  var erros = {};
+  if (!v.name)                              erros.name   = 'Informe o nome do cliente.';
+  if (!v.city)                              erros.city   = 'Escolha a cidade.';
+  if (!v.bairro)                            erros.bairro = 'Informe o bairro.';
+  if (!v.rua)                               erros.rua    = 'Informe a rua ou avenida.';
+  if (!v.numero)                            erros.numero = 'Informe o número.';
+  if (!v.phone || v.phone.length < 10)      erros.phone  = 'Informe o telefone com DDD (10 ou 11 números).';
+  if (!v.data)                              erros.data   = 'Informe a data da entrega.';
+  if (v.exigePagamento) {
+    if (v.pagamento !== 'paid' && v.pagamento !== 'due') {
+      erros.pagamento = 'Escolha o pagamento: “Já pago” ou “A receber”.';
+    } else if (v.pagamento === 'due' && !(v.valor > 0)) {
+      erros.valor = 'Informe o valor a receber (maior que zero).';
+    }
+  }
+  return erros;
+}
+
+/* Pedido de edição: o endereço é o que o motoboy usa para chegar. */
+function validarEdicao(f) {
+  return (f && f.address) ? '' : 'Informe o endereço da entrega.';
+}
+
+/* Link do botão "Falar com a SpeedBoy" (LUAN_PHONE já vem do link da loja). */
+function urlFalarSpeedBoy() {
+  var fone = String(LUAN_PHONE || '').replace(/\D/g, '') || '5527999165959';
+  var msg = 'Olá! Preciso de ajuda com um pedido' + (STORE_NAME ? ' da loja ' + STORE_NAME : '') + '.';
+  return 'https://wa.me/' + fone + '?text=' + encodeURIComponent(msg);
+}
+
+/* Uma chave por parada, guardadas por card. Reenviar depois de falha ou
+   timeout reaproveita as mesmas chaves — a gravação é idempotente e a mesma
+   parada nunca entra duas vezes na fila. Cards removidos saem do mapa. */
+function chavesParaParadas(ids, mapa, gerar) {
+  Object.keys(mapa).forEach(function(id) { if (ids.indexOf(id) < 0) delete mapa[id]; });
+  return ids.map(function(id) { if (!mapa[id]) mapa[id] = gerar(); return mapa[id]; });
+}
+
+/* Gravação multi-caminho de rooms/ROOM/pending: o formato de cada item é o
+   de sempre (string JSON) porque o index.html lê esse nó. */
+function montarUpdatePendentes(stops, keys) {
+  var up = {};
+  stops.forEach(function(s, i) { up[keys[i]] = JSON.stringify(s); });
+  return up;
+}
+
+/* Pedido para a entregadora fixa: o nó do repasse e o tracking de cada
+   entrega, num único mapa de caminhos relativos a rooms/ROOM. */
+function montarUpdateFixa(stops, keys, painel, painelNome, agora) {
+  var up = {};
+  stops.forEach(function(s, i) {
+    var key = keys[i];
+    var entrega = {
+      stopId: 'fx_' + key,
+      name: s.name, address: s.address, complement: s.complement, reference: s.reference,
+      phone: s.phone, store: s.store, city: s.city, cityId: s.cityId,
+      neighborhood: s.neighborhood, street: s.street, number: s.number,
+      serviceType: s.serviceType, deliveryDate: s.deliveryDate,
+      timeFrom: s.timeFrom, timeTo: s.timeTo, notes: s.notes,
+      taxa: 0, done: false
+    };
+    var no = {
+      motoboy: painelNome, painel: painel, trackKey: key, createdAt: agora,
+      hideTaxa: true, askReceiver: true, askPhoto: true,
+      deliveries: [entrega]
+    };
+    var acompanhamento = { status: 'aceito', updatedAt: agora,
+      info: { name: s.name, address: s.address, store: s.store } };
+    up['repass/' + painel + '_' + key] = JSON.stringify(no);
+    up['tracking/' + key] = JSON.stringify(acompanhamento);
+  });
+  return up;
+}
+
+/* Status que a loja lê. `done` = nada mais a fazer (sem Editar/Cancelar).
+   Recusado e cancelado têm texto próprio: nunca "Entregue" nem "Aguardando". */
+function statusInfo(st) {
+  switch (st) {
+    case 'aceito':    return { cls:'aceito',    txt:'✅ Aceito pelo motoboy',      curto:'Aceito',    done:false };
+    case 'acaminho':  return { cls:'acaminho',  txt:'🛵 A caminho',                curto:'A caminho', done:false };
+    case 'entregue':  return { cls:'entregue',  txt:'✅ Entregue',                 curto:'Entregue',  done:true  };
+    case 'recusado':  return { cls:'recusado',  txt:'❌ Pedido recusado',          curto:'Recusado',  done:true  };
+    case 'cancelado': return { cls:'cancelled', txt:'🚫 Cancelada',                curto:'Cancelada', done:true  };
+    case 'problema':  return { cls:'acaminho',  txt:'⚠️ Problema na entrega',     curto:'Problema',  done:false };
+    case 'encerrado': return { cls:'aceito',    txt:'🏁 Encerrada',                curto:'Encerrada', done:true  };   // histórico antigo, sem status guardado
+    default:          return { cls:'pending',   txt:'⏳ Aguardando confirmação',   curto:'Aguardando', done:false };
+  }
+}
+function statusFinal(st) { return statusInfo(st).done; }
+
+/* O que mostrar para um pedido: o status do tracking, ou — enquanto o
+   Luan não confirmar um cancelamento pedido — "Cancelamento solicitado". */
+function rotuloPedido(st, cancelReq, negado) {
+  var f = statusInfo(st || '');
+  if (!f.done && cancelReq) {
+    return { cls:'pending', txt:'⏳ Cancelamento solicitado', curto:'Cancelamento solicitado', acoes:false };
+  }
+  // O Luan respondeu NÃO: a entrega segue, e a loja precisa ler isso.
+  if (!f.done && negado) {
+    return { cls:f.cls, txt:f.txt + ' · cancelamento não aceito', curto:f.curto + ' · cancelamento não aceito', acoes:true };
+  }
+  return { cls:f.cls, txt:f.txt, curto:f.curto, acoes:!f.done };
+}
+
+/* O app do Luan carimba `cancelNegado` no tracking quando recusa um
+   cancelamento. Sem isso a loja ficava lendo "Cancelamento solicitado"
+   para sempre, achando que a entrega não ia sair. O carimbo só responde a
+   um pedido se for DIFERENTE do que já existia quando o pedido foi feito
+   (um "não" antigo não responde a um pedido novo). */
+function cancelFoiNegado(pendente, negadoAgora, negadoAntes) {
+  return !!(pendente && negadoAgora && negadoAgora !== (negadoAntes || ''));
+}
+
+// ═══════════════════════════════════════════════════
 //  BAIRROS CUSTOMIZADOS (localStorage por loja)
 // ═══════════════════════════════════════════════════
 /* Escopo por loja: cada link de loja guarda os bairros que o cliente
@@ -303,6 +469,9 @@ function init() {
     document.title = 'SPEEDBOY — ' + STORE_NAME;
   }
 
+  // "Falar com a SpeedBoy" em toda tela (inclusive "Link inválido")
+  document.querySelectorAll('.js-falar').forEach(function(a) { a.href = urlFalarSpeedBoy(); });
+
   // Verifica se tem sala
   if (!ROOM) {
     document.getElementById('mainWrap').style.display = 'none';
@@ -325,12 +494,7 @@ function init() {
     showToast('Erro ao conectar. Tente novamente.', 'error');
   }
 
-  // Define data padrão como hoje
-  setTimeout(function() {
-    var dateInputs = document.querySelectorAll('input[type="date"]');
-    var today = new Date().toISOString().split('T')[0];
-    dateInputs.forEach(function(el){ if(!el.value) el.value = today; });
-  }, 100);
+  // (a data padrão de cada entrega é preenchida em addStop, na data LOCAL)
 
   // Restaura tema salvo
   if (localStorage.getItem('sb_pedido_theme') === 'light') {
@@ -435,7 +599,7 @@ window.addStop = function() {
       '</div>' +
       '<div class="field-row">' +
         '<div class="field-group">' +
-          '<div class="field-label">Telefone</div>' +
+          '<div class="field-label">Telefone <span class="req">*</span></div>' +
           '<input class="field-input" id="' + id + '_phone" type="tel" placeholder="(XX) XXXXX-XXXX" oninput="window.maskPhone(this)" maxlength="15" />' +
         '</div>' +
       '</div>' +
@@ -460,6 +624,9 @@ window.addStop = function() {
     '</div>';
 
   document.getElementById('stopsWrap').appendChild(div);
+  // Data padrão = hoje (LOCAL) em TODA entrega adicionada, também as de depois de "Novo pedido"
+  var dataEl = document.getElementById(id + '_date');
+  if (dataEl && !dataEl.value) dataEl.value = dataLocalISO(new Date());
   renumber();
 };
 
@@ -470,6 +637,11 @@ window.removeStop = function(id) {
 };
 
 // Filtrar bairros com busca (incluindo customizados)
+var _sugestoes = {};   // stopId -> bairros listados (o onclick leva o índice, nunca o texto)
+window.selectBairroIdx = function(stopId, i) {
+  var b = (_sugestoes[stopId] || [])[i];
+  if (b != null) window.selectBairro(stopId, b);
+};
 window.filterBairros = function(stopId) {
   var input = document.getElementById(stopId + '_bairro');
   var citySelect = document.getElementById(stopId + '_city');
@@ -492,8 +664,9 @@ window.filterBairros = function(stopId) {
     return;
   }
   
-  suggestionsDiv.innerHTML = filtered.map(function(b) {
-    return '<div class="bairro-suggestion-item" onclick="window.selectBairro(\'' + stopId + '\', \'' + b + '\')">' + b + '</div>';
+  _sugestoes[stopId] = filtered;
+  suggestionsDiv.innerHTML = filtered.map(function(b, i) {
+    return '<div class="bairro-suggestion-item" onclick="window.selectBairroIdx(\'' + stopId + '\',' + i + ')">' + escapar(b) + '</div>';
   }).join('');
 
   suggestionsDiv.classList.add('show');
@@ -548,19 +721,60 @@ window.selectPay = function(id, type) {
   yesBtn.className = 'pay-btn' + (type === 'paid' ? ' paid' : '');
   noBtn.className  = 'pay-btn' + (type === 'due'  ? ' due'  : '');
   if (wrap) wrap.className = 'value-group' + (type === 'due' ? ' show' : '');
+  // escolheu: a mensagem de "escolha o pagamento" não faz mais sentido
+  yesBtn.parentNode.classList.remove('error');
+  var grupo = yesBtn.closest ? yesBtn.closest('.field-group') : null;
+  if (grupo) grupo.querySelectorAll('.campo-erro').forEach(function(c) { c.remove(); });
 };
 
 // ═══════════════════════════════════════════════════
 //  ENVIAR
 // ═══════════════════════════════════════════════════
+var _enviando = false;      // envio em andamento: bloqueia o duplo toque
+var _envioConcluido = '';   // chaves do último pedido que chegou à tela de sucesso
+var _chavesEnvio = {};      // card.id -> chave da parada, até o envio dar certo
+
+function mostrarAviso(id, msg) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg || '';
+  if (msg) el.classList.add('show'); else el.classList.remove('show');
+}
+
+function lerPagamento(id) {
+  var sim = document.getElementById(id + '_paid_yes');
+  var nao = document.getElementById(id + '_paid_no');
+  if (sim && sim.classList.contains('paid')) return 'paid';
+  if (nao && nao.classList.contains('due'))  return 'due';
+  return '';
+}
+
+function limparErrosCard(card) {
+  card.querySelectorAll('.campo-erro').forEach(function(c) { c.remove(); });
+  card.querySelectorAll('.error').forEach(function(c) { c.classList.remove('error'); });
+}
+
+// Mensagem em texto junto do campo (não só um toast que some em 3 s)
+function marcarErro(el, msg) {
+  if (!el) return;
+  el.classList.add('error');
+  var grupo = el.closest ? el.closest('.field-group') : null;
+  var caixa = document.createElement('div');
+  caixa.className = 'campo-erro';
+  caixa.textContent = msg;
+  (grupo || el.parentNode).appendChild(caixa);
+}
+
 window.submitPedido = function() {
+  if (_enviando) return;
   var cards    = document.querySelectorAll('.stop-card');
   var newStops = [];
+  var ids      = [];
   var hasErr   = false;
 
   cards.forEach(function(card) {
     var id = card.id;
-    
+
     // Elementos
     var nameEl      = document.getElementById(id + '_name');
     var cityEl      = document.getElementById(id + '_city');
@@ -577,61 +791,55 @@ window.submitPedido = function() {
     var timeToEl    = document.getElementById(id + '_timeTo');
     var valEl       = document.getElementById(id + '_value');
     var notesEl     = document.getElementById(id + '_notes');
-    
+
     // Valores
     var name    = nameEl  ? nameEl.value.trim()      : '';
     var city    = cityEl  ? cityEl.value             : '';
-    var bairro  = bairroEl ? bairroEl.value          : '';
+    var bairro  = bairroEl ? bairroEl.value.trim()   : '';
     var rua     = ruaEl   ? ruaEl.value.trim()       : '';
     var numero  = numeroEl ? numeroEl.value.trim()   : '';
     var comp    = compEl  ? compEl.value.trim()      : '';
     var ref     = refEl   ? refEl.value.trim()       : '';
     var phone   = phoneEl ? phoneEl.value.replace(/\D/g,'') : '';
+    var pagamento  = lerPagamento(id);
+    var valor      = valEl ? parseMoney(valEl.value) : 0;
 
-    // VALIDAÇÕES OBRIGATÓRIAS
-    var errors = [];
-    
-    if (!name)                  { errors.push(nameEl);    }
-    if (!city)                  { errors.push(cityEl);    }
-    if (!bairro)                { errors.push(bairroEl);  }
-    if (!rua)                   { errors.push(ruaEl);     }
-    if (!numero)                { errors.push(numeroEl);  }
-    if (!phone || phone.length < 10) { errors.push(phoneEl); showToast('⚠️ Telefone inválido ou não preenchido', 'error'); }
-    
     // Salva bairro customizado se for novo
     if (city && bairro) {
       addCustomBairro(city, bairro);
     }
-    
-    if (errors.length > 0) {
-      errors.forEach(function(el) { if (el) el.classList.add('error'); });
-      if (!hasErr) card.scrollIntoView({behavior:'smooth',block:'center'});
+
+    // VALIDAÇÕES OBRIGATÓRIAS (a regra mora em validarParada)
+    limparErrosCard(card);
+    var erros = validarParada({
+      name: name, city: city, bairro: bairro, rua: rua, numero: numero, phone: phone,
+      data: dateEl ? dateEl.value : '', pagamento: pagamento, valor: valor,
+      exigePagamento: !PARA
+    });
+    var campos = {
+      name: nameEl, city: cityEl, bairro: bairroEl, rua: ruaEl, numero: numeroEl,
+      phone: phoneEl, data: dateEl, pagamento: yesBtn ? yesBtn.parentNode : null, valor: valEl
+    };
+    var com = Object.keys(erros);
+    if (com.length > 0) {
+      com.forEach(function(k) { marcarErro(campos[k], erros[k]); });
+      if (!hasErr && campos[com[0]]) campos[com[0]].scrollIntoView({behavior:'smooth',block:'center'});
       hasErr = true;
       return;
     }
-    
-    // Remover marcação de erro se passou
-    [nameEl, cityEl, bairroEl, ruaEl, numeroEl, compEl, phoneEl].forEach(function(el) {
-      if (el) el.classList.remove('error');
-    });
 
     // Montar endereço completo
     var address = rua + ', ' + numero + ', ' + bairro + ' - ' + CIDADE_BAIRROS[city].nome;
 
-    // Verificar pagamento
-    var isPaid  = yesBtn && yesBtn.classList.contains('paid');
-    var isNoBtn = document.getElementById(id + '_paid_no');
-    var hasPay  = (yesBtn && (yesBtn.classList.contains('paid') || (isNoBtn && isNoBtn.classList.contains('due'))));
-    var productVal = (valEl && !PARA) ? parseMoney(valEl.value) : 0;
+    var isPaid = pagamento === 'paid';
+    var productVal = PARA ? 0 : valor;
     if (PARA) isPaid = false;
 
     // Data
-    var delivDate = '';
-    if (dateEl && dateEl.value) {
-      var dp = dateEl.value.split('-');
-      delivDate = dp[2] + '/' + dp[1] + '/' + dp[0];
-    }
+    var dp = dateEl.value.split('-');
+    var delivDate = dp[2] + '/' + dp[1] + '/' + dp[0];
 
+    ids.push(id);
     newStops.push({
       name:         name,
       address:      address,
@@ -660,110 +868,134 @@ window.submitPedido = function() {
     });
   });
 
-  if (hasErr) { return; }
+  if (hasErr) { showToast('⚠️ Confira os campos em vermelho', 'error'); return; }
   if (!newStops.length){ showToast('Adicione pelo menos uma entrega', 'error'); return; }
   if (!db)            { showToast('Sem conexão com o sistema. Recarregue a página.', 'error'); return; }
 
-  document.getElementById('loading').classList.add('show');
-  document.getElementById('btnSubmit').disabled = true;
+  enviarPedido(newStops, ids);
+};
 
-  // As regras do banco exigem sessão autenticada. Se o login ainda não
-  // resolveu, espera aqui em vez de gravar sem credencial.
-  window.speedboyLoginAnonimo().catch(function(){ /* regras antigas ainda aceitam */ })
-    .then(function(){ enviarPedido(newStops); });
+// As regras do banco exigem sessão autenticada. Se o login ainda não
+// resolveu, espera aqui em vez de gravar sem credencial. Falha de login é
+// ignorada: as regras antigas (permissivas) ainda aceitam.
+function loginSeguro() {
+  return Promise.resolve()
+    .then(function() { return window.speedboyLoginAnonimo(); })
+    .catch(function() { /* segue sem credencial */ });
 }
 
-// Pedido normal: fila de aceite do Luan.
-function enviarParaPendentes(newStops) {
-  var pendingRef = db.ref('rooms/' + ROOM + '/pending');
-  var refs = newStops.map(function(s) { return pendingRef.push(JSON.stringify(s)); });
-  return { keys: refs.map(function(r){ return r.key; }), promise: Promise.all(refs) };
+function novaChave() {
+  return db.ref('rooms/' + ROOM + '/' + (PARA ? 'repass' : 'pending')).push().key;
+}
+
+// Pedido normal: fila de aceite do Luan. UMA gravação para todas as paradas:
+// ou entram todas, ou nenhuma.
+function enviarParaPendentes(newStops, keys) {
+  return db.ref('rooms/' + ROOM + '/pending').update(montarUpdatePendentes(newStops, keys));
 }
 
 /* Pedido para a entregadora fixa. Cada entrega vira um nó próprio em
    /repass (o mesmo caminho dos repasses, que já tem regra no banco), com
    painel=FX-... — é por ele que o painel dela acha as suas. A chave serve
    também de chave de acompanhamento: o app do Luan devolve por ela o
-   "entregue", a hora, quem recebeu e o comprovante. */
-function enviarParaFixa(newStops) {
-  var agora = new Date().toISOString();
-  var keys = [];
-  var promises = newStops.map(function(s) {
-    var key = db.ref('rooms/' + ROOM + '/repass').push().key;
-    keys.push(key);
-    var entrega = {
-      stopId: 'fx_' + key,
-      name: s.name, address: s.address, complement: s.complement, reference: s.reference,
-      phone: s.phone, store: s.store, city: s.city, cityId: s.cityId,
-      neighborhood: s.neighborhood, street: s.street, number: s.number,
-      serviceType: s.serviceType, deliveryDate: s.deliveryDate,
-      timeFrom: s.timeFrom, timeTo: s.timeTo, notes: s.notes,
-      taxa: 0, done: false
-    };
-    var no = {
-      motoboy: PARA_NOME, painel: PARA, trackKey: key, createdAt: agora,
-      hideTaxa: true, askReceiver: true, askPhoto: true,
-      deliveries: [entrega]
-    };
-    var acompanhamento = { status: 'aceito', updatedAt: agora,
-      info: { name: s.name, address: s.address, store: s.store } };
-    return Promise.all([
-      db.ref('rooms/' + ROOM + '/repass/' + PARA + '_' + key).set(JSON.stringify(no)),
-      db.ref('rooms/' + ROOM + '/tracking/' + key).set(JSON.stringify(acompanhamento))
-    ]);
-  });
-  return { keys: keys, promise: Promise.all(promises) };
+   "entregue", a hora, quem recebeu e o comprovante. Também numa única
+   gravação, junto com o tracking inicial. */
+function enviarParaFixa(newStops, keys) {
+  var up = montarUpdateFixa(newStops, keys, PARA, PARA_NOME, new Date().toISOString());
+  return db.ref('rooms/' + ROOM).update(up);
 }
 
-function enviarPedido(newStops) {
-  var envio = PARA ? enviarParaFixa(newStops) : enviarParaPendentes(newStops);
+function mostrarEnviando(sim) {
+  var overlay = document.getElementById('loading');
+  var botao   = document.getElementById('btnSubmit');
+  if (sim) overlay.classList.add('show'); else overlay.classList.remove('show');
+  botao.disabled = !!sim;
+}
 
-  envio.promise
-    .then(function() {
-      document.getElementById('loading').classList.remove('show');
-      document.getElementById('mainWrap').style.display = 'none';
-      
-      lastSubmittedStops = newStops;
-      lastSubmittedKeys = envio.keys;
+function enviarPedido(newStops, ids) {
+  if (_enviando) return;            // toque repetido: já tem um envio em curso
+  _enviando = true;
+  mostrarEnviando(true);
+  mostrarAviso('avisoEnvio', '');
 
-      // Resumo com status badge
-      var html = newStops.map(function(s, i) {
-        var valStr  = s.productValue > 0
-          ? ' · R$ ' + s.productValue.toFixed(2).replace('.',',') + ' (' + (s.productPaid ? '✅ pago' : '💰 a cobrar') + ')'
-          : '';
-        var timeStr = (s.timeFrom || s.timeTo)
-          ? ' · ⏰ ' + (s.timeFrom||'?') + '–' + (s.timeTo||'?')
-          : '';
-        var typeIcon = s.serviceType === 'retirada' ? '📦 Retirada' : s.serviceType === 'troca' ? '🔄 Troca' : '🛵 Entrega';
-        var dateStr  = s.deliveryDate ? ' · 📅 ' + s.deliveryDate : '';
-        var key = lastSubmittedKeys[i] || '';
-        var podeMexer = key && !PARA;
-        var editBtn = podeMexer ? '<button type="button" class="client-req-btn edit-btn" onclick="window.openEditModal(\'' + key + '\',' + i + ')">✏️ Editar entrega</button>' : '';
-        var cancelBtn = podeMexer ? '<button type="button" class="client-req-btn cancel-btn" onclick="window.requestCancel(\'' + key + '\',\'' + s.name.replace(/'/g,"\\'") + '\')">❌ Cancelar</button>' : '';
-        return '<div class="success-item" id="si_' + key + '">' +
-          '<strong>' + typeIcon + ' ' + (i+1) + '. ' + s.name + '</strong>' + dateStr + '<br>' +
-          '<span style="font-size:11px;color:var(--muted)">' + s.address + timeStr + valStr + '</span><br>' +
-          '<span class="status-badge status-pending" id="badge_' + key + '">⏳ Aguardando confirmação</span>' +
-          '<div id="det_' + key + '"></div>' +
-          (editBtn || cancelBtn ? '<div style="display:flex;gap:8px;margin-top:8px;" id="act_' + key + '">' + editBtn + cancelBtn + '</div>' : '') +
-          '</div>';
-      }).join('');
+  // Chaves ANTES de gravar; reenvio reaproveita as do envio anterior.
+  var keys = chavesParaParadas(ids || newStops.map(function(s, i) { return 'p' + i; }), _chavesEnvio, novaChave);
 
-      document.getElementById('successList').innerHTML =
-        '<div style="font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--muted);text-transform:uppercase;margin-bottom:10px">' +
-        newStops.length + ' entrega(s) enviada(s)</div>' + html;
-      clientReqRoom = ROOM;
-      addToClientHistory(newStops, lastSubmittedKeys);
-      document.getElementById('successWrap').classList.add('show');
-      document.getElementById('btnWhatsApp').style.display = 'inline-block';
-    })
-    .catch(function(e) {
-      document.getElementById('loading').classList.remove('show');
-      document.getElementById('btnSubmit').disabled = false;
-      showToast('Erro ao enviar: ' + e.message, 'error');
+  var marca = keys.join(',');
+  function concluir() {
+    if (_envioConcluido === marca) return;     // já mostrou o sucesso deste pedido
+    _envioConcluido = marca;
+    _enviando = false;
+    _chavesEnvio = {};
+    mostrarEnviando(false);
+    mostrarAviso('avisoEnvio', '');
+    mostrarSucesso(newStops, keys);
+  }
+
+  var escrita = loginSeguro().then(function() {
+    return PARA ? enviarParaFixa(newStops, keys) : enviarParaPendentes(newStops, keys);
+  });
+  comTimeout(escrita, PRAZO_ENVIO_MS)
+    .then(concluir, function(e) {
+      // O formulário continua preenchido: a loja só toca em Enviar de novo.
+      _enviando = false;
+      mostrarEnviando(false);
+      var semSinal = !!(e && e.code === 'sb/timeout');
+      var msg = semSinal
+        ? 'Seu pedido NÃO foi enviado ainda. ' + traduzirErro(e) + ' Toque em Enviar de novo — ou deixe esta página aberta: ele sobe sozinho quando o sinal voltar.'
+        : 'Seu pedido NÃO foi enviado. ' + traduzirErro(e) + ' Seus dados continuam preenchidos: toque em Enviar de novo.';
+      mostrarAviso('avisoEnvio', msg);
+      showToast('Seu pedido NÃO foi enviado' + (semSinal ? ' ainda. ' : '. ') + traduzirErro(e), 'error');
       console.error(e);
+      /* Sem sinal o Firebase não desiste: guarda a gravação e manda quando
+         a conexão voltar, se a página ainda estiver aberta. Quando isso
+         acontece a loja precisa SABER — senão continua olhando "não foi
+         enviado" com o pedido já na fila do Luan, e pede de novo por
+         telefone. (Se ela já tocou em Enviar de novo, quem conclui é o
+         envio novo, com as mesmas chaves.) */
+      if (semSinal) escrita.then(function() { if (!_enviando) concluir(); }, function() {});
     });
-};
+}
+
+function mostrarSucesso(newStops, keys) {
+  document.getElementById('mainWrap').style.display = 'none';
+
+  lastSubmittedStops = newStops;
+  lastSubmittedKeys = keys;
+
+  // Resumo com status badge. TUDO que a loja digitou passa por escapar();
+  // os botões levam o índice, nunca o nome do cliente.
+  var html = newStops.map(function(s, i) {
+    var valStr  = s.productValue > 0
+      ? ' · R$ ' + s.productValue.toFixed(2).replace('.',',') + ' (' + (s.productPaid ? '✅ pago' : '💰 a cobrar') + ')'
+      : '';
+    var timeStr = (s.timeFrom || s.timeTo)
+      ? ' · ⏰ ' + escapar(s.timeFrom||'?') + '–' + escapar(s.timeTo||'?')
+      : '';
+    var typeIcon = s.serviceType === 'retirada' ? '📦 Retirada' : s.serviceType === 'troca' ? '🔄 Troca' : '🛵 Entrega';
+    var dateStr  = s.deliveryDate ? ' · 📅 ' + escapar(s.deliveryDate) : '';
+    var key = keys[i] || '';
+    var podeMexer = key && !PARA;
+    var editBtn = podeMexer ? '<button type="button" class="client-req-btn edit-btn" onclick="window.openEditModal(\'' + escapar(key) + '\',' + i + ')">✏️ Editar entrega</button>' : '';
+    var cancelBtn = podeMexer ? '<button type="button" class="client-req-btn cancel-btn" onclick="window.requestCancel(' + i + ')">❌ Cancelar</button>' : '';
+    return '<div class="success-item" id="si_' + escapar(key) + '">' +
+      '<strong>' + typeIcon + ' ' + (i+1) + '. ' + escapar(s.name) + '</strong>' + dateStr + '<br>' +
+      '<span style="font-size:11px;color:var(--muted)">' + escapar(s.address) + timeStr + valStr + '</span><br>' +
+      '<span class="status-badge status-pending" id="badge_' + escapar(key) + '">⏳ Aguardando confirmação</span>' +
+      '<div id="det_' + escapar(key) + '"></div>' +
+      (editBtn || cancelBtn ? '<div style="display:flex;gap:8px;margin-top:8px;" id="act_' + escapar(key) + '">' + editBtn + cancelBtn + '</div>' : '') +
+      '</div>';
+  }).join('');
+
+  document.getElementById('successList').innerHTML =
+    '<div style="font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--muted);text-transform:uppercase;margin-bottom:10px">' +
+    newStops.length + ' entrega(s) enviada(s)</div>' + html;
+  clientReqRoom = ROOM;
+  addToClientHistory(newStops, keys);
+  document.getElementById('successWrap').classList.add('show');
+  document.getElementById('btnWhatsApp').style.display = 'inline-block';
+  applyTrackingToSuccess();
+}
 
 // ═══════════════════════════════════════════════════
 //  STATUS EM TEMPO REAL — só dá pra editar/cancelar
@@ -771,23 +1003,17 @@ function enviarPedido(newStops) {
 // ═══════════════════════════════════════════════════
 var _trackStatus = {}; // key -> status do motoboy
 var _trackInfo   = {}; // key -> { deliveredBy, deliveredAt, receivedBy, proofId }
-function statusInfo(st) {
-  switch (st) {
-    case 'aceito':   return { cls:'aceito',   txt:'✅ Aceito pelo motoboy', done:false };
-    case 'acaminho': return { cls:'acaminho', txt:'🛵 A caminho',           done:false };
-    case 'entregue': return { cls:'entregue', txt:'✅ Entregue',            done:true  };
-    case 'recusado': return { cls:'recusado', txt:'❌ Recusado',            done:true  };
-    case 'problema': return { cls:'acaminho', txt:'⚠️ Problema na entrega', done:false };
-    default:         return { cls:'pending',  txt:'⏳ Aguardando confirmação', done:false };
-  }
-}
+var _cancelPedido = {}; // key -> true: a loja pediu cancelar e o tracking ainda não confirmou
+var _cancelNegado = {};      // key -> carimbo do "não" que respondeu ao pedido de cancelamento
+var _cancelNegadoAntes = {}; // key -> carimbo que já existia quando a loja pediu
+// statusInfo / statusFinal / rotuloPedido ficam no núcleo testável, no topo.
 function isFinalized(key) {
-  var st = _trackStatus[key];
-  return st === 'entregue' || st === 'recusado';
+  return statusFinal(_trackStatus[key]);   // entregue, recusado ou cancelado
 }
 function listenTracking() {
   if (!db || !ROOM) return;
   db.ref('rooms/' + ROOM + '/tracking').on('value', function(snap) {
+    mostrarAviso('avisoTracking', '');
     var data = snap.val() || {};
     _trackStatus = {};
     _trackInfo   = {};
@@ -797,8 +1023,13 @@ function listenTracking() {
       _trackStatus[k] = (t && t.status) || '';
       _trackInfo[k]   = t || {};
     });
+    Object.keys(_trackInfo).forEach(function(k) { if (_trackInfo[k].cancelNegado) tratarCancelNegado(k, _trackInfo[k].cancelNegado); });
     applyTrackingToSuccess();
     markFinalizedInHistory();
+  }, function(err) {
+    // Sem isto, leitura negada deixava a loja eternamente em "Aguardando"
+    console.error('tracking:', err);
+    mostrarAviso('avisoTracking', 'Não consigo atualizar o status dos seus pedidos agora. ' + traduzirErro(err));
   });
 }
 
@@ -831,13 +1062,14 @@ function detalheEntrega(key) {
 }
 
 function applyTrackingToSuccess() {
-  Object.keys(_trackStatus).forEach(function(key) {
-    var info = statusInfo(_trackStatus[key]);
+  (lastSubmittedKeys || []).forEach(function(key) {
+    if (!key) return;
+    var r = rotuloPedido(_trackStatus[key] || '', !!_cancelPedido[key], !!_cancelNegado[key]);
     var badge = document.getElementById('badge_' + key);
-    if (badge) { badge.className = 'status-badge status-' + info.cls; badge.textContent = info.txt; }
+    if (badge) { badge.className = 'status-badge status-' + r.cls; badge.textContent = r.txt; }
     var det = document.getElementById('det_' + key);
     if (det) det.innerHTML = detalheEntrega(key);
-    if (info.done) { var act = document.getElementById('act_' + key); if (act) act.remove(); }
+    if (!r.acoes) { var act = document.getElementById('act_' + key); if (act) act.remove(); }
   });
 }
 
@@ -880,17 +1112,64 @@ function escapar(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+/* Guarda o último status conhecido de cada pedido no histórico: o nó do
+   tracking pode sumir do banco, e o histórico continua dizendo a verdade
+   (recusado nunca vira "Entregue"). */
 function markFinalizedInHistory() {
   var hist = getClientHistory();
   var changed = false;
   hist.forEach(function(entry) {
     (entry.stops || []).forEach(function(s) {
-      if (s.key && isFinalized(s.key) && !s.finalized) { s.finalized = true; changed = true; }
+      var st = s.key && _trackStatus[s.key];
+      if (st && s.lastStatus !== st) { s.lastStatus = st; changed = true; }
     });
   });
   if (changed) saveClientHistory(hist);
   var panel = document.getElementById('histPanel');
   if (panel && panel.classList.contains('open')) renderClientHistory();
+}
+
+/* Status de uma parada do histórico: tracking ao vivo, senão o último
+   guardado, senão (entradas antigas) "encerrada" — antes dizia "Entregue"
+   até para pedido recusado. */
+function statusDoStop(s) {
+  return (s.key && _trackStatus[s.key]) || s.lastStatus || (s.finalized ? 'encerrado' : '');
+}
+function rotuloDoStop(s) {
+  return rotuloPedido(statusDoStop(s), !!(s.cancelReq || s.cancelled), !!s.cancelNegado);   // `cancelled`: entradas antigas, que já eram só o pedido
+}
+// O Luan recusou o cancelamento: tira o "solicitado" e avisa a loja.
+function tratarCancelNegado(key, neg) {
+  var hist = getClientHistory(), mudou = false, nome = '';
+  var respondeu = cancelFoiNegado(!!_cancelPedido[key], neg, _cancelNegadoAntes[key]);
+  hist.forEach(function(entry) {
+    (entry.stops || []).forEach(function(s) {
+      if (s.key !== key || !cancelFoiNegado(!!s.cancelReq, neg, s.cancelNegadoAntes)) return;
+      s.cancelReq = false; s.cancelNegado = neg; mudou = true; respondeu = true; nome = s.name || nome;
+    });
+  });
+  if (!respondeu) return;
+  delete _cancelPedido[key];
+  _cancelNegado[key] = neg;
+  if (mudou) saveClientHistory(hist);
+  showToast('O cancelamento' + (nome ? ' de ' + nome : '') + ' não foi aceito — a entrega continua.', 'error');
+}
+// Loja tocou em Cancelar: vale como "solicitado" até o tracking confirmar
+function marcarCancelSolicitado(key) {
+  var antes = (_trackInfo[key] || {}).cancelNegado || '';
+  _cancelPedido[key] = true;
+  _cancelNegadoAntes[key] = antes;
+  delete _cancelNegado[key];
+  var hist = getClientHistory();
+  var mudou = false;
+  hist.forEach(function(entry) {
+    (entry.stops || []).forEach(function(s) {
+      if (s.key === key && !s.cancelReq) { s.cancelReq = true; s.cancelNegadoAntes = antes; delete s.cancelNegado; mudou = true; }
+    });
+  });
+  if (mudou) saveClientHistory(hist);
+  applyTrackingToSuccess();
+  renderClientHistory();
 }
 
 // ═══════════════════════════════════════════════════
@@ -905,6 +1184,7 @@ var _editHist = null; // {hi, si} quando a edição vem do histórico
 window.openEditModal = function(key, idx) {
   if (isFinalized(key)) { showToast('Esta entrega já foi finalizada e não pode ser editada', 'error'); return; }
   _editKey = key; _editIdx = idx; _editHist = null;
+  document.getElementById('editAddress').classList.remove('error');
   _editRoom = clientReqRoom || ROOM;
   var s = lastSubmittedStops[idx] || {};
   _editName = s.name || '';
@@ -919,8 +1199,22 @@ window.openEditModal = function(key, idx) {
 window.closeEditModal = function() {
   document.getElementById('editModal').style.display = 'none';
 };
+var _enviandoReq = false;   // pedido de edição/cancelamento em curso (toque repetido não duplica)
+var _reqKeys = {};          // 'edit|chave' / 'cancel|chave' -> chave da solicitação, até dar certo
+
+/* Grava a solicitação na chave `nova` (gerada na hora, localmente). Se uma
+   tentativa anterior com o mesmo `tag` falhou ou estourou o prazo, reaproveita
+   a chave dela: a solicitação nunca entra duas vezes. */
+function despacharSolicitacao(tag, nova, payload) {
+  var ref = _reqKeys[tag] ? nova.parent.child(_reqKeys[tag]) : nova;
+  _reqKeys[tag] = ref.key;
+  return comTimeout(
+    loginSeguro().then(function() { return ref.set(JSON.stringify(payload)); }),
+    PRAZO_ENVIO_MS);
+}
+
 window.submitEdit = function() {
-  if (!_editKey) return;
+  if (!_editKey || _enviandoReq) return;
   if (!db) { showToast('Sem conexão. Recarregue a página.', 'error'); return; }
   var fields = {
     address:    document.getElementById('editAddress').value.trim(),
@@ -930,12 +1224,20 @@ window.submitEdit = function() {
     timeFrom:   document.getElementById('editTimeFrom').value.trim(),
     timeTo:     document.getElementById('editTimeTo').value.trim()
   };
+  var recusa = validarEdicao(fields);
+  document.getElementById('editAddress').classList.toggle('error', !!recusa);
+  if (recusa) { showToast(recusa, 'error'); return; }
   /* push() em vez de set() na chave do pedido: gravando na mesma chave, um
      pedido de edição e um de cancelamento do MESMO pedido se sobrescreviam,
      e o motoboy só via um dos dois. O pedido de origem vai no orderKey. */
   var payload = { type: 'edit', orderKey: _editKey, name: _editName, fields: fields, ts: Date.now() };
-  db.ref('rooms/' + (_editRoom || ROOM) + '/client_requests').push(JSON.stringify(payload))
+  var tag = 'edit|' + _editKey;
+  var nova = db.ref('rooms/' + (_editRoom || ROOM) + '/client_requests').push();
+  _enviandoReq = true;
+  despacharSolicitacao(tag, nova, payload)
     .then(function() {
+      _enviandoReq = false;
+      delete _reqKeys[tag];
       // Se a edição veio do histórico, atualiza a cópia local guardada
       if (_editHist) {
         var hist = getClientHistory();
@@ -950,26 +1252,36 @@ window.submitEdit = function() {
       }
       showToast('✏️ Solicitação enviada ao motoboy!', 'success');
       window.closeEditModal();
-    })
-    .catch(function(e) { showToast('Erro ao enviar: ' + e.message, 'error'); });
+    }, function(e) {
+      _enviandoReq = false;
+      showToast('A solicitação NÃO foi enviada. ' + traduzirErro(e) + ' Toque em enviar de novo.', 'error');
+    });
 };
 function sendCancelRequest(room, key, name, onDone) {
+  if (_enviandoReq) return;
   if (!confirm('Tem certeza que deseja cancelar a entrega de ' + name + '?')) return;
   if (!db) { showToast('Sem conexão. Recarregue a página.', 'error'); return; }
   var payload = { type: 'cancel', orderKey: key, name: name, ts: Date.now() };
-  db.ref('rooms/' + (room || ROOM) + '/client_requests').push(JSON.stringify(payload))
+  var tag = 'cancel|' + key;
+  var nova = db.ref('rooms/' + (room || ROOM) + '/client_requests').push();
+  _enviandoReq = true;
+  despacharSolicitacao(tag, nova, payload)
     .then(function() {
-      showToast('❌ Cancelamento enviado ao motoboy!', 'success');
+      _enviandoReq = false;
+      delete _reqKeys[tag];
+      showToast('Cancelamento solicitado. Aguarde a confirmação.', 'success');
       if (onDone) onDone();
-    })
-    .catch(function(e) { showToast('Erro ao enviar: ' + e.message, 'error'); });
+    }, function(e) {
+      _enviandoReq = false;
+      showToast('O cancelamento NÃO foi enviado. ' + traduzirErro(e) + ' Toque em Cancelar de novo.', 'error');
+    });
 }
-window.requestCancel = function(key, name) {
+window.requestCancel = function(i) {
+  var key = lastSubmittedKeys[i], s = lastSubmittedStops[i];
+  if (!key || !s) return;
   if (isFinalized(key)) { showToast('Esta entrega já foi finalizada e não pode ser cancelada', 'error'); return; }
-  sendCancelRequest(clientReqRoom || ROOM, key, name, function() {
-    var item = document.getElementById('si_' + key);
-    if (item) item.style.opacity = '.4';
-  });
+  if (_cancelPedido[key]) { showToast('O cancelamento já foi solicitado. Aguarde a confirmação.', 'error'); return; }
+  sendCancelRequest(clientReqRoom || ROOM, key, s.name, function() { marcarCancelSolicitado(key); });
 };
 
 window.resetForm = function() {
@@ -978,6 +1290,9 @@ window.resetForm = function() {
   document.getElementById('mainWrap').style.display = 'block';
   document.getElementById('btnSubmit').disabled = false;
   document.getElementById('btnWhatsApp').style.display = 'none';
+  mostrarAviso('avisoEnvio', '');
+  _enviando = false;
+  _chavesEnvio = {};
   lastSubmittedKeys = [];
   stopCount = 0;
   window.addStop();
@@ -1021,6 +1336,9 @@ window.maskMoney = function(el) {
   if(p.length>2) v=p[0]+','+p.slice(1).join('');
   if(p[1]&&p[1].length>2) v=p[0]+','+p[1].substring(0,2);
   el.value=v;
+  el.classList.remove('error');
+  var g = el.closest ? el.closest('.field-group') : null;
+  if (g) g.querySelectorAll('.campo-erro').forEach(function(c) { c.remove(); });
 };
 
 // parseMoney vem do speedboy-core.js
@@ -1090,11 +1408,11 @@ function renderClientHistory() {
   list.innerHTML = hist.map(function(entry, hi) {
     var stopsHtml = entry.stops.map(function(s, i) {
       var type    = s.serviceType==='retirada'?'📦':s.serviceType==='troca'?'🔄':'🛵';
-      var refStr  = s.reference ? ' · 🔍 ' + s.reference : '';
-      var finalized = s.finalized || (s.key && isFinalized(s.key));
-      var badge   = s.cancelled ? ' <span class="status-badge status-cancelled">❌ Cancelada</span>'
-                  : finalized   ? ' <span class="status-badge status-entregue">✅ Entregue</span>' : '';
-      var actions = (s.key && !s.cancelled && !finalized && !s.fixo)
+      var refStr  = s.reference ? ' · 🔍 ' + escapar(s.reference) : '';
+      // Status REAL de cada pedido (aceito, entregue, recusado, cancelado…)
+      var r       = s.key ? rotuloDoStop(s) : null;
+      var badge   = r ? ' <span class="status-badge status-' + r.cls + '">' + r.txt + '</span>' : '';
+      var actions = (s.key && r.acoes && !s.fixo)
         ? '<div class="hist-actions">' +
             '<button type="button" class="client-req-btn edit-btn" onclick="window.histEdit(' + hi + ',' + i + ')">✏️ Atualizar</button>' +
             '<button type="button" class="client-req-btn cancel-btn" onclick="window.histCancel(' + hi + ',' + i + ')">❌ Cancelar</button>' +
@@ -1103,12 +1421,12 @@ function renderClientHistory() {
       // Hora, quem recebeu e comprovante também no histórico: é onde a loja
       // volta dias depois para conferir uma entrega antiga.
       var det = s.key ? detalheEntrega(s.key) : '';
-      return '<div style="margin-top:8px' + (s.cancelled?';opacity:.55':'') + '">' +
-        type + ' ' + (i+1) + '. <strong>' + s.name + '</strong> — ' + (s.city||'') +
-        (s.deliveryDate?' · 📅 '+s.deliveryDate:'') + refStr + badge + det +
+      return '<div style="margin-top:8px' + (r && r.curto === 'Cancelada' ? ';opacity:.55' : '') + '">' +
+        type + ' ' + (i+1) + '. <strong>' + escapar(s.name) + '</strong> — ' + escapar(s.city||'') +
+        (s.deliveryDate?' · 📅 '+escapar(s.deliveryDate):'') + refStr + badge + det +
         '</div>' + actions;
     }).join('');
-    return '<div class="hist-item"><div class="hist-item-name">📅 ' + entry.date + ' às ' + entry.time + '</div><div class="hist-item-info">' + stopsHtml + '</div></div>';
+    return '<div class="hist-item"><div class="hist-item-name">📅 ' + escapar(entry.date) + ' às ' + escapar(entry.time) + '</div><div class="hist-item-info">' + stopsHtml + '</div></div>';
   }).join('');
 }
 
@@ -1118,7 +1436,8 @@ window.histEdit = function(hi, si) {
   var entry = hist[hi]; if (!entry) return;
   var s = entry.stops[si]; if (!s) return;
   if (!s.key) { showToast('Esta entrega não pode ser atualizada', 'error'); return; }
-  if (s.finalized || isFinalized(s.key)) { showToast('Esta entrega já foi finalizada e não pode ser editada', 'error'); return; }
+  if (!rotuloDoStop(s).acoes) { showToast('Esta entrega já foi finalizada ou tem cancelamento solicitado e não pode ser editada', 'error'); return; }
+  document.getElementById('editAddress').classList.remove('error');
   _editKey = s.key; _editIdx = -1; _editHist = {hi:hi, si:si};
   _editRoom = entry.room || ROOM; _editName = s.name || '';
   document.getElementById('editAddress').value    = s.address    || '';
@@ -1134,10 +1453,8 @@ window.histCancel = function(hi, si) {
   var entry = hist[hi]; if (!entry) return;
   var s = entry.stops[si]; if (!s) return;
   if (!s.key) { showToast('Esta entrega não pode ser cancelada', 'error'); return; }
-  if (s.finalized || isFinalized(s.key)) { showToast('Esta entrega já foi finalizada e não pode ser cancelada', 'error'); return; }
-  sendCancelRequest(entry.room || ROOM, s.key, s.name, function() {
-    s.cancelled = true; saveClientHistory(hist); renderClientHistory();
-  });
+  if (!rotuloDoStop(s).acoes) { showToast('Esta entrega já foi finalizada ou já tem cancelamento solicitado', 'error'); return; }
+  sendCancelRequest(entry.room || ROOM, s.key, s.name, function() { marcarCancelSolicitado(s.key); });
 };
 
 // ─── Download das entregas (CSV) ───
@@ -1160,7 +1477,7 @@ function downloadHistory(fromDate, toDate, label) {
         s.deliveryDate||'', s.reference||'',
         (s.productValue?String(s.productValue).replace('.',','):''),
         (s.productPaid?'Pago':(s.productValue?'A cobrar':'')),
-        (s.cancelled?'Cancelada':'')
+        (s.key ? rotuloDoStop(s).curto : '')
       ]);
     });
   });

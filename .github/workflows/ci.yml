@@ -42,6 +42,25 @@ jobs:
       - name: Configurações e primeiro uso
         run: node testes/config.mjs
 
+      - name: Editar parada, taxa na lista, rota e taxa automática
+        run: node testes/parada.mjs
+
+      - name: Página da loja (envio sem sinal, status, validação)
+        run: node testes/pedido.mjs
+
+      - name: Painel do motoboy (fila sem sinal, comprovante)
+        run: node testes/motoboy.mjs
+
+      # Estes três já existiam em `npm run teste`, mas tinham ficado de fora do CI.
+      - name: Leitura de documento
+        run: node testes/documento.mjs
+
+      - name: Modo FULL e repasses
+        run: node testes/full.mjs
+
+      - name: Regras do banco cobrem o que o app grava
+        run: node testes/regras.mjs
+
       - name: Guarda de regressão
         run: node testes/lint.mjs
 

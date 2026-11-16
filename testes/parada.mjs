@@ -213,6 +213,15 @@ const completa = () => ({
   ok(taxa('Centro', 'Av. Getúlio Vargas', 'Serra') === 55,
     `"Centro" em Serra é o "centro da serra" da tabela (R$ 55), não o Centro de Vila Velha (deu ${taxa('Centro', '', 'Serra')})`);
   ok(taxa('Centro', '', 'Vila Velha') === 20, 'Centro sem chave própria da cidade fica com o valor da tabela');
+  /* A cidade só decide quando existe uma chave que É "bairro + cidade".
+     Procurar a chave dentro do texto montado fazia "Boa Vista" + "da Serra"
+     casar com "vista da serra" (R$ 55) — pego comparando a regra antiga e a
+     nova nos 419 bairros oficiais. */
+  ok(taxa('Boa Vista', 'Rua A', 'Serra') === 20,
+    `"Boa Vista" em Serra não vira "Vista da Serra" (deu ${taxa('Boa Vista', 'Rua A', 'Serra')})`);
+  ok(taxa('Vista da Serra', '', 'Serra') === 55, 'e "Vista da Serra" continua valendo R$ 55');
+  ok(taxa('Centro Industrial do Município', '', 'Serra') === 25,
+    'bairro que só CONTÉM "centro" não recebe a taxa do "serra centro"');
   ok(taxa('', 'Rua A, Praia da Costa', 'Vila Velha') === 20, 'sem bairro, o endereço ainda serve — por palavra inteira');
   ok(taxa('', '', '') === null, 'sem nada, não inventa taxa');
 }

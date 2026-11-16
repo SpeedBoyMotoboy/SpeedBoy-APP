@@ -2230,14 +2230,22 @@ const ARITANA_TAXAS = {
 function detectarTaxaAritana(bairro, rua, cidade){
   const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
   const b=norm(bairro), c=norm(cidade);
-  const textos=b ? (c?[b+' da '+c, b+' de '+c, c+' '+b, b]:[b]) : [norm(rua)];
-  let best=null,bestLen=0;
-  for(const[nome,taxa]of Object.entries(ARITANA_TAXAS)){
-    const k=norm(nome);
-    if(k.length<=bestLen)continue;
-    if(textos.some(t=>(' '+t+' ').includes(' '+k+' '))){bestLen=k.length;best={taxa,bairro:nome};}
+  const chaves=Object.entries(ARITANA_TAXAS).map(([nome,taxa])=>({nome,taxa,k:norm(nome)}));
+  const maisLonga=lista=>lista.reduce((m,x)=>(!m||x.k.length>m.k.length)?x:m,null);
+  /* 1º: a chave que É o bairro junto da cidade ("centro da serra", "serra
+     centro"). Tem de ser IGUAL — procurar a chave dentro do texto montado
+     fazia "Boa Vista" + "da Serra" casar com "vista da serra". */
+  let achou=null;
+  if(b&&c){
+    const comCidade=[b+' da '+c, b+' de '+c, b+' do '+c, c+' '+b, b+' '+c];
+    achou=maisLonga(chaves.filter(x=>comCidade.includes(x.k)));
   }
-  return best;
+  // 2º: a chave como palavra inteira dentro do bairro (ou da rua, se não há bairro).
+  if(!achou){
+    const texto=' '+(b||norm(rua))+' ';
+    achou=maisLonga(chaves.filter(x=>x.k&&texto.includes(' '+x.k+' ')));
+  }
+  return achou?{taxa:achou.taxa,bairro:achou.nome}:null;
 }
 // A mesma regra para parada que não passou pelo formulário (pedido de loja, painel fixo).
 function taxaAritanaDaParada(s){

@@ -164,6 +164,12 @@ const SB = janela.SpeedBoy;
   const digita = v => { const el = { value: v }; SB.maskPhone(el); return el.value; };
   ok(digita('+55 27 99916-5959') === '(27) 99916-5959', 'a máscara tira o DDI em vez de cortar o fim do número');
   ok(digita('27999165959') === '(27) 99916-5959', 'e continua formatando o número comum');
+  // DDD 55 existe (RS): dígito sobrando no fim não é DDI
+  const campo = { value: '55999887766' };
+  SB.maskPhone(campo);
+  campo.value += '1';
+  SB.maskPhone(campo);
+  ok(campo.value === '(55) 99988-7766', `DDD 55 com um dígito a mais não perde o DDD (ficou ${campo.value})`);
 }
 
 // ── 7. Nenhuma página redeclara o que o núcleo já dá ─────────

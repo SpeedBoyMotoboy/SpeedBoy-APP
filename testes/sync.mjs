@@ -204,12 +204,17 @@ const nomes = arr => arr.map(s => s.name).sort().join(',');
   const app = histApp(hist);
   app.carimbarHistorico();
   const [u1, u2] = hist[0].stops.map(s => s._upd);
+  /* Entrega antiga, sem retrato: a primeira passada NÃO pode carimbar com
+     "agora". Carimbava — e o aparelho que atualizasse o app por último
+     passava por cima do "pago" marcado no outro. */
+  ok(u1 === undefined && u2 === undefined && !!hist[0].stops[0]._h,
+    'histórico antigo ganha o retrato (_h) sem ganhar carimbo novo');
   hist[0].stops[0].paid = true;                 // marcou a Ana como paga
   const antes = Date.now;
   Date.now = () => antes() + 5000;
   app.carimbarHistorico();
   Date.now = antes;
-  ok(hist[0].stops[0]._upd > u1, 'marcar "pago" no histórico avança o carimbo daquela entrega');
+  ok(hist[0].stops[0]._upd > 0, 'marcar "pago" no histórico avança o carimbo daquela entrega');
   ok(hist[0].stops[1]._upd === u2, 'e a entrega que não mudou mantém o carimbo — senão tudo pareceria novo e o merge daria sempre empate');
 }
 
@@ -247,6 +252,107 @@ const nomes = arr => arr.map(s => s.name).sort().join(',');
   ok(app.assinaturaHistorico(A) === app.assinaturaHistorico(B), 'mesmo histórico com as chaves em outra ordem não conta como diferente (não reenvia à toa)');
   ok(app.assinaturaHistorico(A) !== app.assinaturaHistorico([{ date: '10/11/2026', stops: [{ _id: 'a', _upd: 2 }] }]), 'carimbo diferente conta');
   ok(app.assinaturaHistorico([null, { date: 'x' }]) === app.assinaturaHistorico([]), 'lixo no meio não derruba');
+}
+
+/* ── O merge não apaga entrega ────────────────────────────────
+   Histórico antigo pode ter duas entregas com o mesmo id (paradas iguais,
+   de antes de cada uma ter identidade própria). Fundir por id puro
+   devolvia uma só e GRAVAVA isso: a segunda entrega sumia de vez. */
+{
+  const parseDate = d => { const [a, b, c] = String(d).split('/'); return new Date(+c, +b - 1, +a); };
+  const { mergeHistorico } = new Function('localStorage', 'sbRead', 'stops', 'history', 'parseDate',
+    bloco + '\nreturn {mergeHistorico};')(lsFake, (k, d) => d, [], [], parseDate);
+  const gemeas = () => [{ date: '10/11/2026', stops: [
+    { _id: 'h_x', name: '', value: 35, done: true }, { _id: 'h_x', name: '', value: 35, done: true }] }];
+  ok(mergeHistorico(gemeas(), gemeas())[0].stops.length === 2, 'duas entregas com o mesmo id continuam sendo duas depois do merge');
+  ok(mergeHistorico(gemeas(), [])[0].stops.length === 2, 'inclusive quando o banco está vazio');
+  const comPago = gemeas(); comPago[0].stops[1].paid = true; comPago[0].stops[1]._upd = 9;
+  const r = mergeHistorico(gemeas(), comPago)[0].stops;
+  ok(r.length === 2 && r.filter(s => s.paid).length === 1, 'e a marcação feita numa delas no outro aparelho chega só nela');
+}
+
+/* ── Parada nova nasce com identidade nova ────────────────────
+   A identidade derivada do conteúdo fazia a entrega de hoje à tarde, igual
+   à da manhã que já foi para o histórico, nascer com o MESMO id — e, ao
+   ser arquivada, ficar no lugar da primeira. Uma entrega a menos. */
+{
+  const nova = () => ({ name: '', address: 'Rua A, 10', value: 35, store: 'KS', _addedDate: '16/11/2026' });
+  const lista = [nova()];
+  const app = new Function('localStorage', 'sbRead', 'stops',
+    bloco + '\nreturn {carimbarStops, idDaParada};')(lsFake, (k, d) => d, lista);
+  const derivado = app.idDaParada(nova());      // o id que a regra antiga daria
+  app.carimbarStops();
+  ok(lista[0]._id && lista[0]._id !== derivado, 'parada sem _id ganha identidade própria, não a derivada do conteúdo');
+  const deLoja = [{ name: 'Ana', _trackKey: 'k7' }];
+  new Function('localStorage', 'sbRead', 'stops', bloco + '\nreturn {carimbarStops};')(lsFake, (k, d) => d, deLoja).carimbarStops();
+  ok(deLoja[0]._id === 'tk_k7', 'pedido de loja continua identificado pela chave dele (é o elo com o tracking)');
+}
+
+/* ── Enviar o histórico: quem não leu não grava por cima ──────
+   Dois defeitos do primeiro merge, achados em revisão:
+   • falha de LEITURA (sem sinal, prazo estourado) era tratada como "banco
+     vazio" e o histórico local ia inteiro por cima — desfazendo os "pago"
+     do outro aparelho, exatamente o que o merge existe para impedir;
+   • a marca de "substituir o banco" (apagar histórico, restaurar backup)
+     não dizia de qual sala era: feita sem sala, sobrava para a primeira
+     sala em que o aparelho entrasse, e apagava o histórico dela. */
+{
+  const parseDate = d => { const [a, b, c] = String(d).split('/'); return new Date(+c, +b - 1, +a); };
+  const montar = ({ local, remoto, sala = 'SB-AAAA', falhaLeitura = false }) => {
+    const ls = new Map(); if (sala) ls.set('sb_room_code', sala);
+    const banco = { valor: remoto === undefined ? null : JSON.stringify(remoto), sets: 0 };
+    const ctx = {
+      history: local, stops: [],
+      localStorage: { getItem: k => (ls.has(k) ? ls.get(k) : null), setItem: (k, v) => ls.set(k, String(v)), removeItem: k => ls.delete(k) },
+      sbRead: (k, d) => d, parseDate, parseMoney: v => Number(v) || 0,
+      fbDb: {}, fbMods: {
+        ref: (db, p) => p,
+        get: async () => { if (falhaLeitura) throw new Error('Client is offline'); return { val: () => banco.valor }; },
+        set: async (p, v) => { banco.valor = v; banco.sets++; }
+      },
+      window: { addEventListener() {} }, document: { getElementById: () => ({ classList: { contains: () => false } }) },
+      renderHome() {}, renderReport() {}, renderFinance() {}, sbLogError() {}, setTimeout, Promise, JSON, Map, Set, Date, Array, Object, String, Number
+    };
+    const fonte = bloco + trecho('function forcarCarimboHistorico(){', '\n/* `substituir`') +
+      trecho('const HIST_DIAS_INTEIROS', '\nfunction saveToHistory') +
+      trecho('async function lerHistoricoRemoto(room){', '\nfunction genRoomCode');
+    const api = new Function('ctx', `with (ctx) { ${fonte}; return { fbPushHistory, loadHistoryFromFirebase, ler: () => history }; }`)(ctx);
+    return { ...api, banco, ls };
+  };
+  const dia = (...stops) => [{ date: '10/11/2026', stops }];
+  const pagas = () => dia({ _id: 'a', done: true, paid: true, value: 20, _upd: 500 }, { _id: 'b', done: true, paid: true, value: 20, _upd: 500 });
+  const velhas = () => dia({ _id: 'a', done: true, paid: false, value: 20, _upd: 100 }, { _id: 'b', done: true, paid: false, value: 20, _upd: 100 });
+
+  // leitura falhou: não grava
+  const a = montar({ local: velhas(), remoto: pagas(), falhaLeitura: true });
+  await a.fbPushHistory();
+  ok(a.banco.sets === 0, 'sem conseguir ler o banco, o histórico local NÃO é gravado por cima');
+  ok(JSON.parse(a.banco.valor)[0].stops.every(s => s.paid), 'e os "pago" do outro aparelho continuam lá');
+  ok(a.ls.get('sb_hist_pendente') === '1', 'o envio fica marcado como pendente, para tentar de novo quando o sinal voltar');
+
+  // leitura ok: funde e grava o fundido
+  const b = montar({ local: velhas(), remoto: pagas() });
+  await b.fbPushHistory();
+  ok(b.ler()[0].stops.every(s => s.paid), 'com leitura, o que o outro aparelho marcou entra aqui');
+
+  // marca de substituir sem sala não é gravada
+  const c = montar({ local: [], remoto: pagas(), sala: '' });
+  await c.fbPushHistory(true);
+  ok(!c.ls.has('sb_hist_substituir'), 'apagar o histórico sem sala não deixa marca para trás');
+
+  // marca de OUTRA sala é ignorada ao entrar numa sala
+  const d = montar({ local: [], remoto: pagas(), sala: 'SB-BBBB' });
+  d.ls.set('sb_hist_substituir', 'SB-AAAA');
+  await d.loadHistoryFromFirebase('SB-BBBB');
+  ok(JSON.parse(d.banco.valor)[0].stops.length === 2, 'marca de outra sala NÃO apaga o histórico da sala em que o aparelho entrou');
+  ok(d.ler().length === 1 && !d.ls.has('sb_hist_substituir'), 'o histórico da sala é fundido normalmente e a marca velha é descartada');
+
+  // marca da própria sala vale: o apagado sem sinal não volta
+  const e = montar({ local: [], remoto: pagas(), sala: 'SB-AAAA' });
+  e.ls.set('sb_hist_substituir', 'SB-AAAA');
+  await e.loadHistoryFromFirebase('SB-AAAA');
+  ok(e.banco.valor === '[]' && e.ler().length === 0 && !e.ls.has('sb_hist_substituir'),
+    'histórico apagado sem sinal continua apagado ao reconectar na MESMA sala');
 }
 
 fim();

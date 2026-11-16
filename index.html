@@ -148,7 +148,7 @@
 <div class="screen" id="addScreen">
   <div class="form-screen">
     <div class="screen-title">
-      <button type="button" class="back-btn" onclick="goNav('homeScreen','nav-home')">←</button>
+      <button type="button" class="back-btn" onclick="sairDoFormulario()">←</button>
       <span id="formTitle">Nova parada</span>
     </div>
 
@@ -1167,7 +1167,12 @@ function carimbarStops(){
   const usados = new Set();
   stops.forEach(s => {
     if (!s) return;
-    if (!s._id) s._id = idDaParada(s);
+    /* Parada sem _id é parada NOVA (as guardadas já foram carimbadas ao
+       abrir o app): ganha identidade própria, não uma derivada do conteúdo.
+       Com a derivada, uma entrega igual à que já foi para o histórico
+       nascia com o mesmo id e, ao ser arquivada, ficava no lugar da
+       primeira. Só o pedido de loja mantém o id pela chave dele. */
+    if (!s._id) s._id = s._trackKey ? idDaParada(s) : novoId();
     if (usados.has(s._id) && s._id.indexOf('h_') === 0) s._id = novoId();
     usados.add(s._id);
     const h = hashCurto(conteudoDaParada(s));
@@ -1263,18 +1268,27 @@ function mergeStops(local, remoto, tombs){
    isso o merge é pela entrega, não pelo dia: ela fica onde a versão mais
    nova está, e só lá. Empate fica com quem entrou primeiro (o local). */
 function mergeHistorico(local, remoto){
-  const porId = new Map();
-  [local, remoto].forEach(lista => (Array.isArray(lista) ? lista : []).forEach(day => {
-    if (!day || !Array.isArray(day.stops)) return;
-    day.stops.forEach(s => {
-      if (!s || typeof s !== 'object') return;
-      const id = idDaParada(s);
-      const atual = porId.get(id);
-      if (!atual || (s._upd || 0) > (atual.s._upd || 0)) porId.set(id, { s, date: day.date });
+  const porChave = new Map();
+  [local, remoto].forEach(lista => {
+    /* Histórico antigo pode ter duas entregas com o MESMO id (paradas
+       iguais, de antes de cada uma ter identidade própria). A n-ésima
+       ocorrência de um lado casa com a n-ésima do outro — nunca são
+       fundidas numa só: o merge não apaga entrega. */
+    const vez = new Map();
+    (Array.isArray(lista) ? lista : []).forEach(day => {
+      if (!day || !Array.isArray(day.stops)) return;
+      day.stops.forEach(s => {
+        if (!s || typeof s !== 'object') return;
+        const id = idDaParada(s);
+        const n = vez.get(id) || 0; vez.set(id, n + 1);
+        const chave = id + '#' + n;
+        const atual = porChave.get(chave);
+        if (!atual || (s._upd || 0) > (atual.s._upd || 0)) porChave.set(chave, { s, date: day.date });
+      });
     });
-  }));
+  });
   const dias = new Map();
-  porId.forEach(({ s, date }) => { if (!dias.has(date)) dias.set(date, []); dias.get(date).push(s); });
+  porChave.forEach(({ s, date }) => { if (!dias.has(date)) dias.set(date, []); dias.get(date).push(s); });
   return [...dias.entries()].map(([date, stops]) => ({ date, stops }))
     .sort((a, b) => parseDate(b.date) - parseDate(a.date));
 }
@@ -1289,8 +1303,25 @@ function carimbarHistorico(){
     if (!s || typeof s !== 'object') return;
     if (!s._id) s._id = idDaParada(s);
     const h = hashCurto(conteudoDaParada(s));
-    if (s._h !== h) { s._h = h; s._upd = agora; }
+    /* Entrega antiga, que nunca teve retrato (_h): ganha o retrato e NÃO
+       ganha carimbo novo. Se ganhasse, a primeira gravação depois de
+       atualizar o app carimbava o histórico inteiro com "agora" — e o
+       aparelho que atualizasse por último passava por cima do "pago" do
+       outro. basearHistorico() faz isto ao abrir, antes de qualquer edição. */
+    if (s._h === undefined) s._h = h;
+    else if (s._h !== h) { s._h = h; s._upd = agora; }
   }));
+}
+/* Tira o retrato de tudo que ainda não tem. Roda ao abrir o app e depois
+   de fundir com o banco: daí em diante, qualquer mudança é detectada. */
+function basearHistorico(){
+  let mudou = false;
+  history.forEach(day => ((day && day.stops) || []).forEach(s => {
+    if (!s || typeof s !== 'object' || s._h !== undefined) return;
+    if (!s._id) s._id = idDaParada(s);
+    s._h = hashCurto(conteudoDaParada(s)); mudou = true;
+  }));
+  return mudou;
 }
 
 function saveStops()   {
@@ -1612,6 +1643,7 @@ function goNav(screenId, navId, viaHistorico) {
   window.scrollTo(0,0);
   // render hooks
   if(screenId==='homeScreen')    renderHome();
+  if(screenId==='addScreen' && viaHistorico) formularioEmBranco();
   if(screenId==='financeScreen') { checkNewDay(); renderFinance(); }
   if(screenId==='reportScreen'){
     _histSearchQ='';
@@ -1650,6 +1682,24 @@ function navPelaURL(){
   _telaAtual = tela;
   goNav(tela, (TELAS[tela] || {}).nav, true);
   window.history.replaceState({ tela, modal: null }, '', '#' + (TELAS[tela] || {}).slug);
+}
+
+/* Sai do formulário DESFAZENDO a entrada dele no histórico do navegador.
+   Empilhar a inicial por cima deixava o formulário logo atrás: o botão
+   voltar do celular o reabria com os campos da parada que acabou de ser
+   salva e sem parada em edição — outro "Salvar" criava uma segunda igual. */
+function sairDoFormulario(){
+  const st=window.history.state;
+  if(_telaAtual==='addScreen' && st && st.tela==='addScreen') window.history.back();
+  else goNav('homeScreen','nav-home');
+}
+// Chegar ao formulário pelo histórico (voltar/avançar, recarregar em #nova)
+// é sempre um formulário em branco: o que estava digitado já foi salvo ou largado.
+function formularioEmBranco(){
+  editingIdx=-1; editingId=null;
+  document.getElementById('formTitle').textContent='Nova parada';
+  resetForm(); updateStoreSelect();
+  document.getElementById('editIdx').value=-1;
 }
 
 function goForm(idx) {
@@ -2616,11 +2666,6 @@ function saveStop(){
   // Compose full address
   const address = rua + (numero?', '+numero:'') + ', ' + bairro + (cityName(city)?' - '+cityName(city):'');
   
-  const fone = document.getElementById('fPhone').value.replace(/\D/g,'');
-  if(fone && fone.length!==10 && fone.length!==11){
-    toast('Telefone precisa do DDD (10 ou 11 dígitos) — ou deixe em branco','error'); return;
-  }
-
   /* A parada em edição é achada pela IDENTIDADE, não pelo índice guardado
      quando o formulário abriu: se a lista mudou nesse meio-tempo (pedido
      aceito, sincronização), o índice aponta para outra parada e a edição
@@ -2631,6 +2676,15 @@ function saveStop(){
     if(idx<0) toast('Essa parada saiu da lista em outro aparelho — salvei como nova','error');
   }
   const antiga = idx>=0 ? stops[idx] : null;
+
+  /* Telefone pela metade vira link de WhatsApp para outra pessoa. Só é
+     cobrado quando foi MEXIDO: parada antiga com número fora do padrão
+     continua editável (quem veio corrigir a taxa não pode ficar preso). */
+  const fone = document.getElementById('fPhone').value.replace(/\D/g,'');
+  const foneAntes = String((antiga&&antiga.phone)||'').replace(/\D/g,'');
+  if(fone && fone!==foneAntes && fone.length!==10 && fone.length!==11){
+    toast('Telefone precisa do DDD (10 ou 11 dígitos) — ou deixe em branco','error'); return;
+  }
 
   const rawDate = document.getElementById('fDelivDate').value;
   const delivDate = rawDate ? rawDate.split('-').reverse().join('/') : '';
@@ -2667,7 +2721,7 @@ function saveStop(){
   if(s.city && bairro) addCustomBairro(s.city, bairro);
   saveStops();
   toast(antiga?'Parada atualizada!':'✅ Parada adicionada!','success');
-  goNav('homeScreen','nav-home');
+  sairDoFormulario();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -3790,7 +3844,7 @@ function _renderDays(d){
           </div>
         </div>
         ${wppNum?`<a href="https://wa.me/${wppNum}" target="_blank" style="font-size:13px;color:#25d366;font-weight:700;text-decoration:none;">📞 ${fmtPhone(s.phone)}</a>`:(s.phone?`<div style="font-size:13px;color:var(--muted);">📞 ${esc(s.phone)}</div>`:'')}
-        ${fullAddr?`<div style="font-size:13px;color:var(--muted);">📍 ${fullAddr}</div>`:''}
+        ${fullAddr?`<div style="font-size:13px;color:var(--muted);">📍 ${esc(fullAddr)}</div>`:''}
         ${s.address&&!addr?`<div style="font-size:13px;color:var(--muted);">📍 ${esc(s.address)}</div>`:''}
         ${(s.reference||s.notes)?`<div style="font-size:12px;color:var(--muted);opacity:.8;">💬 ${esc([s.reference,s.notes].filter(Boolean).join(' · '))}</div>`:''}
         ${linhaQuemEntregou(s)}
@@ -5457,8 +5511,10 @@ function fbPush(){
 window.addEventListener('online',  () => { atualizarStatusSync(); if (temPendencia()) fbPush(); });
 window.addEventListener('offline', () => atualizarStatusSync());
 
-/* Lê o histórico do banco. Devolve null se não der (sem sinal, vazio,
-   ilegível) — com prazo, porque sem sinal o get() fica esperando. */
+/* Lê o histórico do banco, com prazo (sem sinal o get() fica esperando).
+   Devolve { ok, dias }. `ok:false` é "não consegui ler" — diferente de
+   "está vazio": quem não leu NÃO pode gravar por cima, senão volta o
+   "último a gravar vence" que o merge existe para acabar. */
 async function lerHistoricoRemoto(room){
   try{
     const snap=await Promise.race([
@@ -5466,10 +5522,10 @@ async function lerHistoricoRemoto(room){
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('sem resposta')),6000))
     ]);
     const raw=snap.val();
-    if(!raw)return null;
+    if(!raw)return {ok:true,dias:[]};
     const remoto=typeof raw==='string'?JSON.parse(raw):raw;
-    return Array.isArray(remoto)?remoto:null;
-  }catch(e){ return null; }
+    return {ok:true,dias:Array.isArray(remoto)?remoto:[]};
+  }catch(e){ return {ok:false,dias:[]}; }
 }
 
 /* Funde o histórico do banco no local. Devolve true se o local mudou. */
@@ -5478,6 +5534,7 @@ function fundirHistoricoRemoto(remoto){
   const fundido=apararHistorico(mergeHistorico(history,remoto));
   if(assinaturaHistorico(fundido)===assinaturaHistorico(history))return false;
   history=fundido;
+  basearHistorico();
   localStorage.setItem('sb_history',JSON.stringify(history));
   return true;
 }
@@ -5486,56 +5543,68 @@ function redesenharHistorico(){
   if(document.getElementById('reportScreen').classList.contains('active'))renderReport();
   if(document.getElementById('financeScreen').classList.contains('active'))renderFinance();
 }
+function marcarHistPendente(sim){
+  try{ if(sim) localStorage.setItem('sb_hist_pendente','1'); else localStorage.removeItem('sb_hist_pendente'); }catch(_){}
+}
 
 /* Antes: set() do histórico inteiro, direto. O aparelho que abriu o app de
    manhã gravava por cima de tudo o que o outro marcou durante o dia. Agora
    lê, funde e só então grava — e uma falha no envio deixa de ser muda. */
 let _histEnviando=false, _histSujo=false, _histSubstituir=false;
 async function fbPushHistory(substituir){
-  /* O pedido de substituir fica gravado até o envio dar certo: feito sem
-     sinal, a próxima abertura do app não pode fundir o banco de volta. */
-  if(substituir){ _histSubstituir=true; try{ localStorage.setItem('sb_hist_substituir','1'); }catch(_){} }
-  if(!fbDb||!fbMods.set)return;
   const room=localStorage.getItem('sb_room_code')||'';
-  if(!room)return;
+  /* O pedido de substituir fica gravado COM A SALA até o envio dar certo:
+     feito sem sinal, a próxima abertura não pode fundir o banco de volta.
+     Sem sala não há o que substituir — e a marca não pode sobrar para a
+     sala em que o aparelho entrar depois (apagaria o histórico dela). */
+  if(substituir&&room){ _histSubstituir=true; try{ localStorage.setItem('sb_hist_substituir',room); }catch(_){} }
+  if(!fbDb||!fbMods.set||!room){ _histSubstituir=false; return; }
   if(_histEnviando){ _histSujo=true; return; }
   _histEnviando=true;
   try{
-    let remoto=null;
+    let lido=null;
     if(!_histSubstituir){
-      remoto=await lerHistoricoRemoto(room);
-      // Mandaram substituir durante a leitura: o que veio do banco não entra.
-      if(_histSubstituir) remoto=null;
-      else if(fundirHistoricoRemoto(remoto)) redesenharHistorico();
+      lido=await lerHistoricoRemoto(room);
+      if(_histSubstituir) lido=null;          // mandaram substituir durante a leitura
+      else if(!lido.ok){ marcarHistPendente(true); return; }   // não leu: não grava por cima
+      else if(fundirHistoricoRemoto(lido.dias)) redesenharHistorico();
     }
     const substituindo=_histSubstituir;
     _histSubstituir=false;
     // Nada mudou em relação ao banco: não reenvia o histórico inteiro à toa.
-    if(substituindo||!remoto||assinaturaHistorico(remoto)!==assinaturaHistorico(history))
+    if(substituindo||!lido||assinaturaHistorico(lido.dias)!==assinaturaHistorico(history))
       await fbMods.set(fbMods.ref(fbDb,'rooms/'+room+'/history'),JSON.stringify(history));
-    localStorage.removeItem('sb_hist_pendente');
+    marcarHistPendente(false);
     if(substituindo&&!_histSubstituir) localStorage.removeItem('sb_hist_substituir');
   }catch(e){
-    // Fica marcado: o próximo envio, ou a próxima abertura do app, tenta de novo.
-    try{ localStorage.setItem('sb_hist_pendente','1'); }catch(_){}
+    // Fica marcado: reconectar, o próximo envio ou a próxima abertura tentam de novo.
+    marcarHistPendente(true);
     sbLogError('envio do histórico',e);
   }finally{
     _histEnviando=false;
     if(_histSujo){ _histSujo=false; fbPushHistory(); }
   }
 }
+// Voltou o sinal: manda o histórico que ficou esperando.
+window.addEventListener('online', () => { if(localStorage.getItem('sb_hist_pendente')) fbPushHistory(); });
 
 /* Ao abrir: traz o que o outro aparelho arquivou ou marcou, e devolve ao
    banco o que só este tem (o dia arquivado na virada, antes de conectar,
    ou um envio que falhou). */
 async function loadHistoryFromFirebase(room){
   if(!fbDb||!room||!fbMods.get)return;
-  // Ficou um "substituir" sem enviar (apagou ou restaurou sem sinal): ele manda.
-  if(localStorage.getItem('sb_hist_substituir')){ fbPushHistory(true); return; }
+  /* Ficou um "substituir" sem enviar (apagou ou restaurou sem sinal): ele
+     manda — mas só se for DESTA sala. Marca de outra sala é descartada. */
+  const marca=localStorage.getItem('sb_hist_substituir');
+  if(marca){
+    if(marca===room){ fbPushHistory(true); return; }
+    localStorage.removeItem('sb_hist_substituir');
+  }
   try{
-    const remoto=await lerHistoricoRemoto(room);
-    if(fundirHistoricoRemoto(remoto)) redesenharHistorico();
-    if(history.length&&assinaturaHistorico(remoto)!==assinaturaHistorico(history)) fbPushHistory();
+    const lido=await lerHistoricoRemoto(room);
+    if(!lido.ok)return;                        // sem leitura não há o que decidir
+    if(fundirHistoricoRemoto(lido.dias)) redesenharHistorico();
+    if(history.length&&assinaturaHistorico(lido.dias)!==assinaturaHistorico(history)) fbPushHistory();
   }catch(e){ sbLogError('leitura do histórico',e); }
 }
 
@@ -6796,7 +6865,10 @@ checkNewDay();          // virou o dia? arquiva o de ontem antes de desenhar
 /* Histórico guardado por versões antigas traz cópias de parada pendente,
    que apareciam como entrega nos "últimos 30 dias". Varre uma vez ao abrir. */
 { const arrumado=apararHistorico(history);
-  if(JSON.stringify(arrumado)!==JSON.stringify(history)){ history=arrumado; localStorage.setItem('sb_history',JSON.stringify(history)); } }
+  const varreu=JSON.stringify(arrumado)!==JSON.stringify(history);
+  if(varreu) history=arrumado;
+  // E o retrato-base de cada entrega, para o carimbo só avançar com mudança de verdade.
+  if(basearHistorico()||varreu) localStorage.setItem('sb_history',JSON.stringify(history)); }
 updateStoreSelect();
 /* Antes de renderHome e de navPelaURL: a aba Repasses precisa existir na
    barra antes de alguém poder cair nela por #repasses. */

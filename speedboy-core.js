@@ -58,8 +58,15 @@
     return (d.length >= 12 && d.indexOf('55') === 0) ? d.substring(2) : d;
   }
   function maskPhone(el) {
-    var v = semDDI(el.value.replace(/\D/g, ''));
+    var v = el.value.replace(/\D/g, '');
+    /* DDD 55 existe (RS). Quem já tinha 11 dígitos no campo e digitou mais
+       um está só passando do tamanho — não colou um número com DDI. Sem
+       esta guarda o "55" do DDD era cortado e o número mudava. */
+    var antes = el._sbDigitos || '';
+    var sobrando = antes.length === 11 && v.length === 12 && v.indexOf(antes) === 0;
+    if (!sobrando) v = semDDI(v);
     if (v.length > 11) v = v.substring(0, 11);
+    el._sbDigitos = v;
     if (v.length > 7)       v = '(' + v.substring(0, 2) + ') ' + v.substring(2, 7) + '-' + v.substring(7);
     else if (v.length > 2)  v = '(' + v.substring(0, 2) + ') ' + v.substring(2);
     el.value = v;

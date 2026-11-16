@@ -48,6 +48,7 @@ function montar(campos = {}) {
     addCustomBairro() {},
     saveStops() { ctx.gravou++; },
     goNav(t) { ctx.foiPara = t; },
+    sairDoFormulario() { ctx.foiPara = 'homeScreen'; },
     idDaParada(s) { return s._id || (s._trackKey ? 'tk_' + s._trackKey : 'h_x'); },
     novoId() { return 'novo' + (++n); }
   };
@@ -135,6 +136,43 @@ const completa = () => ({
   const b = montar({ fPhone: '' });
   b.saveStop();
   ok(b.ctx.stops.length === 1, 'telefone em branco continua permitido');
+}
+
+/* ── 6b. Telefone antigo fora do padrão não prende a edição ───
+   A validação acima bloqueava QUALQUER gravação de uma parada cujo
+   telefone guardado tivesse 9 dígitos — quem abria só para corrigir a
+   taxa não conseguia salvar. Só o telefone MEXIDO é cobrado. */
+{
+  const { ctx, saveStop } = montar({ fPhone: '(99) 91659-59', fValue: '40,00' });
+  ctx.stops = [{ ...completa(), phone: '999165959' }];
+  ctx.editingId = 'sabc';
+  saveStop();
+  ok(ctx.stops[0].value === 40 && ctx.gravou === 1, 'parada com telefone antigo de 9 dígitos aceita corrigir a taxa');
+  ok(ctx.stops[0].phone === '999165959', 'e o telefone fica como estava');
+  const b = montar({ fPhone: '99916-5959' });
+  b.ctx.stops = [{ ...completa(), phone: '27999165959' }];
+  b.ctx.editingId = 'sabc';
+  b.saveStop();
+  ok(b.ctx.gravou === 0, 'trocar um telefone bom por um sem DDD continua sendo recusado');
+}
+
+/* ── 6c. Sair do formulário não o deixa "atrás" no histórico ──
+   O formulário passou a ser uma entrada do histórico do navegador (é o que
+   faz o botão voltar fechá-lo). Mas salvar empilhava a inicial POR CIMA:
+   voltar reabria o formulário com a parada recém-salva nos campos e sem
+   parada em edição — outro "Salvar" criava uma segunda igual. */
+{
+  const sair = (tela, estado) => {
+    const c = { voltou: 0, foi: '' };
+    new Function('_telaAtual', 'window', 'goNav',
+      trecho('function sairDoFormulario(){', '\n// Chegar ao formulário', 'index.html') + '\nsairDoFormulario();')(
+      tela, { history: { state: estado, back() { c.voltou++; } } }, t => { c.foi = t; });
+    return c;
+  };
+  const a = sair('addScreen', { tela: 'addScreen' });
+  ok(a.voltou === 1 && a.foi === '', 'com o formulário no topo do histórico, sair é VOLTAR — ele não fica para trás');
+  const b = sair('addScreen', { tela: 'homeScreen' });
+  ok(b.voltou === 0 && b.foi === 'homeScreen', 'sem ele no histórico (abriu direto em #nova), vai para a lista');
 }
 
 /* ── 7. A taxa na lista: tocar não é apagar ───────────────────

@@ -5839,8 +5839,10 @@ async function showCancelRequest(reqId,req){
     history.forEach(day=>day.stops.forEach(s=>{ if(s._trackKey===key){ markCancelled(s); found=true; } }));
     if(found){ saveHistory(); renderHome(); toast('🚫 Entrega de '+(req.name||'?')+' cancelada (taxa zerada)','success'); }
     // Ainda não aceita: basta tirar da fila de pendentes
-    else if(pendingData[key]){ rmPending(key); toast('🗑️ Pedido de '+(req.name||'?')+' cancelado','success'); }
-    else toast('⚠️ Entrega não encontrada','error');
+    /* Nos dois casos a loja precisa da resposta: sem o 'cancelado' no
+       tracking, a página dela ficava em "Cancelamento solicitado" para sempre. */
+    else if(pendingData[key]){ rmPending(key); updateTracking(key,'cancelado'); toast('🗑️ Pedido de '+(req.name||'?')+' cancelado','success'); }
+    else { updateTracking(key,'cancelado'); toast('⚠️ Entrega não encontrada','error'); }
   }
   rmClientRequest(reqId);
 }

@@ -490,4 +490,25 @@ ok(((HTML.match(/<button(?:\s[^>]*)?>/g) || []).filter(t => !/\btype\s*=/.test(t
   ok(!/não aceito/.test(rotuloPedido('entregue', false, true).txt), 'depois de entregue, o que vale é "Entregue"');
 }
 
+/* ═══ Envio pendurado que sobe depois ═════════════════════════
+   Achado de revisão: sem sinal, a loja envia Ana e Bia (pendura), remove a
+   Bia e reenvia só a Ana. Quando o sinal voltava, a gravação antiga subia:
+   a Bia entrava na fila mesmo removida, e a tela de sucesso era trocada
+   pela do pedido antigo, com segunda entrada no histórico. */
+{
+  const p = pagina(); p.estado.modo = 'volta';
+  p.ctx.enviarPedido([parada('Ana'), parada('Bia')], ['stop_1', 'stop_2']);
+  await p.tick(); await p.avancar(16000);
+  const soltarA = p.estado.soltar;
+  p.estado.modo = 'ok';
+  p.ctx.enviarPedido([parada('Ana')], ['stop_1']); await p.tick(); await p.tick();
+  const ups = p.db.chamadas.filter(c => c.op === 'update');
+  const chavesA = Object.keys(ups[0].val), segundo = ups[1].val;
+  ok(Object.keys(segundo).filter(k => segundo[k] !== null).length === 1 && segundo[chavesA[1]] === null,
+    'reenvio sem a parada removida APAGA a chave dela no banco (a gravação antiga não a deixa na fila)');
+  const antes = p.el('successList').innerHTML;
+  soltarA(); await p.tick(); await p.tick();
+  ok(p.el('successList').innerHTML === antes, 'o envio antigo que sobe depois não toma a tela do pedido novo');
+}
+
 fim();

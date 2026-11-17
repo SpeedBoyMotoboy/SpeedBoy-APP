@@ -360,8 +360,14 @@ function urlFalarSpeedBoy() {
 /* Uma chave por parada, guardadas por card. Reenviar depois de falha ou
    timeout reaproveita as mesmas chaves — a gravação é idempotente e a mesma
    parada nunca entra duas vezes na fila. Cards removidos saem do mapa. */
-function chavesParaParadas(ids, mapa, gerar) {
-  Object.keys(mapa).forEach(function(id) { if (ids.indexOf(id) < 0) delete mapa[id]; });
+function chavesParaParadas(ids, mapa, gerar, largadas) {
+  /* Card removido depois de um envio que ficou pendurado: a chave dele vai
+     para `largadas`, e o próximo envio a APAGA do banco. Sem isso, quando o
+     sinal voltava a gravação antiga subia e a parada removida entrava na
+     fila do Luan mesmo assim. */
+  Object.keys(mapa).forEach(function(id) {
+    if (ids.indexOf(id) < 0) { if (largadas) largadas.push(mapa[id]); delete mapa[id]; }
+  });
   return ids.map(function(id) { if (!mapa[id]) mapa[id] = gerar(); return mapa[id]; });
 }
 
@@ -731,6 +737,8 @@ window.selectPay = function(id, type) {
 //  ENVIAR
 // ═══════════════════════════════════════════════════
 var _enviando = false;      // envio em andamento: bloqueia o duplo toque
+var _tentativaEnvio = 0;    // cresce a cada envio e a cada "Novo pedido"
+var _chavesLargadas = [];   // chaves de paradas removidas depois de um envio pendurado
 var _envioConcluido = '';   // chaves do último pedido que chegou à tela de sucesso
 var _chavesEnvio = {};      // card.id -> chave da parada, até o envio dar certo
 
@@ -891,7 +899,9 @@ function novaChave() {
 // Pedido normal: fila de aceite do Luan. UMA gravação para todas as paradas:
 // ou entram todas, ou nenhuma.
 function enviarParaPendentes(newStops, keys) {
-  return db.ref('rooms/' + ROOM + '/pending').update(montarUpdatePendentes(newStops, keys));
+  var up = montarUpdatePendentes(newStops, keys);
+  _chavesLargadas.forEach(function(k) { if (!(k in up)) up[k] = null; });
+  return db.ref('rooms/' + ROOM + '/pending').update(up);
 }
 
 /* Pedido para a entregadora fixa. Cada entrega vira um nó próprio em
@@ -902,6 +912,9 @@ function enviarParaPendentes(newStops, keys) {
    gravação, junto com o tracking inicial. */
 function enviarParaFixa(newStops, keys) {
   var up = montarUpdateFixa(newStops, keys, PARA, PARA_NOME, new Date().toISOString());
+  _chavesLargadas.forEach(function(k) {
+    if (keys.indexOf(k) < 0) { up['repass/' + PARA + '_' + k] = null; up['tracking/' + k] = null; }
+  });
   return db.ref('rooms/' + ROOM).update(up);
 }
 
@@ -919,7 +932,8 @@ function enviarPedido(newStops, ids) {
   mostrarAviso('avisoEnvio', '');
 
   // Chaves ANTES de gravar; reenvio reaproveita as do envio anterior.
-  var keys = chavesParaParadas(ids || newStops.map(function(s, i) { return 'p' + i; }), _chavesEnvio, novaChave);
+  var keys = chavesParaParadas(ids || newStops.map(function(s, i) { return 'p' + i; }), _chavesEnvio, novaChave, _chavesLargadas);
+  var tentativa = ++_tentativaEnvio;
 
   var marca = keys.join(',');
   function concluir() {
@@ -927,6 +941,7 @@ function enviarPedido(newStops, ids) {
     _envioConcluido = marca;
     _enviando = false;
     _chavesEnvio = {};
+    _chavesLargadas = [];
     mostrarEnviando(false);
     mostrarAviso('avisoEnvio', '');
     mostrarSucesso(newStops, keys);
@@ -953,7 +968,10 @@ function enviarPedido(newStops, ids) {
          enviado" com o pedido já na fila do Luan, e pede de novo por
          telefone. (Se ela já tocou em Enviar de novo, quem conclui é o
          envio novo, com as mesmas chaves.) */
-      if (semSinal) escrita.then(function() { if (!_enviando) concluir(); }, function() {});
+      /* Só se NADA aconteceu depois: outro envio (mesmo já concluído) ou
+         "Novo pedido" mudam a tentativa — aí o envio antigo não pode tomar
+         a tela nem gravar o histórico de novo. */
+      if (semSinal) escrita.then(function() { if (!_enviando && tentativa === _tentativaEnvio) concluir(); }, function() {});
     });
 }
 
@@ -1292,6 +1310,7 @@ window.resetForm = function() {
   document.getElementById('btnWhatsApp').style.display = 'none';
   mostrarAviso('avisoEnvio', '');
   _enviando = false;
+  _tentativaEnvio++;
   _chavesEnvio = {};
   lastSubmittedKeys = [];
   stopCount = 0;

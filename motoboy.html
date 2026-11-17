@@ -320,6 +320,7 @@ function init(){
 
 function aplicarRepasse(dados,doCache){
   _doCache=!!doCache;
+  if(!doCache&&dados&&Array.isArray(dados.deliveries)) podarFila(dados.deliveries);
   // A fila vai por cima: snapshot do servidor ainda "pendente" não desfaz
   // o que o motoboy já marcou e que não subiu.
   repassData=reaplicarFila(dados);
@@ -334,6 +335,8 @@ function aplicarRepasse(dados,doCache){
 
 function mostrarSemSinal(semInternet){
   if(repassData)return;
+  if(document.getElementById('errorWrap').classList.contains('show'))return;   // já é "link inválido"
+
   document.getElementById('loadingWrap').style.display='none';
   document.getElementById('semSinalTitulo').textContent=semInternet?'Sem internet':'Sem sinal — tentando de novo';
   document.getElementById('semSinalTexto').textContent=semInternet
@@ -920,8 +923,12 @@ function carimbarFoto(file,pos){
 
 function confirmarEntrega(){
   var i=_entregaIdx;
-  if(i<0||!repassData.deliveries[i])return;
-  var s=paradaPorId(repassData.deliveries,_entregaKey)||repassData.deliveries[i];
+  if(i<0)return;
+  /* Só pela identidade. Havia um "senão, a do índice i": se o dono tirava
+     a parada com o modal aberto, a confirmação — com a foto e o nome de
+     quem recebeu — caía na parada VIZINHA. */
+  var s=paradaPorId(repassData.deliveries,_entregaKey);
+  if(!s){ fecharEntrega(); showToast('Essa entrega saiu da sua lista — o Luan retirou','error'); return; }
   var recebedor=document.getElementById('entregaRecebedor').value.trim();
   if(repassData.askReceiver&&!recebedor){showToast('Informe quem recebeu','error');return;}
   if(repassData.askPhoto&&!_fotoDataUrl){showToast('Tire a foto do comprovante','error');return;}
@@ -937,8 +944,12 @@ function confirmarEntrega(){
   delete s.problem;
   var item=novoItem('confirmar',s,{done:true,doneAt:new Date().toISOString(),
     receivedBy:recebedor,proofId:proofId,problem:null});
-  if(proofId){ item.proofId=proofId; item.foto=_fotoDataUrl; }
+  if(proofId) item.proofId=proofId;
+  /* Primeiro a fila (é pequena), depois a foto (é grande): com o aparelho
+     quase cheio, a CONFIRMAÇÃO tem de caber antes de a foto disputar o
+     espaço. A foto tem chave própria; só fica na memória se não couber. */
   var guardou=enfileirar(item);
+  if(proofId&&!guardarFoto(proofId,_fotoDataUrl)){ item.foto=_fotoDataUrl; item.fotoSoMemoria=true; guardarFila(); }
   fecharEntrega();
   reaplicarNaTela();
   showToast('✅ Entrega marcada — enviando...','success');
@@ -988,26 +999,56 @@ function carregarFila(){
     var f=JSON.parse(localStorage.getItem(chaveFila())||'[]');
     _fila=Array.isArray(f)?f.filter(function(it){ return it&&it.k&&it.tipo; }):[];
   }catch(e){ _fila=[]; }
+  podarFila(null);
 }
 
-/* Devolve 'ok', 'semFoto' (cota estourou: guardou sem a foto, que fica só
-   em memória) ou 'memoria' (nem sem a foto coube — só vale enquanto a página
-   estiver aberta). */
+/* Foto "parada" (o servidor recusou) cuja parada não existe mais não tem
+   cartão para ser tocada: ficava para sempre na fila, com o aviso na faixa
+   e meio mega de foto ocupando o aparelho. Sai quando a lista do SERVIDOR
+   não tem mais a parada, ou depois de 3 dias. */
+var VALIDADE_FOTO_PARADA=3*24*3600*1000;
+function podarFila(listaDoServidor){
+  var antes=_fila.length;
+  _fila=_fila.filter(function(it){
+    if(!(it.tipo==='foto'&&it.parado)) return true;
+    var velha=Date.now()-(it.at||0)>VALIDADE_FOTO_PARADA;
+    var semParada=listaDoServidor&&!acharDoItem(listaDoServidor,it);
+    if(!velha&&!semParada) return true;
+    apagarFoto(it.proofId);
+    return false;
+  });
+  if(_fila.length!==antes) guardarFila();
+}
+
+/* Cada foto mora numa chave PRÓPRIA do aparelho (sb_moto_foto_<proofId>);
+   a fila guarda só a referência. Antes a foto ia dentro do item da fila:
+   quando a segunda foto estourava a cota, a fila inteira era regravada sem
+   foto nenhuma — inclusive a da primeira entrega, que já estava salva. Se
+   a aba morresse ali, as duas confirmações subiam sem comprovante (e no
+   painel fixo é a foto que paga a entrega). Agora a foto que não coube
+   fica só na memória e as que já estavam guardadas continuam guardadas. */
+function chaveFoto(proofId){ return 'sb_moto_foto_'+proofId; }
+function guardarFoto(proofId,dataUrl){
+  try{ localStorage.setItem(chaveFoto(proofId),dataUrl); return true; }catch(e){ return false; }
+}
+function lerFoto(proofId){
+  try{ return localStorage.getItem(chaveFoto(proofId))||''; }catch(e){ return ''; }
+}
+function apagarFoto(proofId){
+  try{ if(proofId) localStorage.removeItem(chaveFoto(proofId)); }catch(e){}
+}
+function fotoDoItem(item){ return item.foto||lerFoto(item.proofId); }
+
+/* Devolve 'ok' ou 'memoria' (nem a fila coube — só vale enquanto a página
+   estiver aberta). A foto nunca vai dentro da fila. */
 function guardarFila(){
-  try{
-    localStorage.setItem(chaveFila(),JSON.stringify(_fila));
-    _fila.forEach(function(it){ if(it.foto) delete it.fotoSoMemoria; });
-    return 'ok';
-  }catch(e){}
   var leve=_fila.map(function(it){
     if(!it.foto) return it;
     var c={};
     Object.keys(it).forEach(function(k){ if(k!=='foto') c[k]=it[k]; });
-    c.fotoSoMemoria=true;
     return c;
   });
-  _fila.forEach(function(it){ if(it.foto) it.fotoSoMemoria=true; });
-  try{ localStorage.setItem(chaveFila(),JSON.stringify(leve)); return 'semFoto'; }catch(e){}
+  try{ localStorage.setItem(chaveFila(),JSON.stringify(leve)); return 'ok'; }catch(e){}
   return 'memoria';
 }
 
@@ -1125,12 +1166,14 @@ function plural(n,um,varios){ return n+' '+(n===1?um:varios); }
 function atualizarFaixa(){
   var el=document.getElementById('avisoCache');
   if(!el) return;
-  var conf=0,outros=0,semFoto=0,soMemoria=false;
+  var conf=0,outros=0,semFoto=0,soMemoria=false,negado=false;
+  var lista=(repassData&&repassData.deliveries)||[];
   _fila.forEach(function(it){
-    if(it.tipo==='foto'&&it.parado) semFoto++;
+    if(it.tipo==='foto'&&it.parado){ if(acharDoItem(lista,it)) semFoto++; }
     else if(it.tipo==='confirmar') conf++;
     else outros++;
     if(it.foto&&it.fotoSoMemoria&&!it.fotoEnviada) soMemoria=true;
+    if((it.negadas||0)>=2) negado=true;
   });
   var t=[];
   if(_doCache) t.push('📴 Sem sinal — esta é a lista da última vez que o app conectou.');
@@ -1141,6 +1184,7 @@ function atualizarFaixa(){
   }else if(_doCache) t.push('O que você marcar fica salvo neste aparelho e sobe quando o sinal voltar.');
   if(semFoto) t.push('📷 '+plural(semFoto,'entrega sem comprovante no servidor','entregas sem comprovante no servidor')+' — toque no cartão para reenviar a foto.');
   if(soMemoria) t.push('⚠️ A foto não coube na memória do aparelho: NÃO feche esta página até o sinal voltar.');
+  if(negado) t.push('⚠️ O servidor não está aceitando o envio. Não apague nada: avise o Luan.');
   el.textContent=t.join(' ');
   el.style.display=t.length?'':'none';
 }
@@ -1190,18 +1234,48 @@ function enviarItem(item){
 
 /* A foto sobe ANTES da confirmação, com o proofId que já está no item — o
    mesmo em toda tentativa. */
-function enviarFoto(item){
+function enviarFoto(item,jaRefezLogin){
   if(!item.proofId||item.fotoEnviada) return Promise.resolve('ok');
-  if(!item.foto) return Promise.resolve(fotoRecusada(item));   // só estava na memória e a página foi fechada
-  return comTimeout(db.ref('rooms/'+ROOM+'/proofs/'+item.proofId).set(item.foto)).then(function(r){
+  var foto=fotoDoItem(item);
+  if(!foto) return Promise.resolve(fotoPerdida(item));   // só estava na memória e a página foi fechada
+  return comTimeout(db.ref('rooms/'+ROOM+'/proofs/'+item.proofId).set(foto)).then(function(r){
     if(r===_SEM_RESPOSTA) return 'timeout';
-    item.fotoEnviada=true; delete item.foto; delete item.fotoSoMemoria;
+    item.fotoEnviada=true; delete item.foto; delete item.fotoSoMemoria; delete item.negadas;
+    apagarFoto(item.proofId);
     guardarFila();
     return 'ok';
   },function(e){
     console.error('comprovante:',e);
-    return ehRecusa(e)?fotoRecusada(item):'timeout';
+    if(!ehRecusa(e)) return 'timeout';
+    /* "Permissão negada" pode não ser a foto: é o que o banco responde
+       quando a sessão não abriu (painel aberto sem sinal, login anônimo
+       falhou). Tratar isso direto como recusa arrancava o comprovante da
+       confirmação. Então: refaz o login e tenta UMA vez de novo, na hora.
+       Recusou outra vez, aí é recusa — a entrega segue sem a foto, com
+       aviso no cartão. No painel fixo nem assim: lá a foto é o que paga,
+       a confirmação fica esperando e a faixa manda avisar o Luan. */
+    if(!jaRefezLogin) return refazerLogin().then(function(){ return enviarFoto(item,true); });
+    item.negadas=(item.negadas||0)+1; guardarFila();
+    if(modoFixo()) return 'timeout';
+    return fotoRecusada(item);
   });
+}
+function refazerLogin(){
+  var p;
+  try{ p=window.speedboyLoginAnonimo?window.speedboyLoginAnonimo():null; }catch(e){ p=null; }
+  return comTimeout(Promise.resolve(p).catch(function(){})).then(function(){},function(){});
+}
+/* A foto não está mais no aparelho (não coube e a página foi fechada).
+   No repasse comum a entrega segue sem comprovante, com aviso no cartão;
+   no painel fixo a confirmação NÃO sobe sem foto: volta a ficar pendente
+   para a entregadora fotografar de novo. */
+function fotoPerdida(item){
+  if(modoFixo()&&item.tipo==='confirmar'){
+    tirarDaFila(item);
+    showToast('📷 A foto de uma entrega se perdeu — confirme de novo com a foto','error');
+    return 'perdida';
+  }
+  return fotoRecusada(item);
 }
 /* O servidor recusou a foto: a entrega continua valendo (segue sem proofId) e
    a foto vira um item parado — o cartão avisa e o toque reenvia. */
@@ -1246,8 +1320,8 @@ function reenviarFoto(i){
   var it=null;
   _fila.forEach(function(o){ if(o.tipo==='foto'&&o.parado&&o.stopId===id&&o.no===no) it=o; });
   if(!it) return;
-  if(!it.foto){ showToast('A foto não está mais neste aparelho — fale com o Luan','error'); return; }
-  it.parado=false; guardarFila();
+  if(!fotoDoItem(it)){ showToast('A foto não está mais neste aparelho — fale com o Luan','error'); return; }
+  it.parado=false; delete it.negadas; guardarFila();
   showToast('📷 Enviando a foto...','');
   salvarRepasse().then(function(){
     if(_fila.indexOf(it)<0) showToast('✅ Comprovante enviado','success');
@@ -1365,8 +1439,8 @@ function textoDoProblema(s,motivo,detalhe){
 function enviarProblema(){
   var i=_probIdx;
   if(i<0||!_probMotivo)return;
-  var s=paradaPorId(repassData.deliveries,_probKey)||repassData.deliveries[i];
-  if(!s)return;
+  var s=paradaPorId(repassData.deliveries,_probKey);
+  if(!s){ fecharProb(); showToast('Essa entrega saiu da sua lista — o Luan retirou','error'); return; }
   var detalhe=document.getElementById('probTexto').value.trim();
   if(!detalhe){showToast('Escreva o que aconteceu','error');return;}
 
@@ -1393,8 +1467,9 @@ function enviarProblema(){
 
 function resolverProblema(){
   var i=_probIdx;
-  if(i<0||!repassData.deliveries[i])return;
-  var s=paradaPorId(repassData.deliveries,_probKey)||repassData.deliveries[i];
+  if(i<0)return;
+  var s=paradaPorId(repassData.deliveries,_probKey);
+  if(!s){ fecharProb(); showToast('Essa entrega saiu da sua lista — o Luan retirou','error'); return; }
   var it=novoItem('resolvido',s,{problem:null});
   enfileirar(it);
   fecharProb();
@@ -1439,6 +1514,7 @@ document.getElementById('entregaModal').addEventListener('click',function(e){if(
 
 function showError(){
   document.getElementById('loadingWrap').style.display='none';
+  document.getElementById('semSinalWrap').classList.remove('show');
   document.getElementById('errorWrap').classList.add('show');
 }
 

@@ -212,8 +212,9 @@ const proofs = sis => Object.keys(sis.servidor.dados).filter(k => k.includes('/p
     'a confirmação está na fila do aparelho (localStorage), com o id da parada e done');
   ok(f[0] && f[0].campos.receivedBy === 'Dona Maria' && !!f[0].campos.doneAt,
     'com quem recebeu e a hora');
-  ok(f[0] && /^PF-/.test(f[0].proofId || '') && f[0].foto === FOTO,
+  ok(f[0] && /^PF-/.test(f[0].proofId || '') && sis.armazenamento.getItem('sb_moto_foto_' + f[0].proofId) === FOTO,
     'e com o proofId e a foto — nada depende de memória da página');
+  ok(f[0] && !f[0].foto, 'a foto fica numa chave própria do aparelho, fora da fila');
 
   await esperar(150);                      // passou o timeout
   ok(fila(sis).length === 1 && ctx.repassData.deliveries[0].done === true,
@@ -584,6 +585,97 @@ const proofs = sis => Object.keys(sis.servidor.dados).filter(k => k.includes('/p
     'ninguém regrava o nó do repasse inteiro com a cópia local');
   ok(/\/repass\/'\+item\.no\)\.transaction\(/.test(src), 'o nó é alterado por transaction, sobre o estado atual');
   ok(!/Problema enviado para a loja/.test(src), 'não existe mais "Problema enviado para a loja"');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Achados da revisão independente
+// ══════════════════════════════════════════════════════════════
+
+/* A segunda foto estoura a cota — e a PRIMEIRA não pode pagar por isso.
+   A foto ia dentro do item da fila; quando a cota estourava, a fila inteira
+   era regravada sem foto nenhuma, inclusive a que já estava salva. Fechada
+   a aba, as duas entregas subiam sem comprovante. (O teste 9 acima usa
+   limite por valor e uma foto só — não pegava.) */
+{
+  // Cota TOTAL, como no aparelho de verdade.
+  const cotaTotal = total => {
+    const m = new Map();
+    const usado = () => [...m.entries()].reduce((t, [k, v]) => t + k.length + v.length, 0);
+    return {
+      getItem: k => (m.has(k) ? m.get(k) : null),
+      setItem(k, v) {
+        const antes = m.has(k) ? k.length + m.get(k).length : 0;
+        if (usado() - antes + k.length + String(v).length > total) { const e = new Error('QuotaExceededError'); e.name = 'QuotaExceededError'; throw e; }
+        m.set(k, String(v));
+      },
+      removeItem: k => m.delete(k), _m: m
+    };
+  };
+  const sis = { armazenamento: cotaTotal(4200), servidor: criarServidor() };
+  const foto1 = 'data:image/jpeg;base64,' + 'A'.repeat(1500);
+  const foto2 = 'data:image/jpeg;base64,' + 'B'.repeat(1800);
+  let ctx = await abrirComRepasse(sis);
+  sis.servidor.cair();
+  confirmar(ctx, 0, { foto: foto1 });
+  await esperar(20);
+  confirmar(ctx, 1, { nome: 'Seu Zé', foto: foto2 });
+  await esperar(20);
+  const f = fila(sis);
+  ok(f.length === 2, `as duas confirmações estão na fila do aparelho (${f.length})`);
+  ok(sis.armazenamento.getItem('sb_moto_foto_' + f[0].proofId) === foto1,
+    'a foto da PRIMEIRA entrega continua guardada quando a segunda não cabe');
+  ok(/NÃO feche/.test(ctx.el('avisoCache').textContent), 'e a faixa avisa que a segunda está só na memória');
+
+  // A aba morre (as gravações que ela tinha na fila do SDK morrem junto) e o sinal volta.
+  sis.servidor.pendentes.length = 0;
+  ctx = await abrirComRepasse(sis);
+  sis.servidor.voltar();
+  await esperar(80);
+  const n = no(sis);
+  ok(n.deliveries[0].done === true && !!n.deliveries[0].proofId && sis.servidor.dados[`rooms/${SALA}/proofs/${n.deliveries[0].proofId}`] === foto1,
+    'depois de fechar a aba, a primeira entrega sobe COM o comprovante dela');
+  ok(n.deliveries[1].done === true && !n.deliveries[1].proofId,
+    'a segunda (foto perdida com a aba) sobe registrada, sem apontar para foto que não existe' +
+    ' — veio ' + JSON.stringify({ done: n.deliveries[1].done, proofId: n.deliveries[1].proofId, fila: fila(sis).map(i => i.tipo + (i.parado ? '(parado)' : '')) }));
+  ok(![...sis.armazenamento._m.keys()].some(k => k === 'sb_moto_foto_' + n.deliveries[0].proofId),
+    'e a foto enviada sai do aparelho (não fica ocupando a cota)');
+}
+
+/* Modal aberto, parada removida pelo dono: a confirmação NÃO cai na vizinha.
+   Havia um "senão, a do índice i" — a foto e o nome de quem recebeu a Ana
+   eram gravados no Beto. */
+{
+  const sis = sistema();
+  const ctx = await abrirComRepasse(sis);
+  ctx.abrirEntrega(0);
+  const rp = no(sis);
+  const tirada = rp.deliveries.shift();                       // o dono tirou a primeira parada
+  sis.servidor.dados[NO] = JSON.stringify(rp);
+  ctx.aplicarRepasse(JSON.parse(JSON.stringify(rp)), false);
+  ctx.el('entregaRecebedor').value = 'Dona Maria';
+  ctx._fotoDataUrl = FOTO;
+  ctx.confirmarEntrega();
+  await esperar(40);
+  ok(fila(sis).length === 0 && no(sis).deliveries.every(d => !d.done),
+    `parada removida com o modal aberto: nada é gravado na parada vizinha (removida: ${tirada.name})`);
+}
+
+/* "Permissão negada" na foto pode ser só sessão que não abriu. Uma recusa
+   seguida de sucesso (depois de refazer o login) não pode custar o
+   comprovante. */
+{
+  const sis = sistema();
+  const ctx = await abrirComRepasse(sis);
+  let logins = 0;
+  ctx.window.speedboyLoginAnonimo = () => { logins++; sis.servidor.recusaFoto = false; return Promise.resolve(); };
+  sis.servidor.recusaFoto = true;                              // 1ª tentativa: negada (sem sessão)
+  confirmar(ctx, 0);
+  await esperar(80);
+  const d = no(sis).deliveries[0];
+  ok(logins >= 1, 'recusa na foto faz o painel refazer o login');
+  ok(d.done === true && !!d.proofId && proofs(sis).length === 1,
+    'e a entrega sobe COM o comprovante — a recusa passageira não arranca o proofId');
+  ok(!/Sem comprovante/.test(cartoes(ctx)), 'sem aviso de "sem comprovante" no cartão');
 }
 
 fim();

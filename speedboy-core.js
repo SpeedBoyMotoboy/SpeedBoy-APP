@@ -23,11 +23,28 @@
   var SB = global.SpeedBoy = global.SpeedBoy || {};
 
   // ── DINHEIRO ────────────────────────────────────────────────
-  function parseMoney(s) { return parseFloat(String(s == null ? '' : s).replace(',', '.')) || 0; }
+  /* Lê qualquer forma em que um valor chega: número, "12,50", "12.50",
+     "1.250,00" e — o que importa — "R$ 35,00", que é como o fmtMoney
+     escreve. Antes só a vírgula era trocada: o "R$" derrubava o parseFloat
+     e o resultado era ZERO, sem erro. O campo de taxa da lista vem
+     preenchido com fmtMoney; tocar nele e sair apagava a taxa. */
+  function parseMoney(s) {
+    if (typeof s === 'number') return isFinite(s) ? s : 0;
+    var t = String(s == null ? '' : s).replace(/[^\d,.\-]/g, '');
+    if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');   // 1.250,00
+    else if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');     // 1.250
+    return parseFloat(t) || 0;
+  }
   function fmtMoney(v)   { return 'R$ ' + (parseFloat(v) || 0).toFixed(2).replace('.', ','); }
 
+  /* Teclado numérico em inglês digita ponto no lugar da vírgula. A máscara
+     apagava o ponto e "12.50" virava 1250 — R$ 1.250,00 de taxa. Ponto no
+     fim, ou seguido de até dois dígitos, é centavo e vira vírgula; ponto de
+     milhar ("1.250") continua sendo descartado. */
   function maskMoney(el) {
-    var v = el.value.replace(/[^0-9,]/g, '');
+    var v = String(el.value);
+    if (v.indexOf(',') < 0) v = v.replace(/\.(\d{0,2})$/, ',$1');
+    v = v.replace(/[^0-9,]/g, '');
     var p = v.split(',');
     if (p.length > 2) v = p[0] + ',' + p.slice(1).join('');
     if (p[1] && p[1].length > 2) v = p[0] + ',' + p[1].substring(0, 2);
@@ -35,12 +52,32 @@
   }
 
   // ── TELEFONE ────────────────────────────────────────────────
+  /* "+55 27 99916-5959" tem 13 dígitos. Cortar em 11 guardava
+     "55279991659": o DDI virava DDD e o fim do número sumia. */
+  function semDDI(d) {
+    return (d.length >= 12 && d.indexOf('55') === 0) ? d.substring(2) : d;
+  }
   function maskPhone(el) {
     var v = el.value.replace(/\D/g, '');
+    /* DDD 55 existe (RS). Quem já tinha 11 dígitos no campo e digitou mais
+       um está só passando do tamanho — não colou um número com DDI. Sem
+       esta guarda o "55" do DDD era cortado e o número mudava. */
+    var antes = el._sbDigitos || '';
+    var sobrando = antes.length === 11 && v.length === 12 && v.indexOf(antes) === 0;
+    if (!sobrando) v = semDDI(v);
     if (v.length > 11) v = v.substring(0, 11);
+    el._sbDigitos = v;
     if (v.length > 7)       v = '(' + v.substring(0, 2) + ') ' + v.substring(2, 7) + '-' + v.substring(7);
     else if (v.length > 2)  v = '(' + v.substring(0, 2) + ') ' + v.substring(2);
     el.value = v;
+  }
+
+  /* O número pronto para wa.me/, com um 55 só. Devolve '' quando não dá
+     para montar um número de verdade — quem chama abre o WhatsApp sem
+     destinatário em vez de abrir a conversa de um desconhecido. */
+  function numeroWpp(tel) {
+    var d = semDDI(String(tel == null ? '' : tel).replace(/\D/g, '').replace(/^0+/, ''));
+    return (d.length === 10 || d.length === 11) ? '55' + d : '';
   }
 
   // String(p||'') e não p.replace: o motoboy.html quebrava com telefone vazio
@@ -229,7 +266,7 @@
 
   // ── EXPOSIÇÃO ───────────────────────────────────────────────
   SB.parseMoney = parseMoney;   SB.fmtMoney = fmtMoney;   SB.maskMoney = maskMoney;
-  SB.maskPhone  = maskPhone;    SB.fmtPhone = fmtPhone;
+  SB.maskPhone  = maskPhone;    SB.fmtPhone = fmtPhone;   SB.numeroWpp = numeroWpp;
   SB.CIDADE_BAIRROS = CIDADE_BAIRROS;
   SB.nomeDaCidade = nomeDaCidade; SB.codigosDeCidade = codigosDeCidade;
   SB.bairrosDaCidade = bairrosDaCidade;
@@ -246,5 +283,6 @@
   global.maskMoney  = maskMoney;
   global.maskPhone  = maskPhone;
   global.fmtPhone   = fmtPhone;
+  global.numeroWpp  = numeroWpp;
   global.CIDADE_BAIRROS = CIDADE_BAIRROS;
 })(window);

@@ -15,7 +15,7 @@
    conteúdo dos arquivos — não edite à mão.
    ═══════════════════════════════════════════════════════════════ */
 
-const VERSION = '20261015-0fa49229';                       // gerado por scripts/bump-versao.mjs
+const VERSION = '20261117-f9f753b6';                       // gerado por scripts/bump-versao.mjs
 const CACHE   = 'speedboy-' + VERSION;
 
 // Casca do app: o que precisa estar disponível para abrir offline.
@@ -81,6 +81,31 @@ async function cacheDeOcr(req) {
      é o que segura o núcleo wasm entre sessões. */
   if (res && res.ok && res.type !== 'opaque') cache.put(req, res.clone()).catch(() => {});
   return res;
+}
+
+/* O SDK do Firebase vem de www.gstatic.com, em URL com versão (o arquivo
+   nunca muda). Antes ficava por conta do cache HTTP do navegador — que o
+   aparelho limpa quando quer: o painel do motoboy abria a lista guardada,
+   mas sem o SDK não tinha como enviar nada, nem depois que o sinal
+   voltasse. Guardado aqui, em cache próprio (mesma lógica do leitor de
+   documento: sobrevive à troca de versão do app), o SDK está lá na
+   primeira vez que o sinal reaparece.
+
+   As páginas carregam o SDK por <script> sem CORS, e resposta opaca não
+   pode ser guardada — por isso o pedido é refeito COM CORS (a gstatic
+   permite). Se não der, segue como era antes. */
+const CACHE_SDK = 'sb-sdk-v1';
+const ehSdk = url => url.startsWith('https://www.gstatic.com/firebasejs/');
+
+async function cacheDeSdk(req) {
+  const cache  = await caches.open(CACHE_SDK);
+  const cached = await cache.match(req.url);
+  if (cached) return cached;
+  try {
+    const res = await fetch(req.url, { mode: 'cors', credentials: 'omit' });
+    if (res && res.ok) { cache.put(req.url, res.clone()).catch(() => {}); return res; }
+  } catch (e) { /* sem CORS ou sem rede: cai no pedido original */ }
+  return fetch(req);
 }
 
 // ── INSTALL ────────────────────────────────────────────────────
@@ -167,6 +192,9 @@ self.addEventListener('fetch', e => {
 
   // Leitor de documento: cache próprio, primeiro o guardado
   if (ehOcr(url)) { e.respondWith(cacheDeOcr(req)); return; }
+
+  // SDK do Firebase: imutável por versão, primeiro o guardado
+  if (ehSdk(url)) { e.respondWith(cacheDeSdk(req)); return; }
 
   const mesmaOrigem = url.startsWith(self.location.origin);
 

@@ -86,6 +86,10 @@
     d.fatura.moeda = d.fatura.moeda || 'BRL';
     d.fatura.emissao = d.fatura.emissao || new Date().toISOString();
     d.pagamento = d.pagamento || { recebido: 0 };
+    // Como pagar. Vazio quando o emissor não cadastrou chave: a fatura
+    // não inventa uma, só deixa de mostrar o bloco.
+    d.pagamento.pix = String(d.pagamento.pix || '').trim();
+    d.pagamento.pix_nome = String(d.pagamento.pix_nome || '').trim();
     d.config = Object.assign({}, CONFIG_PADRAO, d.config || {});
     d.config.siglas_cidade = Object.assign({}, CONFIG_PADRAO.siglas_cidade, d.config.siglas_cidade || {});
     d.config.siglas_tipo = Object.assign({}, CONFIG_PADRAO.siglas_tipo, d.config.siglas_tipo || {});
@@ -123,7 +127,8 @@
   function agrupar(itens, chave, total) {
     var mapa = {};
     itens.forEach(function (i) {
-      var k = i[chave] || '—';
+      // Sem motoboy = quem entregou foi o próprio emissor.
+      var k = i[chave] || (chave === 'motoboy' ? 'Entrega própria' : '—');
       if (!mapa[k]) mapa[k] = { q: 0, v: 0 };
       mapa[k].q += 1;
       mapa[k].v += i.valor;
@@ -217,10 +222,7 @@
     // ---------- blocos de resumo ----------
     var ry = ky - 8;
     var bw = (W - 2 * M - 8) / 2;
-    var maxLinhas = resumos.reduce(function (a, r) { return Math.max(a, r.linhas.length); }, 0);
-    var bh = 14 + 11 * maxLinhas + 6;
-
-    function bloco(x, y, w, titulo, linhas) {
+    function bloco(x, y, w, bh, titulo, linhas) {
       c.fill(WHITE); c.stroke(LGREY); c.lw(0.5);
       c.rect(x, y - bh, w, bh, true, true);
       c.fill(DARK); c.rect(x, y - 13, w, 13, true, false);
@@ -242,9 +244,18 @@
       });
     }
 
-    resumos.slice(0, 2).forEach(function (r, i) {
-      bloco(M + i * (bw + 8), ry, bw, r.titulo, r.linhas);
-    });
+    /* Dois blocos por fileira, quantas fileiras forem precisas. Antes só os
+       dois primeiros eram desenhados (`slice(0, 2)`): o fechamento pedia
+       POR MOTOBOY como terceiro resumo e ele nunca saía no PDF — só
+       gastava o espaço reservado para ele. */
+    var yFila = ry;
+    for (var fi = 0; fi < resumos.length; fi += 2) {
+      var fila = resumos.slice(fi, fi + 2);
+      var nLinhas = fila.reduce(function (a, r) { return Math.max(a, r.linhas.length); }, 0);
+      var bhFila = 14 + 11 * nLinhas + 6;
+      fila.forEach(function (r, i) { bloco(M + i * (bw + 8), yFila, bw, bhFila, r.titulo, r.linhas); });
+      yFila -= bhFila + 8;
+    }
 
     // ---------- tabela em 2 colunas ----------
     var COLW = (W - 2 * M - 10) / 2;
@@ -294,7 +305,7 @@
     }
 
     // Distribui os itens entre as páginas (a 1ª tem menos espaço por causa do resumo)
-    var topo1 = ry - bh - 10;
+    var topo1 = yFila - 2;
     var topoN = H - M - 24;
     var paginas = [];
     var restante = itens.slice();
@@ -334,6 +345,15 @@
     c.fill(ACCENT); c.font(true, 15);
     c.textR(W - M - 14, fy + 1, brl(aReceber));
 
+    // Como pagar: a chave PIX logo abaixo do total, quando há o que pagar.
+    if (d.pagamento.pix && aReceber > 0) {
+      c.fill(GREY); c.font(false, 7);
+      c.text(M, fy - 17, 'PAGAMENTO POR PIX  ·  CHAVE');
+      c.fill(DARK); c.font(true, 9);
+      c.text(M + c.width('PAGAMENTO POR PIX  ·  CHAVE', 7, false) + 6, fy - 17,
+        d.pagamento.pix + (d.pagamento.pix_nome ? '   (' + d.pagamento.pix_nome + ')' : ''));
+    }
+
     // numeração (apenas quando há mais de uma página)
     var nPags = doc.internal.getNumberOfPages();
     if (nPags > 1) {
@@ -368,6 +388,22 @@
   }
 
   // ═══════════════ conferência em HTML (página do cliente) ═══════════════
+  // Sem área de transferência (navegador antigo, página sem https): deixa
+  // a chave selecionada para a pessoa copiar à mão.
+  function selecionar(no) {
+    if (!no || !window.getSelection) return;
+    var r = document.createRange(); r.selectNodeContents(no);
+    var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }
+
+  function pixHtml(d) {
+    if (!d.pagamento.pix || !(d.totais.a_receber > 0)) return '';
+    return '<div class="fp-pix"><div class="fp-pix-txt"><div class="fp-pix-l">PAGAMENTO POR PIX</div>' +
+      '<div class="fp-pix-chave">' + esc(d.pagamento.pix) + '</div>' +
+      (d.pagamento.pix_nome ? '<div class="fp-pix-nome">' + esc(d.pagamento.pix_nome) + '</div>' : '') +
+      '</div><button type="button" class="fp-pix-btn">Copiar chave</button></div>';
+  }
+
   function preview(dados, el) {
     var d = normalizar(dados);
     var f = d.fatura, em = d.emissor, cfg = d.config;
@@ -421,7 +457,17 @@
       '<div class="fp-tab-wrap"><table class="fp-tab"><thead><tr>' +
         '<th>Nº</th><th>DATA</th><th>CLIENTE</th><th>BAIRRO</th><th>CIDADE</th><th>TIPO</th><th class="v">VALOR</th>' +
       '</tr></thead><tbody>' + linhas + '</tbody></table></div>' +
-      '<div class="fp-total"><span>TOTAL A RECEBER</span><b style="color:' + ACCENT + '">' + brl(d.totais.a_receber) + '</b></div>';
+      '<div class="fp-total"><span>TOTAL A RECEBER</span><b style="color:' + ACCENT + '">' + brl(d.totais.a_receber) + '</b></div>' +
+      pixHtml(d);
+
+    /* A chave se copia em um toque: é o que a pessoa do financeiro da
+       loja vai colar no aplicativo do banco. */
+    var bPix = el.querySelector('.fp-pix-btn');
+    if (bPix) bPix.onclick = function () {
+      var feito = function () { bPix.textContent = '✓ Chave copiada'; setTimeout(function () { bPix.textContent = 'Copiar chave'; }, 2500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(d.pagamento.pix).then(feito, function () { selecionar(el.querySelector('.fp-pix-chave')); });
+      else selecionar(el.querySelector('.fp-pix-chave'));
+    };
 
     return d;
   }
@@ -434,6 +480,7 @@
     baixar: baixar,
     nomeArquivo: nomeArquivo,
     preview: preview,
+    pixHtml: pixHtml,
     brl: brl,
     dBR: dBR,
     EMISSOR_PADRAO: EMISSOR_PADRAO,

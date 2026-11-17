@@ -148,7 +148,7 @@
 <div class="screen" id="addScreen">
   <div class="form-screen">
     <div class="screen-title">
-      <button type="button" class="back-btn" onclick="goNav('homeScreen','nav-home')">←</button>
+      <button type="button" class="back-btn" onclick="sairDoFormulario()">←</button>
       <span id="formTitle">Nova parada</span>
     </div>
 
@@ -190,7 +190,7 @@
       <div class="field-row">
         <div class="field-group">
           <div class="field-label">Cidade <span class="req">*</span></div>
-          <select class="field-input" id="fCity" onchange="onCityChange();autoTaxaKS()">
+          <select class="field-input" id="fCity" onchange="onCityChange();autoTaxaKS();autoTaxaAritana()">
             <option value="">Selecione</option>
             <option value="SRR">Serra</option>
             <option value="VIX">Vitória</option>
@@ -259,7 +259,7 @@
           <div class="field-label">Taxa da entrega</div>
           <div class="money-input-wrap">
             <span class="money-prefix">R$</span>
-            <input class="field-input" id="fValue" placeholder="0,00" type="text" inputmode="decimal" oninput="maskMoney(this)" />
+            <input class="field-input" id="fValue" placeholder="0,00" type="text" inputmode="decimal" oninput="maskMoney(this);this.dataset.auto=''" />
           </div>
         </div>
         <button type="button" class="chk-btn" id="fPaidBtn" onclick="toggleFormPaid()" aria-pressed="false" title="Taxa já recebida?">Recebida</button>
@@ -461,6 +461,8 @@
     </div>
     <div id="histSearchResults" style="display:none;"></div>
     <div id="reportPeriodBody">
+      <!-- Quem deve, no total — não depende da aba de período logo abaixo. -->
+      <div id="reportContas"></div>
       <div class="period-tabs">
         <button type="button" class="period-tab on" id="tabW"  onclick="setPeriod('week')">7 Dias</button>
         <button type="button" class="period-tab"   id="tabM"  onclick="setPeriod('month')">Mês</button>
@@ -783,7 +785,12 @@
         <div class="field" style="margin-bottom:8px;"><div class="flabel">Subtítulo</div><input class="finput" id="cfgEmiSub" placeholder="Motoboy Express" maxlength="40" /></div>
         <div class="field" style="margin-bottom:8px;"><div class="flabel">CNPJ</div><input class="finput" id="cfgEmiCnpj" placeholder="00.000.000/0001-00" maxlength="20" /></div>
         <div class="field" style="margin-bottom:8px;"><div class="flabel">Telefone</div><input class="finput" id="cfgEmiTel" placeholder="(27) 90000-0000" maxlength="20" /></div>
-        <div class="field"><div class="flabel">E-mail</div><input class="finput" id="cfgEmiEmail" type="email" placeholder="contato@exemplo.com" maxlength="60" /></div>
+        <div class="field" style="margin-bottom:8px;"><div class="flabel">E-mail</div><input class="finput" id="cfgEmiEmail" type="email" placeholder="contato@exemplo.com" maxlength="60" /></div>
+        <!-- A fatura dizia quanto a loja devia, mas não COMO pagar. Com a
+             chave aqui, ela sai na fatura, no PDF e na cobrança. -->
+        <div class="info-box">💳 Com a chave PIX preenchida, a loja vê como pagar na própria fatura — e copia a chave em um toque.</div>
+        <div class="field" style="margin-bottom:8px;"><div class="flabel">Chave PIX</div><input class="finput" id="cfgPixChave" placeholder="CNPJ, telefone, e-mail ou chave aleatória" maxlength="80" autocapitalize="off" autocomplete="off" /></div>
+        <div class="field"><div class="flabel">Nome do favorecido (como aparece no banco)</div><input class="finput" id="cfgPixNome" placeholder="Ex.: SpeedBoy Entregas" maxlength="60" /></div>
       </div>
     </div>
     <button type="button" class="btn-cfg-save" onclick="saveConfig()">💾 Salvar configurações</button>
@@ -1006,7 +1013,11 @@ function sbBackupKeys(){
 // mexer no app sem risco de perder entregas ou histórico.
 function sbAutoBackup(){
   try{
-    var key = 'sb_bkp_' + new Date().toISOString().slice(0,10);
+    /* Data LOCAL. toISOString() é UTC: das 21h em diante já era "amanhã",
+       a cópia do dia seguinte era tirada à noite e, de manhã, a chave já
+       existia — o backup "de hoje" ficava 12 horas velho. */
+    var agora = new Date();
+    var key = 'sb_bkp_' + agora.getFullYear() + '-' + String(agora.getMonth()+1).padStart(2,'0') + '-' + String(agora.getDate()).padStart(2,'0');
     if(localStorage.getItem(key)) return;               // já existe o de hoje
     var snap = {
       v: SB_SCHEMA_VERSION,
@@ -1086,6 +1097,7 @@ function setGroupBy(mode){
 let sortMode    = 'manual';
 let reportPeriod='week';
 let editingIdx  = -1;
+let editingId   = null;   // identidade da parada aberta no formulário (ver saveStop)
 
 // Firebase state
 let fbDb        = null;
@@ -1095,6 +1107,10 @@ let fbRoomPath  = null;
 let fbPushing   = false;
 let fbSujo      = false;   // mudou algo enquanto uma escrita estava em voo
 let fbListener  = null;
+/* Os outros três ouvintes da sala. Só o de `stops` era desligado ao trocar
+   de sala: os pedidos da sala ANTIGA continuavam chegando, eram aceitos na
+   sala nova e a loja nunca via o "aceito". */
+let _tombsOff = null, _pendingOff = null, _crOff = null;
 let pendingData = {};
 
 // ═══════════════════════════════════════════════════════
@@ -1141,8 +1157,24 @@ function conteudoDaParada(s){
    a do outro aparelho e o merge sempre daria empate a nosso favor. */
 function carimbarStops(){
   const agora = Date.now();
+  /* Paradas IGUAIS não são a mesma parada. A identidade derivada do
+     conteúdo é só para dado legado; duas paradas idênticas na mesma lista
+     ("+3" nas lojas rápidas, cliente que pede duas vezes) nasciam com o
+     mesmo _id, e o merge, o histórico e o fechamento ficavam com uma só.
+     A segunda ocorrência ganha id próprio — inclusive em lista que já veio
+     colidida de antes desta correção (só ids 'h_': os de pedido de loja,
+     'tk_', são a ligação com o tracking e repetidos são duplicata mesmo). */
+  const usados = new Set();
   stops.forEach(s => {
-    if (!s._id) s._id = idDaParada(s);
+    if (!s) return;
+    /* Parada sem _id é parada NOVA (as guardadas já foram carimbadas ao
+       abrir o app): ganha identidade própria, não uma derivada do conteúdo.
+       Com a derivada, uma entrega igual à que já foi para o histórico
+       nascia com o mesmo id e, ao ser arquivada, ficava no lugar da
+       primeira. Só o pedido de loja mantém o id pela chave dele. */
+    if (!s._id) s._id = s._trackKey ? idDaParada(s) : novoId();
+    if (usados.has(s._id) && s._id.indexOf('h_') === 0) s._id = novoId();
+    usados.add(s._id);
     const h = hashCurto(conteudoDaParada(s));
     if (s._h !== h) { s._h = h; s._upd = agora; }
   });
@@ -1224,13 +1256,110 @@ function mergeStops(local, remoto, tombs){
   return saida;
 }
 
+/* ── O histórico também é de dois aparelhos ──
+   As paradas do dia tinham identidade e carimbo; o histórico não. Cada
+   aparelho gravava o histórico INTEIRO por cima do banco, e ao abrir
+   trocava o dia local pelo remoto sempre que o remoto tivesse a mesma
+   quantidade de paradas. Marcar "pago" não muda quantidade: a marcação de
+   um celular era desfeita pelo outro e a loja que pagou voltava a dever.
+
+   Agora vale a mesma regra das paradas: por identidade, vence o carimbo
+   mais novo. A entrega pode ter mudado de dia (correção de data) — por
+   isso o merge é pela entrega, não pelo dia: ela fica onde a versão mais
+   nova está, e só lá. Empate fica com quem entrou primeiro (o local). */
+function mergeHistorico(local, remoto){
+  const porChave = new Map();
+  [local, remoto].forEach(lista => {
+    /* Histórico antigo pode ter duas entregas com o MESMO id (paradas
+       iguais, de antes de cada uma ter identidade própria). A n-ésima
+       ocorrência de um lado casa com a n-ésima do outro — nunca são
+       fundidas numa só: o merge não apaga entrega. */
+    const vez = new Map();
+    (Array.isArray(lista) ? lista : []).forEach(day => {
+      if (!day || !Array.isArray(day.stops)) return;
+      day.stops.forEach(s => {
+        if (!s || typeof s !== 'object') return;
+        const id = idDaParada(s);
+        const n = vez.get(id) || 0; vez.set(id, n + 1);
+        const chave = id + '#' + n;
+        const atual = porChave.get(chave);
+        if (!atual || (s._upd || 0) > (atual.s._upd || 0)) porChave.set(chave, { s, date: day.date });
+      });
+    });
+  });
+  const dias = new Map();
+  porChave.forEach(({ s, date }) => { if (!dias.has(date)) dias.set(date, []); dias.get(date).push(s); });
+  return [...dias.entries()].map(([date, stops]) => ({ date, stops }))
+    .sort((a, b) => parseDate(b.date) - parseDate(a.date));
+}
+
+/* O carimbo do histórico. Mexer numa entrega já arquivada (pago, valor,
+   nome, cancelamento) não passava por carimbarStops — sem isto o merge
+   acima não teria como saber qual versão é a mais nova. Como lá, _upd só
+   avança quando o conteúdo mudou de verdade. */
+function carimbarHistorico(){
+  const agora = Date.now();
+  history.forEach(day => ((day && day.stops) || []).forEach(s => {
+    if (!s || typeof s !== 'object') return;
+    if (!s._id) s._id = idDaParada(s);
+    const h = hashCurto(conteudoDaParada(s));
+    /* Entrega antiga, que nunca teve retrato (_h): ganha o retrato e NÃO
+       ganha carimbo novo. Se ganhasse, a primeira gravação depois de
+       atualizar o app carimbava o histórico inteiro com "agora" — e o
+       aparelho que atualizasse por último passava por cima do "pago" do
+       outro. basearHistorico() faz isto ao abrir, antes de qualquer edição. */
+    if (s._h === undefined) s._h = h;
+    else if (s._h !== h) { s._h = h; s._upd = agora; }
+  }));
+}
+/* Tira o retrato de tudo que ainda não tem. Roda ao abrir o app e depois
+   de fundir com o banco: daí em diante, qualquer mudança é detectada. */
+function basearHistorico(){
+  let mudou = false;
+  history.forEach(day => ((day && day.stops) || []).forEach(s => {
+    if (!s || typeof s !== 'object' || s._h !== undefined) return;
+    if (!s._id) s._id = idDaParada(s);
+    s._h = hashCurto(conteudoDaParada(s)); mudou = true;
+  }));
+  return mudou;
+}
+
 function saveStops()   {
   carimbarStops();
   registrarExclusoes();
   localStorage.setItem('sb_stops', JSON.stringify(stops));
   fbPush();
 }
-function saveHistory() { localStorage.setItem('sb_history', JSON.stringify(history)); fbPushHistory(); }
+/* Restaurar backup, importar e apagar tudo precisam VENCER o que está no
+   servidor: são decisão explícita, não edição concorrente. */
+function forcarCarimboHistorico(){
+  const agora = Date.now();
+  history.forEach(day => ((day && day.stops) || []).forEach(s => {
+    if (!s || typeof s !== 'object') return;
+    if (!s._id) s._id = idDaParada(s);
+    s._h = hashCurto(conteudoDaParada(s));
+    s._upd = agora;
+  }));
+}
+
+/* O que há no histórico, sem depender da ordem das chaves do JSON: dia,
+   entrega e carimbo. É o que decide se existe algo a enviar — comparar o
+   texto fazia cada aparelho reenviar o histórico inteiro a cada abertura. */
+function assinaturaHistorico(h){
+  return (Array.isArray(h) ? h : []).filter(d => d && Array.isArray(d.stops) && d.stops.length)
+    .map(d => d.date + ':' + d.stops.filter(s => s && typeof s === 'object')
+      .map(s => idDaParada(s) + '@' + (s._upd || 0)).join(','))
+    .join('|');
+}
+
+/* `substituir`: grava por cima do banco SEM fundir antes — desfazer,
+   restaurar backup e apagar o histórico. Se fundissem, o que acabou de
+   ser desfeito ou apagado voltava do servidor na mesma hora. */
+function saveHistory(substituir) {
+  carimbarHistorico();
+  localStorage.setItem('sb_history', JSON.stringify(history));
+  fbPushHistory(substituir);
+}
 function saveCfg()     { localStorage.setItem('sb_cfg',     JSON.stringify(cfg)); }
 
 
@@ -1352,9 +1481,20 @@ function retratoParadas(){ return JSON.parse(JSON.stringify(stops)); }
 function retratoDoDia(){
   return { stops: retratoParadas(), history: JSON.parse(JSON.stringify(history)) };
 }
+/* A versão que o desfazer quer apagar já subiu para o banco, com carimbo
+   mais novo que o do retrato. Por isso o que VOLTOU a ser diferente ganha
+   carimbo de agora (vence em qualquer aparelho) e a gravação substitui o
+   banco em vez de fundir — senão o desfazer se desfazia sozinho. */
 function restaurarDia(r){
+  const era = new Map();
+  history.forEach(d => ((d && d.stops) || []).forEach(s => { if (s) era.set(idDaParada(s), d.date + '|' + conteudoDaParada(s)); }));
   history = JSON.parse(JSON.stringify(r.history));
-  saveHistory();
+  const agora = Date.now();
+  history.forEach(d => ((d && d.stops) || []).forEach(s => {
+    if (!s || era.get(idDaParada(s)) === d.date + '|' + conteudoDaParada(s)) return;
+    s._h = hashCurto(conteudoDaParada(s)); s._upd = agora;
+  }));
+  saveHistory(true);
   restaurarParadas(r.stops);
 }
 
@@ -1503,6 +1643,7 @@ function goNav(screenId, navId, viaHistorico) {
   window.scrollTo(0,0);
   // render hooks
   if(screenId==='homeScreen')    renderHome();
+  if(screenId==='addScreen' && viaHistorico) formularioEmBranco();
   if(screenId==='financeScreen') { checkNewDay(); renderFinance(); }
   if(screenId==='reportScreen'){
     _histSearchQ='';
@@ -1543,13 +1684,43 @@ function navPelaURL(){
   window.history.replaceState({ tela, modal: null }, '', '#' + (TELAS[tela] || {}).slug);
 }
 
+/* Sai do formulário DESFAZENDO a entrada dele no histórico do navegador.
+   Empilhar a inicial por cima deixava o formulário logo atrás: o botão
+   voltar do celular o reabria com os campos da parada que acabou de ser
+   salva e sem parada em edição — outro "Salvar" criava uma segunda igual. */
+function sairDoFormulario(){
+  const st=window.history.state;
+  if(_telaAtual==='addScreen' && st && st.tela==='addScreen') window.history.back();
+  else goNav('homeScreen','nav-home');
+}
+// Chegar ao formulário pelo histórico (voltar/avançar, recarregar em #nova)
+// é sempre um formulário em branco: o que estava digitado já foi salvo ou largado.
+function formularioEmBranco(){
+  editingIdx=-1; editingId=null;
+  document.getElementById('formTitle').textContent='Nova parada';
+  resetForm(); updateStoreSelect();
+  document.getElementById('editIdx').value=-1;
+}
+
 function goForm(idx) {
-  editingIdx = (idx !== undefined) ? idx : -1;
+  editingIdx = (idx !== undefined && idx >= 0 && stops[idx]) ? idx : -1;
+  editingId  = editingIdx>=0 ? idDaParada(stops[editingIdx]) : null;
+  /* Passa pelo goNav como qualquer outra tela: é ele que empilha o
+     histórico. Antes o formulário trocava a tela por fora, e o botão
+     voltar do celular não o fechava — ou fechava o app com tudo digitado. */
+  goNav('addScreen');
   document.getElementById('formTitle').textContent = editingIdx>=0 ? 'Editar parada' : 'Nova parada';
   resetForm();
+  updateStoreSelect();
   if(editingIdx>=0) {
     const s = stops[editingIdx];
-    document.getElementById('fStore').value      = s.store      || '';
+    /* A loja da parada pode não estar em "Minhas lojas" (loja rápida com
+       nome próprio, loja renomeada, nome vindo do link). Atribuir a um
+       <select> um valor que não é opção ZERA o campo — e salvar a edição
+       deixava a parada "sem loja", fora da fatura. */
+    const selLoja = document.getElementById('fStore');
+    if(s.store && ![...selLoja.options].some(o=>o.value===s.store)) selLoja.add(new Option(s.store, s.store));
+    selLoja.value = s.store || '';
     document.getElementById('fName').value        = s.name       || '';
     // Resolve city code from any format
     document.getElementById('fCity').value         = resolveCityCode(s.city||s.cityId||'');
@@ -1582,13 +1753,10 @@ function goForm(idx) {
     }
   }
   document.getElementById('editIdx').value = editingIdx;
-  updateStoreSelect();
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.getElementById('addScreen').classList.add('active');
-  window.scrollTo(0,0);
 }
 
 function resetForm(){
+  { const fv=document.getElementById('fValue'); if(fv) fv.dataset.auto=''; }
   ['pasteArea','fName','fComplement','fReference','fPhone','fNotes','fValue','fProductValue','fTimeFrom','fTimeTo','fDelivDate','fRua','fNumero','fBairro'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('fCity').value='';
   document.getElementById('fServiceType').value='entrega';
@@ -1681,10 +1849,7 @@ function renderHome(){
   // Separar agendadas futuras das de hoje/passado
   const todayDt=new Date(); todayDt.setHours(0,0,0,0);
   const tomorrowDt=new Date(todayDt); tomorrowDt.setDate(todayDt.getDate()+1);
-  const isFuture=function(s){
-    if(!s.deliveryDate)return false;
-    try{return parseDate(s.deliveryDate)>todayDt;}catch(e){return false;}
-  };
+  const isFuture=ehAgendada;
   const currentIndexed=indexed.filter(s=>!isFuture(s));
   const scheduledIndexed=indexed.filter(s=>isFuture(s)).sort(function(a,b){
     try{return parseDate(a.deliveryDate)-parseDate(b.deliveryDate);}catch(e){return 0;}
@@ -1723,7 +1888,7 @@ function renderHome(){
   /* Valor editável direto na lista: toque, digite, saia do campo. */
   const valorEditavel=function(val,pago,onblur){
     if(!(val>0)) return '';
-    return `<div class="stop-val-wrap" onclick="event.stopPropagation()"><input type="text" class="stop-val-inp${pago?' pago':''}" value="${fmtMoney(val)}" onblur="${onblur}" inputmode="decimal" aria-label="Taxa da entrega" />${pago?'<span class="stop-val-ok" title="Taxa recebida">✓</span>':''}</div>`;
+    return `<div class="stop-val-wrap" onclick="event.stopPropagation()"><input type="text" class="stop-val-inp${pago?' pago':''}" value="${fmtMoney(val)}" onfocus="this.select()" onblur="${onblur}" inputmode="decimal" aria-label="Taxa da entrega" />${pago?'<span class="stop-val-ok" title="Taxa recebida">✓</span>':''}</div>`;
   };
   const enderecoHtml=function(s,comBairro){
     const rua=[s.street,s.number,s.complement].filter(Boolean).join(' ');
@@ -1750,7 +1915,7 @@ function renderHome(){
             ${ehProx?'<span class="prox-tag">Próxima</span>':''}
             <div class="stop-linha1">
               <div class="stop-name">${esc(s.name||'Sem nome')}</div>
-              ${valorEditavel(val,s.paid,`updateStopValue(${i},this.value)`)}
+              ${valorEditavel(val,s.paid,`updateStopValue(${i},this.value,this)`)}
             </div>
             ${enderecoHtml(s,true)}
             ${(s.reference||s.notes)?`<div class="stop-ref">${esc([s.reference,s.notes].filter(Boolean).join(' · '))}</div>`:''}
@@ -1819,7 +1984,7 @@ function renderHome(){
             <div class="stop-info">
               <div class="stop-linha1">
                 <div class="stop-name">${esc(s.name||'Sem nome')}</div>
-                ${valorEditavel(val,s.paid,`updateStopValue(${i},this.value)`)}
+                ${valorEditavel(val,s.paid,`updateStopValue(${i},this.value,this)`)}
               </div>
               ${enderecoHtml(s,true)}
               ${(s.reference||s.notes)?`<div class="stop-ref">${esc([s.reference,s.notes].filter(Boolean).join(' · '))}</div>`:''}
@@ -1886,7 +2051,7 @@ function renderHome(){
           <div class="stop-info">
             <div class="stop-linha1">
               <div class="stop-name">${esc(s.name||'Sem nome')}</div>
-              ${valorEditavel(val,s.paid,`updateHistStopValue(${di},${si},this.value)`)}
+              ${valorEditavel(val,s.paid,`updateHistStopValue(${di},${si},this.value,this)`)}
             </div>
             ${(s.street||s.neighborhood)?`<div class="stop-addr">${esc([s.street,s.number,s.neighborhood].filter(Boolean).join(' '))}</div>`:''}
             <div class="tags">
@@ -1953,9 +2118,11 @@ function togHistProductPaid(ref,si){
   history[di].stops[si].productPaid=!history[di].stops[si].productPaid;
   saveHistory();renderHome();
 }
-function updateHistStopValue(di,si,rawVal){
+function updateHistStopValue(di,si,rawVal,el){
   if(!history[di]||!history[di].stops[si])return;
-  history[di].stops[si].value=parseMoney(rawVal)||0;
+  const v=taxaDigitada(rawVal, history[di].stops[si].value, el);
+  if(v===null)return;
+  history[di].stops[si].value=v;
   saveHistory();
 }
 
@@ -1980,12 +2147,21 @@ function togPaid(i)        { stops[i].paid=!stops[i].paid; saveStops(); renderHo
 function togProductPaid(i) { stops[i].productPaid=!stops[i].productPaid; saveStops(); renderHome(); }
 /* Um toque para remover, e a saída fica visível por 8 segundos. Antes era
    confirm() — dois toques, e nenhuma volta depois do OK. */
+/* Pedido de loja removido antes de ser entregue: a loja ficava vendo
+   "aceito" para sempre, esperando uma entrega que não vai acontecer —
+   agora o status vira "cancelado", e desfazer devolve o status junto com a
+   parada. Repassada e ainda na rua: o aviso diz quem continua vendo. */
 function delStop(i){
   const s=stops[i]; if(!s)return;
   const antes=retratoParadas();
   stops.splice(i,1); saveStops(); renderHome();
-  comDesfazer(`🗑️ "${s.name||'Parada'}" removida`, ()=>{
-    restaurarParadas(antes); toast('↩️ Parada de volta','success');
+  const avisaLoja=!!(s._trackKey&&!s.done);
+  if(avisaLoja) updateTracking(s._trackKey,'cancelado');
+  const comQuem=(s._repassId&&!s.done)?` — ${s.repassadaPara||'o motoboy'} ainda vê no painel`:'';
+  comDesfazer(`🗑️ "${s.name||'Parada'}" removida${comQuem}`, ()=>{
+    restaurarParadas(antes);
+    if(avisaLoja) updateTracking(s._trackKey,'aceito',{name:s.name||'',address:s.address||'',store:s.store||''});
+    toast('↩️ Parada de volta','success');
   });
 }
 
@@ -2091,39 +2267,91 @@ const ARITANA_TAXAS = {
   "balneário ponta da fruta":60,"bicanga":60,"conjunto jacaraípe":60,"costa dourada":60,"costabela":60,"das laranjeiras":60,"enseada de jacaralpe":60,"estância monazítica":60,"interlagos":60,"jardim atlântico":60,"lagoa de jacaraípe":60,"manguinhos":60,"morada do sol":60,"morro da lagoa":60,"nova ponta da fruta":60,"ourimar":60,"parque jacaraípe":60,"ponta da fruta":60,"portal de jacaraípe":60,"praia de capuba":60,"resid. jacaraípe":60,"são patrício":60,
   "bairro novo":75,"marbela":75,"nova almeida":75,"nova almeida centro":75,"parque nova fé":75,"parque da gaivotas":75,"praiamar":75,"reis magos":75,"serramar":75,"são joão":75
 };
-function detectarTaxaAritana(endereco){
-  if(!endereco)return null;
-  const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').trim();
-  const endNorm=norm(endereco);
-  let best=null,bestLen=0;
-  for(const[bairro,taxa]of Object.entries(ARITANA_TAXAS)){
-    const b=norm(bairro);
-    if(endNorm.includes(b)&&b.length>bestLen){bestLen=b.length;best={taxa,bairro};}
+/* A tabela é por nome de bairro. Duas armadilhas que estavam aqui:
+
+   • casava por PEDAÇO de texto, com a rua junto: o bairro "paul" (R$ 20)
+     casava com "Rua Paulo Freire", "centro" com "Rua Centro Comercial".
+     Agora é por palavra inteira, e a rua só entra se o bairro estiver vazio;
+   • não olhava a cidade: "Centro" em Serra recebia os R$ 20 de Vila Velha,
+     embora a tabela tenha "centro da serra" a R$ 55. Agora o bairro é
+     testado primeiro junto do nome da cidade.
+
+   Vence a chave mais longa, como antes. */
+function detectarTaxaAritana(bairro, rua, cidade){
+  const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+  const b=norm(bairro), c=norm(cidade);
+  const chaves=Object.entries(ARITANA_TAXAS).map(([nome,taxa])=>({nome,taxa,k:norm(nome)}));
+  const maisLonga=lista=>lista.reduce((m,x)=>(!m||x.k.length>m.k.length)?x:m,null);
+  /* 1º: a chave que É o bairro junto da cidade ("centro da serra", "serra
+     centro"). Tem de ser IGUAL — procurar a chave dentro do texto montado
+     fazia "Boa Vista" + "da Serra" casar com "vista da serra". */
+  let achou=null;
+  if(b&&c){
+    const comCidade=[b+' da '+c, b+' de '+c, b+' do '+c, c+' '+b, b+' '+c];
+    achou=maisLonga(chaves.filter(x=>comCidade.includes(x.k)));
   }
-  return best;
+  // 2º: a chave como palavra inteira dentro do bairro (ou da rua, se não há bairro).
+  if(!achou){
+    const texto=' '+(b||norm(rua))+' ';
+    achou=maisLonga(chaves.filter(x=>x.k&&texto.includes(' '+x.k+' ')));
+  }
+  return achou?{taxa:achou.taxa,bairro:achou.nome}:null;
+}
+// A mesma regra para parada que não passou pelo formulário (pedido de loja, painel fixo).
+function taxaAritanaDaParada(s){
+  return detectarTaxaAritana(s.neighborhood, s.street||s.address, cityName(resolveCityCode(s.city||s.cityId||'')));
+}
+/* O mesmo nome de bairro existe em mais de uma cidade (Centro, Santa
+   Luzia, Novo Horizonte…) e a tabela guarda um valor só. O app não tem
+   como saber de qual cidade é aquele valor: preenche, mas avisa. */
+function bairroRepetidoEntreCidades(bairro){
+  const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+  const b=norm(bairro);
+  if(!b)return false;
+  return Object.keys(CIDADE_BAIRROS).filter(c=>CIDADE_BAIRROS[c].bairros.some(x=>norm(x)===b)).length>1;
+}
+/* A taxa preenchida pelo app fica marcada (data-auto). Sem a marca, trocar
+   a cidade ou a loja depois deixava o valor antigo no campo — KS em
+   Vitória (R$ 25) corrigida para Serra continuava R$ 25 em vez de R$ 35.
+   Valor DIGITADO nunca é trocado: o oninput do campo apaga a marca. */
+function campoTaxaLivre(){
+  const fValue=document.getElementById('fValue');
+  if(!fValue)return null;
+  if(fValue.value && fValue.dataset.auto!=='1')return null;   // foi digitado: não mexe
+  if(fValue.dataset.auto==='1'){ fValue.value=''; fValue.dataset.auto=''; }
+  return fValue;
+}
+function preencherTaxaAuto(fValue,taxa){
+  fValue.value=taxa.toFixed(2).replace('.',',');
+  fValue.dataset.auto='1';
 }
 function autoTaxaAritana(){
   const store=(document.getElementById('fStore')?.value||'').toUpperCase();
   if(store!=='ARITANA')return;
+  const fValue=campoTaxaLivre();
+  if(!fValue)return;
   const bairro=document.getElementById('fBairro')?.value||'';
   const rua=document.getElementById('fRua')?.value||'';
-  const fValue=document.getElementById('fValue');
-  if(!fValue||fValue.value)return;
-  const match=detectarTaxaAritana(bairro+' '+rua);
+  const cidade=cityName(resolveCityCode(document.getElementById('fCity')?.value||''));
+  const match=detectarTaxaAritana(bairro,rua,cidade);
   if(!match)return;
-  fValue.value=match.taxa.toFixed(2).replace('.',',');
-  toast('🛵 Taxa ARITANA: R$ '+match.taxa+' — '+match.bairro,'success');
+  preencherTaxaAuto(fValue,match.taxa);
+  if(bairroRepetidoEntreCidades(bairro)) toast('⚠️ Taxa ARITANA: R$ '+match.taxa+' — '+match.bairro+'. Há bairro com esse nome em outra cidade: confira o valor.','',5000);
+  else toast('🛵 Taxa ARITANA: R$ '+match.taxa+' — '+match.bairro,'success');
 }
 function autoTaxaKS(){
   const store=(document.getElementById('fStore')?.value||'').toUpperCase();
-  if(store!=='KS')return;
-  const city=document.getElementById('fCity')?.value||'';
-  const code=resolveCityCode(city);
-  const fValue=document.getElementById('fValue');
-  if(!fValue||fValue.value)return;
+  if(store!=='KS'){
+    // Saiu da KS/Aritana: a taxa que o app tinha posto não vale mais.
+    if(store!=='ARITANA') campoTaxaLivre();
+    return;
+  }
+  const fValue=campoTaxaLivre();
+  if(!fValue)return;
+  const code=resolveCityCode(document.getElementById('fCity')?.value||'');
   const taxa=KS_TAXAS_BY_CITY[code];
   if(!taxa)return;
-  fValue.value=taxa.toFixed(2).replace('.',',');
+  preencherTaxaAuto(fValue,taxa);
   toast('🛵 Taxa KS: R$ '+taxa+' — '+cityName(code),'success');
 }
 
@@ -2405,9 +2633,23 @@ function saveQuickPanel(){
   toast(`⚡ ${added} parada(s) adicionada(s)!`,'success');
 }
 
-function updateStopValue(i, rawVal){
+/* O que fazer com o texto que saiu do campo de taxa da lista. Devolve o
+   valor novo, ou null quando NÃO é para gravar: campo intocado, apagado
+   ou com texto sem número. O campo mostra "R$ 35,00"; tocar nele e sair
+   gravava zero (ver parseMoney) e, com zero, o próprio campo sumia da
+   lista — a taxa não tinha mais onde ser consertada. Em qualquer caso o
+   campo volta a mostrar o valor que ficou valendo. */
+function taxaDigitada(rawVal, atual, el){
+  const antes=parseMoney(atual);
   const v=parseMoney(rawVal);
-  if(isNaN(v))return;
+  const mudou=/\d/.test(String(rawVal)) && v>=0 && v!==antes;
+  if(el) el.value=fmtMoney(mudou?v:antes);
+  return mudou?v:null;
+}
+function updateStopValue(i, rawVal, el){
+  if(!stops[i])return;
+  const v=taxaDigitada(rawVal, stops[i].value, el);
+  if(v===null)return;
   stops[i].value=v;
   saveStops();
 }
@@ -2424,15 +2666,32 @@ function saveStop(){
   // Compose full address
   const address = rua + (numero?', '+numero:'') + ', ' + bairro + (cityName(city)?' - '+cityName(city):'');
   
-  const idx = parseInt(document.getElementById('editIdx').value);
-  if(idx >= 0 && (idx >= stops.length || idx < 0)) {
-    toast('Erro: Índice inválido', 'error');
-    return;
+  /* A parada em edição é achada pela IDENTIDADE, não pelo índice guardado
+     quando o formulário abriu: se a lista mudou nesse meio-tempo (pedido
+     aceito, sincronização), o índice aponta para outra parada e a edição
+     caía em cima dela. */
+  let idx = -1;
+  if(editingId){
+    idx = stops.findIndex(x=>x && idDaParada(x)===editingId);
+    if(idx<0) toast('Essa parada saiu da lista em outro aparelho — salvei como nova','error');
   }
-  
+  const antiga = idx>=0 ? stops[idx] : null;
+
+  /* Telefone pela metade vira link de WhatsApp para outra pessoa. Só é
+     cobrado quando foi MEXIDO: parada antiga com número fora do padrão
+     continua editável (quem veio corrigir a taxa não pode ficar preso). */
+  const fone = document.getElementById('fPhone').value.replace(/\D/g,'');
+  const foneAntes = String((antiga&&antiga.phone)||'').replace(/\D/g,'');
+  if(fone && fone!==foneAntes && fone.length!==10 && fone.length!==11){
+    toast('Telefone precisa do DDD (10 ou 11 dígitos) — ou deixe em branco','error'); return;
+  }
+
   const rawDate = document.getElementById('fDelivDate').value;
   const delivDate = rawDate ? rawDate.split('-').reverse().join('/') : '';
-  const s={
+  /* Parte da parada que já existe e troca só os campos do formulário.
+     Antes era um objeto novo, e tudo que não é campo de tela se perdia:
+     _id, _trackKey, dados do repasse, comprovante, _doneDate, cancelled. */
+  const s=Object.assign({}, antiga||{}, {
     name, address,
     street:       rua,
     number:       numero,
@@ -2445,21 +2704,24 @@ function saveStop(){
     reference:    document.getElementById('fReference').value.trim(),
     timeFrom:     document.getElementById('fTimeFrom')?.value || '',
     timeTo:       document.getElementById('fTimeTo')?.value   || '',
-    phone:        document.getElementById('fPhone').value.replace(/\D/g,''),
+    phone:        fone,
     value:        parseMoney(document.getElementById('fValue').value),
     paid:         document.getElementById('fPaid').value==='1',
     productValue: parseMoney(document.getElementById('fProductValue').value),
     productPaid:  document.getElementById('fProductPaid').value==='1',
     notes:        document.getElementById('fNotes').value.trim(),
-    done:         idx>=0 && idx<stops.length ? stops[idx].done : false,
-    _order:       idx>=0 && idx<stops.length ? (stops[idx]._order||idx) : stops.length,
-    _addedDate:   idx>=0 && idx<stops.length ? (stops[idx]._addedDate||new Date().toLocaleDateString('pt-BR')) : new Date().toLocaleDateString('pt-BR')
-  };
-  if(idx>=0) stops[idx]=s; else stops.push(s);
+    done:         antiga ? !!antiga.done : false,
+    _order:       antiga ? (antiga._order||idx) : stops.length,
+    _addedDate:   (antiga && antiga._addedDate) || new Date().toLocaleDateString('pt-BR')
+  });
+  // Nasce com identidade própria: duas paradas iguais são duas paradas.
+  if(!s._id) s._id=novoId();
+  if(antiga) stops[idx]=s; else stops.push(s);
+  editingId=null;
   if(s.city && bairro) addCustomBairro(s.city, bairro);
   saveStops();
-  toast(idx>=0?'Parada atualizada!':'✅ Parada adicionada!','success');
-  goNav('homeScreen','nav-home');
+  toast(antiga?'Parada atualizada!':'✅ Parada adicionada!','success');
+  sairDoFormulario();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2484,8 +2746,41 @@ async function getGpsOrigin(){
     return pos.coords.latitude+','+pos.coords.longitude;
   }catch(e){return null;}
 }
+/* Agendada = marcada para um dia DEPOIS de hoje. A lista já separava
+   essas paradas numa seção própria, mas a rota não: o mapa recebia junto
+   as entregas de amanhã e da semana que vem. */
+function ehAgendada(s){
+  if(!s||!s.deliveryDate)return false;
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  try{ return parseDate(s.deliveryDate)>hoje; }catch(e){ return false; }
+}
+// O que entra na rota de hoje: pendente e não agendada para outro dia.
+function paradasDaRota(){ return stops.filter(s=>s&&!s.done&&!ehAgendada(s)); }
+
+/* Aplica a ordem da rota sobre a lista VIVA, pela identidade das paradas.
+   A otimização leva dezenas de segundos (geocodificação, GPS, OSRM).
+   Antes, no fim, a lista era trocada por uma montada a partir da cópia
+   tirada no começo: parada que chegasse nesse intervalo (pedido aceito,
+   outro celular) ficava de fora e era apagada — com lápide, então sumia
+   também do outro aparelho. Agora quem não está na rota fica onde estava,
+   depois das roteadas; e parada removida no meio do cálculo não volta. */
+function ordenarPelaRota(lista, idsNaOrdem){
+  const pos=new Map(idsNaOrdem.map((id,i)=>[id,i]));
+  const naRota=[], fora=[], feitas=[];
+  lista.forEach(s=>{
+    if(!s)return;
+    if(s.done)feitas.push(s);
+    else if(pos.has(idDaParada(s)))naRota.push(s);
+    else fora.push(s);
+  });
+  naRota.sort((a,b)=>pos.get(idDaParada(a))-pos.get(idDaParada(b)));
+  const nova=[...naRota,...fora,...feitas];
+  nova.forEach((s,i)=>{ s._order=i; });
+  return nova;
+}
+
 async function openRoute(){
-  const active=stops.filter(s=>!s.done);
+  const active=paradasDaRota();
   if(!active.length){ toast('Nenhuma parada pendente','error'); return; }
   const origin=await getGpsOrigin();
   const url=buildMapsUrl(active.map(s=>s.address),origin);
@@ -2577,8 +2872,8 @@ async function osrmTripOptimize(items, originCoords, destCoords=null){
 }
 
 async function optimizeAndOpenRoute(){
-  const active=stops.map((s,i)=>({...s,_si:i})).filter(s=>!s.done);
-  if(!active.length){toast('Nenhuma parada pendente','error');return;}
+  const active=paradasDaRota().map(s=>({...s}));
+  if(!active.length){toast('Nenhuma parada pendente para hoje','error');return;}
   const btn=document.getElementById('optimizeBtn');
   btn.disabled=true; btn.textContent='⏳ Calculando...';
   try{
@@ -2624,10 +2919,7 @@ async function optimizeAndOpenRoute(){
 
     // 4. Reordenar array de paradas
     const finalOrder=[...ordered,...withoutCoords];
-    const newStops=[];
-    finalOrder.forEach((s,ni)=>{const orig=stops[s._si];if(orig){orig._order=ni;newStops.push(orig);}});
-    stops.filter(s=>s.done).forEach(s=>{s._order=newStops.length;newStops.push(s);});
-    stops=newStops; saveStops(); renderHome();
+    stops=ordenarPelaRota(stops, finalOrder.map(idDaParada)); saveStops(); renderHome();
 
     // 5. Abrir no Maps: GPS → entregas otimizadas → casa
     const mapsAddrs=finalOrder.map(s=>s.address);
@@ -2677,10 +2969,10 @@ function sendQ(type){
     .replace(/{nome}/g,nome)
     .replace(/{loja}/g,loja)
     .replace(/{tipo}/g,tipo);
-  window.open(`https://wa.me/55${wppStop.phone}?text=${encodeURIComponent(msg)}`,'_blank');
+  window.open(`https://wa.me/${numeroWpp(wppStop.phone)}?text=${encodeURIComponent(msg)}`,'_blank');
   closeWpp();
 }
-function sendCustomWpp(){ if(!wppStop)return; const msg=document.getElementById('wppCustom').value.trim(); if(!msg){toast('Digite uma mensagem','error');return;} window.open(`https://wa.me/55${wppStop.phone}?text=${encodeURIComponent(msg)}`,'_blank'); closeWpp(); }
+function sendCustomWpp(){ if(!wppStop)return; const msg=document.getElementById('wppCustom').value.trim(); if(!msg){toast('Digite uma mensagem','error');return;} window.open(`https://wa.me/${numeroWpp(wppStop.phone)}?text=${encodeURIComponent(msg)}`,'_blank'); closeWpp(); }
 
 // ═══════════════════════════════════════════════════════
 //  § 21 — IMPORTAR LISTA COLADA
@@ -2719,11 +3011,13 @@ async function doParse(){
   const btn=document.getElementById('parseBtn'); const orig=btn.innerHTML;
   btn.innerHTML='⏳...'; btn.disabled=true;
   const parsed = smartParse(text);
-  document.getElementById('fName').value       =parsed.name       ||'';
-  document.getElementById('fComplement').value =parsed.complement ||'';
-  document.getElementById('fReference').value  =parsed.reference  ||'';
-  document.getElementById('fNotes').value      =parsed.notes      ||'';
-  const ph=document.getElementById('fPhone'); ph.value=parsed.phone||''; if(parsed.phone)maskPhone(ph);
+  /* Só preenche o que a mensagem trouxe. Antes cada campo era regravado
+     com `parsed.x||''`: colar uma mensagem só com o endereço apagava o
+     nome e o telefone que já estavam digitados. */
+  const poe=(id,v)=>{ if(v) document.getElementById(id).value=v; };
+  poe('fName',parsed.name); poe('fComplement',parsed.complement);
+  poe('fReference',parsed.reference); poe('fNotes',parsed.notes);
+  if(parsed.phone){ const ph=document.getElementById('fPhone'); ph.value=parsed.phone; maskPhone(ph); }
   if(parsed.street)       document.getElementById('fRua').value    = parsed.street;
   if(parsed.number)       document.getElementById('fNumero').value = parsed.number;
   if(parsed.neighborhood) document.getElementById('fBairro').value = parsed.neighborhood;
@@ -2741,54 +3035,49 @@ async function doParse(){
 // ═══════════════════════════════════════════════════════
 //  § 22 — GANHOS
 // ═══════════════════════════════════════════════════════
-function renderFinance(){
-  const todayStr=new Date().toLocaleDateString('pt-BR');
-  const now=new Date();
+/* Os números de Ganhos, apurados num lugar só e a partir da MESMA lista do
+   fechamento e da fatura (entregasFeitas). A tela tinha uma terceira
+   regra: somava parada pendente como ganho, somava as cópias que a virada
+   do dia deixava no histórico (uma entrega agendada para daqui a 5 dias
+   contava 5 vezes) e ignorava cancelamento.
 
-  // Semana calendário: Segunda → Domingo atual
-  const dow=now.getDay(); // 0=Dom, 1=Seg...
+   • ganho é o que foi ENTREGUE; o que está na rua aparece à parte;
+   • lucro desconta as despesas E o que vai para o motoboy do repasse;
+   • a média diária é sempre últimos 7 dias ÷ 7. Antes dividia pelo dia do
+     mês: no dia 3, sete dias de faturamento eram divididos por 3 e a
+     projeção saía mais que dobrada. */
+function apurarGanhos(){
+  const now=new Date();
+  const hojeStr=now.toLocaleDateString('pt-BR');
+  const dow=now.getDay();           // semana calendário: segunda → hoje
   const wkStart=new Date(now); wkStart.setDate(now.getDate()-((dow===0)?6:dow-1)); wkStart.setHours(0,0,0,0);
   const m1=new Date(now.getFullYear(),now.getMonth(),1);
-  const r7=new Date(now); r7.setDate(now.getDate()-6); r7.setHours(0,0,0,0);
+  const feitas=entregasFeitas().filter(s=>!s._cancelled);
+  const soma=l=>l.reduce((a,s)=>a+parseMoney(s.value),0);
+  const desde=d=>feitas.filter(s=>parseDate(s._date)>=d);
+  const hoje=feitas.filter(s=>s._date===hojeStr);
+  const naRua=paradasDaRota();      // pendentes de hoje: ainda não são ganho
+  const semana=desde(wkStart);
+  const ultimos7=soma(desde(inicioPeriodo('week')));
+  const diasNoMes=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  const g={
+    feitas, hoje, naRua,
+    hojeFeito:soma(hoje), hojeRecebido:soma(hoje.filter(s=>s.paid)), hojeEntregas:hoje.length,
+    hojeNaRua:soma(naRua),
+    hojeMotoboys:hoje.reduce((a,s)=>a+parseMoney(s.repassValor),0),
+    semana:soma(semana), mes:soma(desde(m1)), ultimos7,
+    mediaDiaria:ultimos7/7, diasRestantes:diasNoMes-now.getDate()
+  };
+  g.projecao=g.mes+g.mediaDiaria*g.diasRestantes;
+  g.lucroHoje=despesas=>g.hojeFeito-(despesas||0)-g.hojeMotoboys;
+  return g;
+}
 
-  // Lista plana — usa _addedDate > deliveryDate > day.date como data efetiva
-  // Constrói índice de stops já arquivados no histórico para evitar duplicação
-  const archivedKeys=new Set();
-  history.forEach(day=>day.stops.forEach(s=>{
-    archivedKeys.add(s._trackKey?'tk_'+s._trackKey:'c_'+(s.name||'')+'|'+(s.address||'')+'|'+(s.value||''));
-  }));
-  const todayDt0=new Date(); todayDt0.setHours(0,0,0,0);
-  const allDays=[{date:todayStr,stops},...history];
-  const flatStops=[];
-  allDays.forEach(day=>day.stops.forEach(s=>{
-    // Entregas agendadas para dias futuros ainda não realizadas não contam nos ganhos
-    if(!s.done&&s.deliveryDate){
-      try{if(parseDate(s.deliveryDate)>todayDt0)return;}catch(e){}
-    }
-    // Paradas finalizadas sem _addedDate nos stops atuais que já estão no histórico
-    // são de dias anteriores — ignora para evitar contagem duplicada
-    if(day===allDays[0]&&s.done&&!s._addedDate){
-      const k=s._trackKey?'tk_'+s._trackKey:'c_'+(s.name||'')+'|'+(s.address||'')+'|'+(s.value||'');
-      if(archivedKeys.has(k))return;
-    }
-    const effDate=day===allDays[0]?(s.deliveryDate||s._addedDate||day.date):day.date;
-    flatStops.push({...s,_effDate:effDate});
-  }));
-  const tryDt=s=>{try{return parseDate(s._effDate);}catch(e){return new Date(0);}};
-
-  const todayStops=flatStops.filter(s=>s._effDate===todayStr);
-  const todayTotal=todayStops.reduce((a,s)=>a+parseMoney(s.value),0);
-  const todayRec  =todayStops.filter(s=>s.paid).reduce((a,s)=>a+parseMoney(s.value),0);
-  const todayDone =todayStops.filter(s=>s.done).length;
-  // Split finalizadas (done) vs pendentes — para as barras de meta
-  const todayDoneTotal=todayStops.filter(s=>s.done).reduce((a,s)=>a+parseMoney(s.value),0);
-  const todayPendTotal=todayTotal-todayDoneTotal;
-  const wkStops   =flatStops.filter(s=>tryDt(s)>=wkStart);
-  const wkTotal   =wkStops.reduce((a,s)=>a+parseMoney(s.value),0);
-  const wkDoneTotal=wkStops.filter(s=>s.done).reduce((a,s)=>a+parseMoney(s.value),0);
-  const wkPendTotal=wkTotal-wkDoneTotal;
-  const mTotal    =flatStops.filter(s=>tryDt(s)>=m1).reduce((a,s)=>a+parseMoney(s.value),0);
-  const r7Total   =flatStops.filter(s=>tryDt(s)>=r7).reduce((a,s)=>a+parseMoney(s.value),0);
+function renderFinance(){
+  const g=apurarGanhos();
+  const todayTotal=g.hojeFeito+g.hojeNaRua;
+  const todayDoneTotal=g.hojeFeito, todayPendTotal=g.hojeNaRua;
+  const wkDoneTotal=g.semana, wkPendTotal=g.hojeNaRua, wkTotal=g.semana+g.hojeNaRua;
   // Meta
   const meta=parseFloat(cfg.meta)||0;
   document.getElementById('metaInp').value=meta||'';
@@ -2832,33 +3121,28 @@ function renderFinance(){
   // Despesas e lucro
   const todayExps=getTodayExpenses();
   const todayExpTotal=getExpenseTotal(todayExps);
-  const todayProfit=todayTotal-todayExpTotal;
-  // Projeção mensal: média dos últimos 7 dias corridos × dias restantes
-  const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
-  const dayOfMonth=now.getDate();
-  const daysLeft=daysInMonth-dayOfMonth;
-  const avg7=r7Total/Math.min(7,dayOfMonth)||0;
-  const projection=mTotal+(avg7*daysLeft);
+  const todayProfit=g.lucroHoje(todayExpTotal);
+  const plural=(n,um,muitos)=>n+' '+(n===1?um:muitos);
 
   // Summary grid 1
   document.getElementById('sumGrid').innerHTML=`
-    <div class="sum-card heroi"><div><div class="sum-lbl">Hoje</div><div class="sum-val">${fmtMoney(todayTotal)}</div><div class="sum-sub">${todayDone} entrega${todayDone===1?'':'s'}</div></div><div class="sum-heroi-lado"><b class="gr">${fmtMoney(todayRec)}</b><br>recebido<br><b class="ac">${fmtMoney(todayTotal-todayRec)}</b><br>a receber</div></div>
-    <div class="sum-card"><div class="sum-lbl">Semana</div><div class="sum-val">${fmtMoney(wkTotal)}</div></div>
-    <div class="sum-card"><div class="sum-lbl">Mês atual</div><div class="sum-val">${fmtMoney(mTotal)}</div></div>`;
+    <div class="sum-card heroi"><div><div class="sum-lbl">Hoje · entregue</div><div class="sum-val">${fmtMoney(g.hojeFeito)}</div><div class="sum-sub">${plural(g.hojeEntregas,'entrega','entregas')}${g.hojeNaRua>0?` · + ${fmtMoney(g.hojeNaRua)} na rua`:''}</div></div><div class="sum-heroi-lado"><b class="gr">${fmtMoney(g.hojeRecebido)}</b><br>recebido<br><b class="ac">${fmtMoney(g.hojeFeito-g.hojeRecebido)}</b><br>a receber</div></div>
+    <div class="sum-card"><div class="sum-lbl">Semana</div><div class="sum-val">${fmtMoney(g.semana)}</div></div>
+    <div class="sum-card"><div class="sum-lbl">Mês atual</div><div class="sum-val">${fmtMoney(g.mes)}</div></div>`;
   // Summary grid 2: despesas, lucro, projeção
   document.getElementById('sumGrid2').innerHTML=`
-    <div class="sum-card"><div class="sum-lbl">Despesas hoje</div><div class="sum-val ${todayExpTotal>0?'rd':''}">${fmtMoney(todayExpTotal)}</div><div class="sum-sub">${todayExps.length} ${todayExps.length===1?'item':'itens'}</div></div>
-    <div class="sum-card"><div class="sum-lbl">Lucro hoje</div><div class="sum-val ${todayProfit>=0?'gr':'rd'}">${fmtMoney(todayProfit)}</div><div class="sum-sub">taxas − despesas</div></div>
-    <div class="sum-card largo"><div class="sum-lbl">Projeção do mês</div><div class="sum-val">${fmtMoney(projection)}</div><div class="sum-sub">Pela média dos últimos 7 dias · faltam ${daysLeft} dias</div></div>`;
-  drawChart(flatStops);
+    <div class="sum-card"><div class="sum-lbl">Despesas hoje</div><div class="sum-val ${todayExpTotal>0?'rd':''}">${fmtMoney(todayExpTotal)}</div><div class="sum-sub">${plural(todayExps.length,'item','itens')}</div></div>
+    <div class="sum-card"><div class="sum-lbl">Lucro hoje</div><div class="sum-val ${todayProfit>=0?'gr':'rd'}">${fmtMoney(todayProfit)}</div><div class="sum-sub">entregue − despesas${g.hojeMotoboys>0?` − ${fmtMoney(g.hojeMotoboys)} de motoboys`:''}</div></div>
+    <div class="sum-card largo"><div class="sum-lbl">Projeção do mês</div><div class="sum-val">${fmtMoney(g.projecao)}</div><div class="sum-sub">Média de ${fmtMoney(g.mediaDiaria)} por dia nos últimos 7 dias · faltam ${plural(g.diasRestantes,'dia','dias')}</div></div>`;
+  drawChart(g.feitas.map(s=>({...s,_effDate:s._date})));
   // Expenses
   renderExpenses(todayExps);
   renderMotoboyBreak();
-  // Store breakdown
+  // Por loja — hoje: o que foi entregue e o que ainda está na rua
   const sm={};
-  stops.forEach(s=>{ const k=s.store||'Sem loja'; if(!sm[k])sm[k]={t:0,c:0}; sm[k].t+=parseMoney(s.value); sm[k].c++; });
+  [...g.hoje,...g.naRua].forEach(s=>{ const k=s.store||'Sem loja'; if(!sm[k])sm[k]={t:0,c:0}; sm[k].t+=parseMoney(s.value); sm[k].c++; });
   document.getElementById('storeBreak').innerHTML='<div class="chart-lbl" style="margin-bottom:10px">Por loja — hoje</div>'+
-    (Object.keys(sm).length?Object.entries(sm).map(([n,v])=>`<div class="break-row"><div class="break-name">🏪 ${n}</div><div><div class="break-val">${fmtMoney(v.t)}</div><div class="break-cnt">${v.c} parada(s)</div></div></div>`).join(''):'<div style="color:var(--muted);font-size:13px">Nenhuma parada hoje</div>');
+    (Object.keys(sm).length?Object.entries(sm).map(([n,v])=>`<div class="break-row"><div class="break-name">🏪 ${esc(n)}</div><div><div class="break-val">${fmtMoney(v.t)}</div><div class="break-cnt">${v.c} parada(s)</div></div></div>`).join(''):'<div style="color:var(--muted);font-size:13px">Nenhuma parada hoje</div>');
   drawDonut(sm);
 }
 
@@ -2967,9 +3251,33 @@ function renderMotoboyBreak(){
 // ═══════════════════════════════════════════════════════
 //  § 25 — HISTÓRICO — acesso direto
 // ═══════════════════════════════════════════════════════
-function markStoreReceived(storeName){
-  history.forEach(day=>day.stops.forEach(s=>{if(s.store===storeName)s.paid=true;}));
-  saveHistory();renderReport();toast('✅ '+storeName+' marcado como recebido','success');
+/* A parada de verdade por trás de uma linha do fechamento: a de hoje mora
+   em `stops`, a arquivada no dia _bucket do histórico. */
+function paradaReal(e){
+  const id=idDaParada(e);
+  if(e._hoje) return stops.find(s=>s&&idDaParada(s)===id)||null;
+  const dia=history.find(d=>d.date===e._bucket);
+  return (dia&&dia.stops.find(s=>s&&idDaParada(s)===id))||null;
+}
+
+/* "Marcar pago" no cartão da loja. O cartão mostra o período da tela, mas
+   o botão quitava a loja no histórico INTEIRO (todos os períodos, feitas
+   ou não), não mexia nas entregas de hoje, não perguntava e não tinha
+   volta: um toque na tela de 7 dias apagava a dívida de semanas. Agora
+   quita só o que o cartão mostra, diz quanto, e dá para desfazer. */
+async function markStoreReceived(storeName){
+  const d=getReportData();
+  const abertas=d.allStops.filter(s=>(s.store||'Sem loja')===storeName&&!s._cancelled&&!s.paid&&parseMoney(s.value)>0);
+  if(!abertas.length){ toast('✅ '+storeName+' não deve nada neste período','success'); return; }
+  const valor=abertas.reduce((a,s)=>a+parseMoney(s.value),0);
+  if(!await confirmarAcao({titulo:'💰 Marcar como pago',
+    texto:`Marcar ${abertas.length} entrega(s) de ${storeName} como pagas?`,
+    detalhe:`${fmtMoney(valor)} — só as entregas do período na tela (${d.label.toLowerCase()}). O que for de outro período continua em aberto.`,
+    botao:'Marcar pago'}))return;
+  const mexidas=abertas.map(paradaReal).filter(Boolean);
+  const gravar=pago=>{ mexidas.forEach(s=>{s.paid=pago;}); saveStops(); saveHistory(); renderReport(); };
+  gravar(true);
+  comDesfazer(`✅ ${storeName}: ${fmtMoney(valor)} marcado como pago`, ()=>{ gravar(false); toast('↩️ Voltou a ficar em aberto','success'); });
 }
 function markDayReceived(ref){
   const di=typeof ref==='string'?history.findIndex(d=>d.date===ref):ref;
@@ -3099,6 +3407,10 @@ function salvarEditHist(){
   s.serviceType  = document.getElementById('ehTipo').value;
   s.cancelled    = document.getElementById('ehCancelada').checked;
   s.paid         = document.getElementById('ehPaga').checked;
+  /* Cancelada não tem taxa nem pagamento — igual ao cancelamento pedido
+     pela loja. Antes só a marca era gravada e o valor ficava: quem soma
+     taxa sem olhar a marca continuava cobrando. Desfazer devolve tudo. */
+  if(s.cancelled){ s.value=0; s.paid=false; }
   /* O endereço de uma linha é o que a maioria das telas mostra. Recompor
      aqui evita a entrega ficar com nome novo e endereço velho. */
   s.address = [rua + (numero ? ', ' + numero : ''), bairro, cityName(cidade)]
@@ -3160,6 +3472,45 @@ function entregasSuspeitas(d){
   return fora;
 }
 
+/* Quem deve, quanto e há quanto tempo — de TUDO o que o app guarda, não só
+   do período da tela. O "a receber" do fechamento muda com a aba (7 dias,
+   mês, 60 dias) e nenhuma delas respondia à pergunta que importa na hora
+   de cobrar: quanto cada loja me deve, no total, e desde quando. */
+function contasAReceber(){
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const porLoja={};
+  entregasFeitas().forEach(s=>{
+    if(s._cancelled||s.paid)return;
+    const v=parseMoney(s.value);
+    if(!(v>0))return;
+    const k=s.store||'Sem loja';
+    const dias=Math.max(0,Math.round((hoje-parseDate(s._date))/86400000));
+    const l=porLoja[k]||(porLoja[k]={loja:k,valor:0,entregas:0,dias:0});
+    l.valor+=v; l.entregas++; if(dias>l.dias)l.dias=dias;
+  });
+  return Object.values(porLoja).sort((a,b)=>b.valor-a.valor);
+}
+
+function _renderContas(){
+  const el=document.getElementById('reportContas');
+  if(!el)return;
+  const contas=contasAReceber();
+  if(!contas.length){ el.innerHTML=''; return; }
+  const total=contas.reduce((a,c)=>a+c.valor,0);
+  const idade=d=>d===0?'de hoje':d===1?'desde ontem':'a mais antiga há '+d+' dias';
+  el.innerHTML=`<div class="contas">
+    <div class="contas-cab"><span>A receber · tudo em aberto</span><b>${fmtMoney(total)}</b></div>
+    ${contas.map(c=>`<div class="conta">
+      <div class="conta-info">
+        <div class="conta-loja">${esc(c.loja)}</div>
+        <div class="conta-sub${c.dias>30?' velha':''}">${c.entregas} entrega${c.entregas!==1?'s':''} · ${idade(c.dias)}</div>
+      </div>
+      <div class="conta-valor">${fmtMoney(c.valor)}</div>
+      ${c.loja==='Sem loja'?'':`<button type="button" class="sc-btn wpp" onclick="cobrancaWppLoja('${escJs(c.loja)}')" aria-label="Cobrar ${esc(c.loja)} pelo WhatsApp">Cobrar</button>`}
+    </div>`).join('')}
+  </div>`;
+}
+
 function _renderSuspeitas(d){
   const el = document.getElementById('reportSuspeitas');
   if(!el) return;
@@ -3191,9 +3542,33 @@ function _renderSuspeitas(d){
    Agora funde por identidade. A versão de agora vence a que já estava
    gravada (é a mais recente da mesma parada), e o que só existe na
    gravada permanece. */
+const HIST_DIAS_INTEIROS = 60;
+
+/* Põe o histórico em ordem e no tamanho.
+
+   • Só entrega FEITA mora aqui. Versões antigas copiavam a lista inteira a
+     cada virada de dia; as cópias de parada pendente que ficaram são
+     varridas (a original continuou na lista até ser entregue ou apagada).
+   • Os HIST_DIAS_INTEIROS dias mais recentes ficam inteiros.
+   • Dos mais antigos fica só o que AINDA É DEVIDO. Antes o corte era
+     `slice(0,60)`, sem olhar o que saía: entrega que a loja não pagou
+     sumia do "a receber" e da cobrança, em silêncio. Dívida só sai do
+     histórico quando é paga. */
+function apararHistorico(lista){
+  const dias = (Array.isArray(lista) ? lista : [])
+    .filter(d => d && d.date && Array.isArray(d.stops))
+    .map(d => ({ ...d, stops: d.stops.filter(s => s && s.done) }))
+    .filter(d => d.stops.length)
+    .sort((a, b) => parseDate(b.date) - parseDate(a.date));
+  const devida = s => !s.paid && !s.cancelled && parseMoney(s.value) > 0;
+  return dias.map((d, i) => i < HIST_DIAS_INTEIROS ? d : { ...d, stops: d.stops.filter(devida) })
+    .filter(d => d.stops.length);
+}
+
 function saveToHistory(date){
-  if(!stops.length)return;
-  const novas = JSON.parse(JSON.stringify(stops));
+  // Só o que foi entregue: a pendente continua na lista, não é história ainda.
+  const novas = JSON.parse(JSON.stringify(stops.filter(s => s && s.done)));
+  if(!novas.length)return;
   const ex = history.findIndex(d=>d.date===date);
   if(ex>=0){
     const porId = new Map((history[ex].stops||[]).map(s=>[idDaParada(s), s]));
@@ -3202,7 +3577,7 @@ function saveToHistory(date){
   } else {
     history.unshift({date, stops:novas});
   }
-  if(history.length>60)history=history.slice(0,60);
+  history=apararHistorico(history);
   saveHistory();
 }
 
@@ -3224,43 +3599,66 @@ window.addEventListener('DOMContentLoaded', function(){
   }, 100);
 });
 
-function getReportData(){
+/* Início de cada período, sempre à meia-noite. A tela cortava em "agora
+   menos 7 dias" e a fatura em "meia-noite de 7 dias atrás": a fatura
+   pegava um dia a mais que o fechamento. Agora os dois perguntam aqui. */
+function inicioPeriodo(p){
+  const d=new Date(); d.setHours(0,0,0,0);
+  if(p==='month') return new Date(d.getFullYear(),d.getMonth(),1);
+  d.setDate(d.getDate()-(p==='week'?6:59));
+  return d;
+}
+
+/* UMA lista só do que foi ENTREGUE. Fechamento, fatura da loja e cobrança
+   por WhatsApp leem daqui — antes cada um varria as paradas com a sua
+   regra, e a fatura cobrava parada que ainda estava na rua (o mesmo dia
+   dava R$ 30 no fechamento e R$ 95 na fatura).
+
+   Regras, todas num lugar:
+   • só entra parada finalizada (cancelada aceita também é finalizada:
+     aparece assinalada, com taxa zero);
+   • a mesma entrega pode existir em `stops` e no histórico (depois de um
+     "limpar o dia"): vence a primeira ocorrência, a de `stops`;
+   • a data é a da ENTREGA (_doneDate), e é por ela que o período corta.
+     _bucket/_si dizem onde a parada está guardada de verdade — é o que
+     acha a parada de volta na hora de corrigir. */
+function entregasFeitas(desde, ate){
   const todayStr=new Date().toLocaleDateString('pt-BR');
   const allDays=[{date:todayStr,stops},...history];
-  const now=new Date();
-  let cutoff;
-  if(reportPeriod==='week'){ cutoff=new Date(now); cutoff.setDate(now.getDate()-7); }
-  else if(reportPeriod==='month') cutoff=new Date(now.getFullYear(),now.getMonth(),1);
-  else{ cutoff=new Date(now); cutoff.setDate(now.getDate()-60); }
-  const days=allDays.filter(d=>parseDate(d.date)>=cutoff);
-  let total=0,received=0,deliveries=0,cancelled=0; const allStops=[]; const sm={};
-  /* A mesma entrega pode aparecer duas vezes: `stops` (hoje) e o registro
-     que o "limpar o dia" gravou em history para a data de hoje descrevem
-     as mesmas paradas. Sem esta trava ela entra DUAS VEZES no total do
-     fechamento. Vence a primeira ocorrência, que é a de `stops` — a mais
-     recente. */
   const jaContadas=new Set();
-  const ehHoje=day=>day===allDays[0];
-  days.forEach(day=>day.stops.forEach((s,si)=>{
-    // Apenas entregas finalizadas entram no fechamento
-    if(!s.done)return;
+  const feitas=[];
+  allDays.forEach((day,di)=>(day.stops||[]).forEach((s,si)=>{
+    if(!s||!s.done)return;
     const id=idDaParada(s);
     if(jaContadas.has(id))return;
     jaContadas.add(id);
-    // Usa a data em que foi finalizada (_doneDate); cai para a lógica antiga se ausente
-    const reportDate=s._doneDate||(day===days[0]?(s.deliveryDate||s._addedDate||day.date):day.date);
-    /* _date é a data que o fechamento MOSTRA; _bucket é o dia em que a
-       parada está guardada de verdade. Os dois divergem quando _doneDate
-       difere do dia do histórico — e é o _bucket que acha a parada de
-       volta na hora de corrigir. */
-    const onde={_date:reportDate,_bucket:day.date,_si:si,_hoje:ehHoje(day)};
-    // Entregas canceladas aparecem assinaladas, com taxa zerada e fora dos totais
-    if(s.cancelled){ cancelled++; allStops.push({...s,...onde,_cancelled:true}); return; }
-    const v=parseMoney(s.value); total+=v; if(s.paid)received+=v; deliveries++;
-    allStops.push({...s,...onde});
-    const k=s.store||'Sem loja'; if(!sm[k])sm[k]={t:0,c:0,r:0}; sm[k].t+=v; sm[k].c++; if(s.paid)sm[k].r+=v;
+    const hoje=di===0;
+    let data=s._doneDate||(hoje?(s.deliveryDate||s._addedDate||day.date):day.date);
+    let dt=null;
+    try{ dt=parseDate(data); }catch(e){}
+    // Data ilegível não pode sumir com o dinheiro: cai no dia em que está guardada.
+    if(!dt||isNaN(dt)){ data=day.date; try{ dt=parseDate(data); }catch(e){ dt=null; } }
+    if(!dt||isNaN(dt))return;
+    if(desde&&dt<desde)return;
+    if(ate&&dt>ate)return;
+    const e={...s,_date:data,_bucket:day.date,_si:si,_hoje:hoje};
+    if(s.cancelled)e._cancelled=true;
+    feitas.push(e);
   }));
-  const range=days.length?days[days.length-1].date+' — '+days[0].date:'Sem dados';
+  return feitas;
+}
+
+function getReportData(){
+  const cutoff=inicioPeriodo(reportPeriod);
+  let total=0,received=0,deliveries=0,cancelled=0; const sm={};
+  const allStops=entregasFeitas(cutoff);
+  allStops.forEach(s=>{
+    // Entregas canceladas aparecem assinaladas, com taxa zerada e fora dos totais
+    if(s._cancelled){ cancelled++; return; }
+    const v=parseMoney(s.value); total+=v; if(s.paid)received+=v; deliveries++;
+    const k=s.store||'Sem loja'; if(!sm[k])sm[k]={t:0,c:0,r:0}; sm[k].t+=v; sm[k].c++; if(s.paid)sm[k].r+=v;
+  });
+  const range=cutoff.toLocaleDateString('pt-BR')+' — '+new Date().toLocaleDateString('pt-BR');
   const label=reportPeriod==='week'?'Últimos 7 dias':reportPeriod==='month'?'Mês atual':'Últimos 60 dias';
   return {total,received,pending:total-received,deliveries,cancelled,allStops,sm,range,label,cutoff};
 }
@@ -3279,6 +3677,7 @@ function genReportNumber(){
 function renderReport(){
   const d=getReportData();
   document.getElementById('btnPdf').disabled=!d.allStops.length;
+  _renderContas();
   _renderSummary(d);
   _renderSuspeitas(d);
   _renderMotoboys(d);
@@ -3327,7 +3726,10 @@ function _renderStores(d){
       <div class="sc-row1">
         <button type="button" class="sc-btn" id="fat7_${nid}" onclick="genFaturaLoja('${ne}','semana',this)">📄 7 dias</button>
         <button type="button" class="sc-btn" id="fatM_${nid}" onclick="genFaturaLoja('${ne}','mes',this)">📄 Mês</button>
-        <button type="button" class="sc-btn" onclick="abrirFaturaPersonalizada('${ne}')">📅 Período</button>
+        <button type="button" class="sc-btn" onclick="genFaturaLoja('${ne}','mes_passado',this)">📄 Mês passado</button>
+      </div>
+      <div class="sc-row1" style="grid-template-columns:1fr;">
+        <button type="button" class="sc-btn" onclick="abrirFaturaPersonalizada('${ne}')">📅 Fatura de outro período</button>
       </div>
       <div class="sc-row1" style="grid-template-columns:1fr;">
         <button type="button" class="sc-btn blue" onclick="abrirFaturaPersonalizada('${ne}','link')">🔗 Enviar fatura p/ o cliente conferir</button>
@@ -3422,7 +3824,7 @@ function _renderDays(d){
       const prodVal=parseMoney(s.productValue);
       const payFn=day.isToday?`togPaid(${si})`:`togHistPaid('${day.date}',${si})`;
       const prodFn=day.isToday?`togProductPaid(${si})`:`togHistProductPaid('${day.date}',${si})`;
-      const wppNum=(s.phone||'').replace(/\D/g,'');
+      const wppNum=numeroWpp(s.phone);
       const addr=[s.street,s.number,s.complement,s.neighborhood].filter(Boolean).join(' ');
       const city=cityName(resolveCityCode(s.city||s.cityId))||'';
       const fullAddr=addr+(city?' · '+city:'');
@@ -3441,8 +3843,8 @@ function _renderDays(d){
             <button type="button" class="sc-btn" style="font-size:12px;padding:5px 8px;color:var(--muted);border-color:var(--border);" title="Corrigir esta entrega" onclick="abrirEditHist('${escJs(day.date)}',${si},${day.isToday?'true':'false'});event.stopPropagation();">✏️</button>
           </div>
         </div>
-        ${wppNum?`<a href="https://wa.me/55${wppNum}" target="_blank" style="font-size:13px;color:#25d366;font-weight:700;text-decoration:none;">📞 ${fmtPhone(s.phone)}</a>`:(s.phone?`<div style="font-size:13px;color:var(--muted);">📞 ${s.phone}</div>`:'')}
-        ${fullAddr?`<div style="font-size:13px;color:var(--muted);">📍 ${fullAddr}</div>`:''}
+        ${wppNum?`<a href="https://wa.me/${wppNum}" target="_blank" style="font-size:13px;color:#25d366;font-weight:700;text-decoration:none;">📞 ${fmtPhone(s.phone)}</a>`:(s.phone?`<div style="font-size:13px;color:var(--muted);">📞 ${esc(s.phone)}</div>`:'')}
+        ${fullAddr?`<div style="font-size:13px;color:var(--muted);">📍 ${esc(fullAddr)}</div>`:''}
         ${s.address&&!addr?`<div style="font-size:13px;color:var(--muted);">📍 ${esc(s.address)}</div>`:''}
         ${(s.reference||s.notes)?`<div style="font-size:12px;color:var(--muted);opacity:.8;">💬 ${esc([s.reference,s.notes].filter(Boolean).join(' · '))}</div>`:''}
         ${linhaQuemEntregou(s)}
@@ -3502,8 +3904,8 @@ function _renderSearch(q){
   }
   el.innerHTML='<div class="fsec-title">'+matches.length+' resultado(s)</div>'+matches.map(({day,s,si})=>{
     const val=parseMoney(s.value);
-    const wppNum=(s.phone||'').replace(/\D/g,'');
-    const wppLink=wppNum?`<a href="https://wa.me/55${wppNum}" target="_blank" style="color:#25d366;font-weight:700;font-size:13px;">💬 ${fmtPhone(s.phone)}</a>`:'';
+    const wppNum=numeroWpp(s.phone);
+    const wppLink=wppNum?`<a href="https://wa.me/${wppNum}" target="_blank" style="color:#25d366;font-weight:700;font-size:13px;">💬 ${fmtPhone(s.phone)}</a>`:'';
     const addr=[s.street,s.number,s.complement,s.neighborhood].filter(Boolean).join(' ');
     const city=cityName(resolveCityCode(s.city||s.cityId))||'';
     return `<div class="sc" style="margin-bottom:8px;">
@@ -3552,7 +3954,7 @@ async function genPDF(){
         cliente:'',
         titulo:'FECHAMENTO · '+d.label.toUpperCase(),
         periodo:{inicio:primeira,fim:ultima},
-        emissao:now.toISOString(),
+        emissao:agoraLocalISO(),
         moeda:'BRL'
       },
       pagamento:{recebido:d.received},
@@ -3572,7 +3974,7 @@ function abrirFaturaPersonalizada(storeName, modo){
   modo=modo||'pdf';
   const linkMode=modo==='link';
   const hoje=new Date();
-  const fmtISO=d=>d.toISOString().slice(0,10);
+  const fmtISO=isoFromDate;   // data LOCAL: em UTC, depois das 21h o período já vinha com "amanhã"
   const ini=new Date(hoje); ini.setDate(hoje.getDate()-30);
   const ov=document.createElement('div');
   ov.id='_fatModal';
@@ -3619,11 +4021,24 @@ function faturaEmissor(){
   };
 }
 
+/* Como a loja paga. A fatura dizia quanto era devido e não dizia COMO
+   pagar — a chave ia à mão, numa segunda mensagem. Sai da Config e viaja
+   na fatura: página de conferência, PDF e cobrança por WhatsApp. */
+function faturaPix(){
+  return { pix:String(cfg.pixChave||'').trim(), pix_nome:String(cfg.pixNome||'').trim() };
+}
+
 // DD/MM/YYYY → YYYY-MM-DD
 function isoFromBR(br){
   const p=String(br||'').split('/');
   if(p.length!==3)return '';
   return p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
+}
+/* "Emitido em" sai da data LOCAL. Com toISOString() (UTC), fatura gerada
+   depois das 21h saía datada do dia seguinte. */
+function agoraLocalISO(){
+  const d=new Date(), p=n=>String(n).padStart(2,'0');
+  return isoFromDate(d)+'T'+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
 }
 function isoFromDate(d){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -3664,44 +4079,40 @@ function coletarFaturaLoja(storeName, periodo, opts={}){
   const now=new Date();
   let cutoff, endDateLimit=null, iniISO, fimISO, periodoLabel;
   if(periodo==='semana'){
-    cutoff=new Date(now); cutoff.setDate(now.getDate()-7); cutoff.setHours(0,0,0,0);
+    cutoff=inicioPeriodo('week');
     periodoLabel='ÚLTIMOS 7 DIAS';
   } else if(periodo==='custom'&&opts.dataInicio&&opts.dataFim){
     cutoff=new Date(opts.dataInicio+'T00:00:00');
     endDateLimit=new Date(opts.dataFim+'T23:59:59');
     const fmt=d=>d.split('-').reverse().join('/');
     periodoLabel=fmt(opts.dataInicio)+' A '+fmt(opts.dataFim);
+  } else if(periodo==='mes_passado'){
+    /* Fatura mensal se emite depois que o mês fecha. Só havia "mês atual":
+       no dia 2, a fatura do mês que acabou tinha de ser montada à mão. */
+    cutoff=new Date(now.getFullYear(),now.getMonth()-1,1);
+    endDateLimit=new Date(now.getFullYear(),now.getMonth(),0,23,59,59);
+    periodoLabel=MESES_FAT[cutoff.getMonth()]+'/'+cutoff.getFullYear();
   } else {
-    cutoff=new Date(now.getFullYear(),now.getMonth(),1);
+    cutoff=inicioPeriodo('month');
     periodoLabel=MESES_FAT[now.getMonth()]+'/'+now.getFullYear();
   }
   iniISO=opts.dataInicio||isoFromDate(cutoff);
   fimISO=opts.dataFim||isoFromDate(endDateLimit||now);
 
-  const todayStr=now.toLocaleDateString('pt-BR');
-  const allDays=[{date:todayStr,stops},...history];
-  const seen={};
-  const fatStops=[];
-  allDays.forEach(day=>{
-    day.stops.forEach(s=>{
-      if((s.store||'')!==storeName)return;
-      const dDate=day===allDays[0]?(s.deliveryDate||s._addedDate||day.date):day.date;
-      try{
-        const dt=parseDate(dDate);
-        if(dt<cutoff)return;
-        if(endDateLimit&&dt>endDateLimit)return;
-      }catch(e){return;}
-      const dk=s._trackKey?('tk_'+s._trackKey):('c_'+(s.name||'')+'|'+(s.address||'')+'|'+(s.value||'')+'|'+dDate);
-      if(seen[dk])return; seen[dk]=true;
-      fatStops.push({...s,_date:dDate});
-    });
-  });
+  /* A fatura NÃO varre as paradas por conta própria: pergunta a
+     entregasFeitas(), a mesma lista do fechamento. O que a loja paga é o
+     que a tela de fechamento mostra — nem parada na rua, nem a que ficou
+     para trás, nem a mesma entrega duas vezes. */
+  const fatStops=entregasFeitas(cutoff,endDateLimit).filter(s=>(s.store||'')===storeName);
 
   if(!fatStops.length){ toast('Nenhuma entrega de '+storeName+' no período','error'); return null; }
   fatStops.sort((a,b)=>{try{return parseDate(a._date)-parseDate(b._date);}catch(e){return 0;}});
 
   const recebido=fatStops.filter(s=>s.paid&&!s.cancelled).reduce((a,s)=>a+parseMoney(s.value),0);
-  const numero='FAT-'+storeName.replace(/\s/g,'').substring(0,6).toUpperCase()+'-'+now.getFullYear()+String(now.getMonth()+1).padStart(2,'0');
+  /* O número leva o período. Antes era loja + mês de emissão: a fatura de
+     7 dias, a do mês e a de período livre saíam com o MESMO número. */
+  const aammdd=iso=>iso.slice(2).replace(/-/g,'');
+  const numero='FAT-'+storeName.replace(/\s/g,'').substring(0,6).toUpperCase()+'-'+aammdd(iniISO)+'-'+aammdd(fimISO);
 
   return SBFatura.normalizar({
     schema:'speedboy.fatura/v1',
@@ -3711,10 +4122,10 @@ function coletarFaturaLoja(storeName, periodo, opts={}){
       cliente:storeName,
       titulo:'FATURA '+storeName.toUpperCase()+' · '+periodoLabel,
       periodo:{inicio:iniISO,fim:fimISO},
-      emissao:new Date().toISOString(),
+      emissao:agoraLocalISO(),
       moeda:'BRL'
     },
-    pagamento:{recebido:recebido},
+    pagamento:{recebido:recebido,...faturaPix()},
     config:{siglas_cidade:siglasCidadeApp()},
     resumos:[{titulo:'POR CIDADE',chave:'cidade'},{titulo:'POR TIPO DE SERVIÇO',chave:'tipo'}],
     itens:fatStops.map(itemFatura)
@@ -3763,8 +4174,8 @@ function mostrarLinkFatura(dados,link){
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
   ov.innerHTML=`<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;width:100%;max-width:360px;">
     <div style="font-weight:800;font-size:16px;margin-bottom:4px;">🔗 Fatura publicada</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6;">${dados.fatura.cliente} · ${t.servicos} serviço(s) · <strong style="color:var(--accent)">${fmtMoney(t.a_receber)}</strong> a receber</div>
-    <div class="link-url" id="_fatLinkUrl">${link}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6;">${esc(dados.fatura.cliente)} · ${t.servicos} serviço(s) · <strong style="color:var(--accent)">${fmtMoney(t.a_receber)}</strong> a receber</div>
+    <div class="link-url" id="_fatLinkUrl">${esc(link)}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
       <button type="button" class="btn-copy-link" id="_fatCopy">📋 Copiar</button>
       <button type="button" class="btn-wpp-link"  id="_fatWpp">💬 WhatsApp</button>
@@ -3777,43 +4188,55 @@ function mostrarLinkFatura(dados,link){
     navigator.clipboard?.writeText(link).then(()=>toast('📋 Link copiado!','success')).catch(()=>toast(link,''));
   };
   document.getElementById('_fatWpp').onclick=()=>{
-    const msg=`🧾 *${dados.fatura.titulo}*\n\n📦 ${t.servicos} serviço(s)\n💰 Total: *${fmtMoney(t.total)}*\n⏳ A receber: *${fmtMoney(t.a_receber)}*\n\n🔗 Confira item a item e baixe o PDF:\n${link}\n\n📲 ${dados.emissor.nome}`;
+    const pg=dados.pagamento||{};
+    const pix=(pg.pix&&t.a_receber>0)?`\n\n💳 *PIX:* ${pg.pix}${pg.pix_nome?` (${pg.pix_nome})`:''}`:'';
+    const msg=`🧾 *${dados.fatura.titulo}*\n\n📦 ${t.servicos} serviço(s)\n💰 Total: *${fmtMoney(t.total)}*\n⏳ A receber: *${fmtMoney(t.a_receber)}*\n\n🔗 Confira item a item e baixe o PDF:\n${link}${pix}\n\n📲 ${dados.emissor.nome}`;
     const stored=localStorage.getItem('sb_wpp_loja_'+dados.fatura.cliente)||'';
     const digits=stored.replace(/\D/g,'');
-    window.open((digits?`https://wa.me/55${digits}?text=`:'https://wa.me/?text=')+encodeURIComponent(msg),'_blank');
+    window.open((numeroWpp(digits)?`https://wa.me/${numeroWpp(digits)}?text=`:'https://wa.me/?text=')+encodeURIComponent(msg),'_blank');
   };
 }
 
-function cobrancaWppLoja(storeName){
-  const cutoff30=new Date(); cutoff30.setDate(cutoff30.getDate()-30); cutoff30.setHours(0,0,0,0);
-  const recent=history.filter(d=>{try{return parseDate(d.date)>=cutoff30;}catch(e){return false;}});
-  const allStops=[];
-  recent.forEach(d=>d.stops.forEach(s=>{if(s.store===storeName)allStops.push({...s,_date:d.date});}));
-  if(!allStops.length){toast('Nenhuma entrega de '+storeName+' nos últimos 30 dias','error');return;}
-  const total=allStops.reduce((a,s)=>a+parseMoney(s.value),0);
-  const received=allStops.filter(s=>s.paid).reduce((a,s)=>a+parseMoney(s.value),0);
-  const pending=total-received;
-  const pendStops=allStops.filter(s=>!s.paid&&parseMoney(s.value)>0);
-  const dateRange=allStops.length?allStops[0]._date+' — '+allStops[allStops.length-1]._date:'';
+/* O texto da cobrança, separado de abrir o WhatsApp para poder ser
+   testado. Lê de entregasFeitas(), como a fatura: antes varria só o
+   histórico (as entregas de HOJE ficavam de fora) e somava parada que
+   nunca foi entregue. Cobre tudo o que o app ainda guarda, não só 30
+   dias — entrega em aberto há 40 dias continua sendo dívida. */
+function textoCobrancaLoja(storeName){
+  const feitas=entregasFeitas().filter(s=>(s.store||'')===storeName&&!s._cancelled);
+  if(!feitas.length)return null;
+  feitas.sort((a,b)=>parseDate(a._date)-parseDate(b._date));
+  const total=feitas.reduce((a,s)=>a+parseMoney(s.value),0);
+  const abertas=feitas.filter(s=>!s.paid&&parseMoney(s.value)>0);
+  const pendente=abertas.reduce((a,s)=>a+parseMoney(s.value),0);
+  const recebido=total-pendente;
+  const pix=faturaPix();
   let msg=`🛵 *SPEEDBOY — Cobrança ${storeName}*\n\n`;
-  msg+=`📅 Período: ${dateRange}\n`;
-  msg+=`📦 Entregas realizadas: ${allStops.length}\n`;
+  msg+=`📅 Período: ${feitas[0]._date} — ${feitas[feitas.length-1]._date}\n`;
+  msg+=`📦 Entregas realizadas: ${feitas.length}\n`;
   msg+=`💰 Total do período: *${fmtMoney(total)}*\n`;
-  if(received>0)msg+=`✅ Já recebido: ${fmtMoney(received)}\n`;
-  msg+=`⏳ *A receber: ${fmtMoney(pending)}*\n`;
-  if(pendStops.length){
+  if(recebido>0)msg+=`✅ Já recebido: ${fmtMoney(recebido)}\n`;
+  msg+=`⏳ *A receber: ${fmtMoney(pendente)}*\n`;
+  if(abertas.length){
     msg+=`\nPendências:\n`;
-    pendStops.slice(0,10).forEach(s=>{ msg+=`• ${s._date} — ${s.name||'—'} — ${fmtMoney(parseMoney(s.value))}\n`; });
-    if(pendStops.length>10)msg+=`... e mais ${pendStops.length-10} entrega(s)\n`;
+    abertas.slice(0,10).forEach(s=>{ msg+=`• ${s._date} — ${s.name||'—'} — ${fmtMoney(parseMoney(s.value))}\n`; });
+    if(abertas.length>10)msg+=`... e mais ${abertas.length-10} entrega(s)\n`;
   }
+  if(pix.pix)msg+=`\n💳 *PIX:* ${pix.pix}${pix.pix_nome?` (${pix.pix_nome})`:''}\n`;
   msg+=`\n📲 SpeedBoy Entregas`;
-  const storedPhone=localStorage.getItem('sb_wpp_loja_'+storeName)||'';
-  const phone=prompt('WhatsApp da loja '+storeName+' (ex: 27999999999):',storedPhone);
-  if(phone===null)return; // cancelado
-  if(phone.trim())localStorage.setItem('sb_wpp_loja_'+storeName,phone.trim());
-  const digits=phone.replace(/\D/g,'');
-  const url=digits?`https://wa.me/55${digits}?text=${encodeURIComponent(msg)}`:`https://wa.me/?text=${encodeURIComponent(msg)}`;
-  window.open(url,'_blank');
+  return {msg,total,recebido,pendente,entregas:feitas.length,abertas:abertas.length};
+}
+
+function cobrancaWppLoja(storeName){
+  const c=textoCobrancaLoja(storeName);
+  if(!c){toast('Nenhuma entrega feita para '+storeName,'error');return;}
+  if(!c.abertas){toast('✅ '+storeName+' está em dia — nada a cobrar','success');return;}
+  /* O número vem de Config → Minhas lojas. Antes era um prompt() do
+     navegador a cada cobrança; sem número cadastrado o WhatsApp abre para
+     escolher a conversa, e o app avisa onde cadastrar. */
+  const digits=String(localStorage.getItem('sb_wpp_loja_'+storeName)||'').replace(/\D/g,'');
+  if(!digits)toast('Escolha a conversa no WhatsApp. Para abrir direto, cadastre o número em Config → Minhas lojas.','');
+  window.open((digits?`https://wa.me/${numeroWpp(digits)}?text=`:'https://wa.me/?text=')+encodeURIComponent(c.msg),'_blank');
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -3953,7 +4376,7 @@ function renderRepassList(){
         <div style="flex:1;min-width:0;">
           <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(s.name||'Sem nome')}</div>
           <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(s.address||'')}</div>
-          <div style="font-size:10px;color:var(--accent);margin-top:2px;">${s.store?'🏪 '+esc(s.store):''} ${s.city?'· '+esc(cityName(resolveCityCode(s.city))):''}</div>
+          <div style="font-size:10px;color:var(--accent);margin-top:2px;">${s.store?'🏪 '+esc(s.store):''} ${s.city?'· '+esc(cityName(resolveCityCode(s.city))):''}${s._repassId?' · já com '+esc(s.repassadaPara||'motoboy'):''}</div>
         </div>
         <div style="flex-shrink:0;width:80px;">
           <div style="font-size:9px;color:var(--muted);font-weight:700;margin-bottom:3px;">PAGAR R$</div>
@@ -4047,6 +4470,9 @@ async function sendRepassLink(){
     const rh=getRepassHistory();
     rh.unshift({name:motoName,date:new Date().toLocaleDateString('pt-BR'),deliveries:items.length,total:items.reduce((a,x)=>a+x.taxa,0),repassId:code});
     localStorage.setItem('sb_repass_history',JSON.stringify(rh.slice(0,90)));
+    /* As caixas ficavam marcadas e o botão ativo: um segundo toque gerava
+       OUTRO repasse com as mesmas entregas e dobrava o "pago aos motoboys". */
+    document.querySelectorAll('.repass-chk:checked').forEach(c=>{ c.checked=false; });
     toast('✅ Link gerado!','success');
   }catch(e){console.error(e);toast('Erro: '+e.message,'error');}
   finally{updateRepassBtn();}
@@ -4058,7 +4484,7 @@ function shareRepassWpp(){
   const items=getRepassItems();
   const total=items.reduce((a,x)=>a+x.taxa,0);
   const msg=`🏍️ *SPEEDBOY — Entregas para ${name}*\n\n📦 ${items.length} entrega(s)\n💰 Total: *${fmtMoney(total)}*\n\n🔗 Acesse seu painel:\n${lastRepassLink}`;
-  const url=phone?`https://wa.me/55${phone}?text=${encodeURIComponent(msg)}`:`https://wa.me/?text=${encodeURIComponent(msg)}`;
+  const url=numeroWpp(phone)?`https://wa.me/${numeroWpp(phone)}?text=${encodeURIComponent(msg)}`:`https://wa.me/?text=${encodeURIComponent(msg)}`;
   window.open(url,'_blank');
 }
 
@@ -4308,7 +4734,7 @@ function wppMotoboy(id){
   const pend=ds.filter(d=>!d.done);
   const msg=`🏍️ *SPEEDBOY*\n\nOlá ${rp.motoboy||''}! Como estão as entregas?\n\n📦 ${ds.length-pend.length}/${ds.length} concluídas\n\n🔗 Seu painel:\n${linkDoRepasse(id)}`;
   const fone=String(rp.phone||'').replace(/\D/g,'');
-  window.open((fone?`https://wa.me/55${fone}?text=`:'https://wa.me/?text=')+encodeURIComponent(msg),'_blank');
+  window.open((numeroWpp(fone)?`https://wa.me/${numeroWpp(fone)}?text=`:'https://wa.me/?text=')+encodeURIComponent(msg),'_blank');
 }
 
 /* Encerrar apaga o nó do repasse — o link do motoboy para de abrir. O que
@@ -4435,7 +4861,7 @@ function enviarLinkFixa(quem){
   }else{
     msg=`🛵 *SPEEDBOY*\n\nOlá, ${f.loja}! Para mandar entrega para a ${f.nome}, use este link (é só preencher e enviar):\n\n${linkLojaParaFixa()}\n\nAssim a entrega fica registrada e vocês acompanham: hora, quem recebeu e foto.`;
   }
-  const url=fone?`https://wa.me/55${fone}?text=${encodeURIComponent(msg)}`:`https://wa.me/?text=${encodeURIComponent(msg)}`;
+  const url=numeroWpp(fone)?`https://wa.me/${numeroWpp(fone)}?text=${encodeURIComponent(msg)}`:`https://wa.me/?text=${encodeURIComponent(msg)}`;
   window.open(url,'_blank');
 }
 function copiarLinkFixa(quem){
@@ -4464,7 +4890,7 @@ function paradaDaEntregaFixa(rpId, rp, d){
   if(rp.trackKey) s._trackKey=rp.trackKey;
   const LOJA=loja.toUpperCase();
   if(LOJA==='KS' && KS_TAXAS_BY_CITY[city]) s.value=KS_TAXAS_BY_CITY[city];
-  if(LOJA==='ARITANA'){ const m=detectarTaxaAritana(d.address||''); if(m) s.value=m.taxa; }
+  if(LOJA==='ARITANA'){ const m=taxaAritanaDaParada(s); if(m) s.value=m.taxa; }
   return s;
 }
 
@@ -4728,7 +5154,7 @@ function atualizarResumosCfg(){
   por('full',    modoFull() ? 'ligado' : 'desligado');
   por('rapidas', n(getQuickStores().length, 'loja', 'lojas'));
   por('links',   n(getLinks().length, 'link', 'links'));
-  por('fatura',  (cfg.emiNome || faturaEmissor().nome || '').slice(0,20));
+  por('fatura',  cfg.pixChave ? (cfg.emiNome || faturaEmissor().nome || '').slice(0,20) : 'falta a chave PIX');
   const sala = localStorage.getItem('sb_room_code');
   por('sync',    sala ? sala : 'sem sala');
   const copias = (typeof sbListBackups==='function' ? sbListBackups().length : 0);
@@ -4776,6 +5202,8 @@ function loadConfig(){
   document.getElementById('cfgEmiCnpj').value=em.cnpj;
   document.getElementById('cfgEmiTel').value=em.telefone;
   document.getElementById('cfgEmiEmail').value=em.email;
+  document.getElementById('cfgPixChave').value=cfg.pixChave||'';
+  document.getElementById('cfgPixNome').value=cfg.pixNome||'';
   document.getElementById('cfgFull').checked=modoFull();
   document.getElementById('cfgFullOcultarTaxa').checked=cfg.fullOcultarTaxa!==false;
   document.getElementById('cfgFullPedirFoto').checked=!!cfg.fullPedirFoto;
@@ -4808,6 +5236,8 @@ function saveConfig(){
   cfg.emiCnpj =document.getElementById('cfgEmiCnpj').value.trim();
   cfg.emiTel  =document.getElementById('cfgEmiTel').value.trim();
   cfg.emiEmail=document.getElementById('cfgEmiEmail').value.trim();
+  cfg.pixChave=document.getElementById('cfgPixChave').value.trim();
+  cfg.pixNome =document.getElementById('cfgPixNome').value.trim();
   cfg.fullOcultarTaxa=document.getElementById('cfgFullOcultarTaxa').checked;
   cfg.fullPedirFoto  =document.getElementById('cfgFullPedirFoto').checked;
   cfg.plantaoTel     =document.getElementById('cfgPlantaoTel').value.replace(/\D/g,'');
@@ -4862,7 +5292,7 @@ function rmStore(i){
     cfg.stores=antes;cfg.storePhones=fonesAntes;saveCfg();renderStores();updateStoreSelect();toast('↩️ Loja de volta','success');
   });
 }
-function updateStoreSelect(){const sel=document.getElementById('fStore');const cur=sel.value;sel.innerHTML='<option value="">— Sem loja específica —</option>'+cfg.stores.map(s=>`<option value="${s}">${s}</option>`).join('');sel.value=cur;}
+function updateStoreSelect(){const sel=document.getElementById('fStore');const cur=sel.value;sel.innerHTML='<option value="">— Sem loja específica —</option>'+cfg.stores.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');if(cur&&!cfg.stores.includes(cur))sel.add(new Option(cur,cur));sel.value=cur;}
 function getGPS(){const btn=document.querySelector('.btn-gps');if(!navigator.geolocation){toast('GPS não suportado','error');return;}btn.textContent='⏳...';navigator.geolocation.getCurrentPosition(async pos=>{try{const res=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);const data=await res.json();document.getElementById('cfgOrigin').value=data.display_name||`${pos.coords.latitude}, ${pos.coords.longitude}`;toast('📍 Capturado!','success');}catch(e){document.getElementById('cfgOrigin').value=`${pos.coords.latitude}, ${pos.coords.longitude}`;}btn.textContent='📍 GPS';},()=>{btn.textContent='📍 GPS';toast('Permita acesso ao GPS','error');});}
 
 // ═══════════════════════════════════════════════════════
@@ -4896,7 +5326,7 @@ async function initFb(cfgStr){
     }
     if(!c.apiKey||!c.databaseURL)throw new Error('apiKey ou databaseURL ausente');
     const {initializeApp,getApps,getApp}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
-    const {getDatabase,ref,onValue,set}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
+    const {getDatabase,ref,onValue,set,get}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
     const app=getApps().length?getApp():initializeApp(c);
 
     // Login anônimo: as regras do banco (database.rules.json) exigem sessão
@@ -4908,11 +5338,17 @@ async function initFb(cfgStr){
       fbUid=cred.user.uid;
     }catch(e){ console.warn('Login anônimo falhou (seguindo mesmo assim):',e); }
 
-    fbDb=getDatabase(app); fbMods={ref,onValue,set};
+    fbDb=getDatabase(app); fbMods={ref,onValue,set,get};
     localStorage.setItem('sb_firebase_cfg',JSON.stringify(c));
     setSyncUI('synced','🟢 Firebase conectado');
     return true;
-  }catch(e){setSyncUI('error','❌ '+e.message.substring(0,40));console.error(e);return false;}
+  }catch(e){
+    /* O rótulo mostrava e.message cru: "❌ Failed to fetch" no topo do app
+       toda vez que faltava sinal na hora de abrir. */
+    const semRede=!navigator.onLine||/fetch|network|import|load/i.test(String(e&&e.message));
+    setSyncUI(semRede?'offline':'error', semRede?'📴 Sem sinal':'❌ Sincronização: confira em Config');
+    console.error(e);return false;
+  }
 }
 
 function startSync(code){
@@ -4982,7 +5418,8 @@ function startSync(code){
   toast('🔥 Sala '+code+' ativa!','success');
   /* Exclusões feitas no outro aparelho chegam por aqui. Sem este listener
      uma parada apagada por ela voltaria à lista dele no próximo snapshot. */
-  fbMods.onValue(fbMods.ref(fbDb,'rooms/'+code+'/tombs'),snap=>{
+  if(_tombsOff){_tombsOff();_tombsOff=null;}
+  _tombsOff=fbMods.onValue(fbMods.ref(fbDb,'rooms/'+code+'/tombs'),snap=>{
     try{
       const raw=snap.val();
       if(raw==null)return;
@@ -5074,37 +5511,101 @@ function fbPush(){
 window.addEventListener('online',  () => { atualizarStatusSync(); if (temPendencia()) fbPush(); });
 window.addEventListener('offline', () => atualizarStatusSync());
 
-function fbPushHistory(){
-  if(!fbDb)return;
-  const room=localStorage.getItem('sb_room_code')||'';
-  if(!room)return;
-  fbMods.set(fbMods.ref(fbDb,'rooms/'+room+'/history'),JSON.stringify(history))
-    .catch(e=>console.error('fbPushHistory:',e));
+/* Lê o histórico do banco, com prazo (sem sinal o get() fica esperando).
+   Devolve { ok, dias }. `ok:false` é "não consegui ler" — diferente de
+   "está vazio": quem não leu NÃO pode gravar por cima, senão volta o
+   "último a gravar vence" que o merge existe para acabar. */
+async function lerHistoricoRemoto(room){
+  try{
+    const snap=await Promise.race([
+      fbMods.get(fbMods.ref(fbDb,'rooms/'+room+'/history')),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('sem resposta')),6000))
+    ]);
+    const raw=snap.val();
+    if(!raw)return {ok:true,dias:[]};
+    const remoto=typeof raw==='string'?JSON.parse(raw):raw;
+    return {ok:true,dias:Array.isArray(remoto)?remoto:[]};
+  }catch(e){ return {ok:false,dias:[]}; }
 }
 
-async function loadHistoryFromFirebase(room){
-  if(!fbDb||!room)return;
+/* Funde o histórico do banco no local. Devolve true se o local mudou. */
+function fundirHistoricoRemoto(remoto){
+  if(!remoto||!remoto.length)return false;
+  const fundido=apararHistorico(mergeHistorico(history,remoto));
+  if(assinaturaHistorico(fundido)===assinaturaHistorico(history))return false;
+  history=fundido;
+  basearHistorico();
+  localStorage.setItem('sb_history',JSON.stringify(history));
+  return true;
+}
+function redesenharHistorico(){
+  renderHome();
+  if(document.getElementById('reportScreen').classList.contains('active'))renderReport();
+  if(document.getElementById('financeScreen').classList.contains('active'))renderFinance();
+}
+function marcarHistPendente(sim){
+  try{ if(sim) localStorage.setItem('sb_hist_pendente','1'); else localStorage.removeItem('sb_hist_pendente'); }catch(_){}
+}
+
+/* Antes: set() do histórico inteiro, direto. O aparelho que abriu o app de
+   manhã gravava por cima de tudo o que o outro marcou durante o dia. Agora
+   lê, funde e só então grava — e uma falha no envio deixa de ser muda. */
+let _histEnviando=false, _histSujo=false, _histSubstituir=false;
+async function fbPushHistory(substituir){
+  const room=localStorage.getItem('sb_room_code')||'';
+  /* O pedido de substituir fica gravado COM A SALA até o envio dar certo:
+     feito sem sinal, a próxima abertura não pode fundir o banco de volta.
+     Sem sala não há o que substituir — e a marca não pode sobrar para a
+     sala em que o aparelho entrar depois (apagaria o histórico dela). */
+  if(substituir&&room){ _histSubstituir=true; try{ localStorage.setItem('sb_hist_substituir',room); }catch(_){} }
+  if(!fbDb||!fbMods.set||!room){ _histSubstituir=false; return; }
+  if(_histEnviando){ _histSujo=true; return; }
+  _histEnviando=true;
   try{
-    const {ref,get}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
-    const snap=await get(ref(fbDb,'rooms/'+room+'/history'));
-    const raw=snap.val();
-    if(!raw)return;
-    let remote;
-    try{remote=typeof raw==='string'?JSON.parse(raw):raw;}catch(e){return;}
-    if(!Array.isArray(remote)||!remote.length)return;
-    // Merge: for each remote day, update local if remote has equal or more stops
-    const local=history.slice();
-    remote.forEach(rd=>{
-      const li=local.findIndex(ld=>ld.date===rd.date);
-      if(li<0){local.push(rd);}
-      else if(rd.stops&&rd.stops.length>=local[li].stops.length){local[li]=rd;}
-    });
-    local.sort((a,b)=>{try{return parseDate(b.date)-parseDate(a.date);}catch(e){return 0;}});
-    history=local.slice(0,60);
-    localStorage.setItem('sb_history',JSON.stringify(history));
-    renderHome();
-    if(document.getElementById('reportHistory'))renderReport();
-  }catch(e){console.error('loadHistoryFromFirebase:',e);}
+    let lido=null;
+    if(!_histSubstituir){
+      lido=await lerHistoricoRemoto(room);
+      if(_histSubstituir) lido=null;          // mandaram substituir durante a leitura
+      else if(!lido.ok){ marcarHistPendente(true); return; }   // não leu: não grava por cima
+      else if(fundirHistoricoRemoto(lido.dias)) redesenharHistorico();
+    }
+    const substituindo=_histSubstituir;
+    _histSubstituir=false;
+    // Nada mudou em relação ao banco: não reenvia o histórico inteiro à toa.
+    if(substituindo||!lido||assinaturaHistorico(lido.dias)!==assinaturaHistorico(history))
+      await fbMods.set(fbMods.ref(fbDb,'rooms/'+room+'/history'),JSON.stringify(history));
+    marcarHistPendente(false);
+    if(substituindo&&!_histSubstituir) localStorage.removeItem('sb_hist_substituir');
+  }catch(e){
+    // Fica marcado: reconectar, o próximo envio ou a próxima abertura tentam de novo.
+    marcarHistPendente(true);
+    sbLogError('envio do histórico',e);
+  }finally{
+    _histEnviando=false;
+    if(_histSujo){ _histSujo=false; fbPushHistory(); }
+  }
+}
+// Voltou o sinal: manda o histórico que ficou esperando.
+window.addEventListener('online', () => { if(localStorage.getItem('sb_hist_pendente')) fbPushHistory(); });
+
+/* Ao abrir: traz o que o outro aparelho arquivou ou marcou, e devolve ao
+   banco o que só este tem (o dia arquivado na virada, antes de conectar,
+   ou um envio que falhou). */
+async function loadHistoryFromFirebase(room){
+  if(!fbDb||!room||!fbMods.get)return;
+  /* Ficou um "substituir" sem enviar (apagou ou restaurou sem sinal): ele
+     manda — mas só se for DESTA sala. Marca de outra sala é descartada. */
+  const marca=localStorage.getItem('sb_hist_substituir');
+  if(marca){
+    if(marca===room){ fbPushHistory(true); return; }
+    localStorage.removeItem('sb_hist_substituir');
+  }
+  try{
+    const lido=await lerHistoricoRemoto(room);
+    if(!lido.ok)return;                        // sem leitura não há o que decidir
+    if(fundirHistoricoRemoto(lido.dias)) redesenharHistorico();
+    if(history.length&&assinaturaHistorico(lido.dias)!==assinaturaHistorico(history)) fbPushHistory();
+  }catch(e){ sbLogError('leitura do histórico',e); }
 }
 
 function genRoomCode(){const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let r='SB-';for(let i=0;i<4;i++)r+=c[Math.floor(Math.random()*c.length)];return r;}
@@ -5158,7 +5659,8 @@ function listenPending(){
   if(!fbDb)return;
   const room=localStorage.getItem('sb_room_code')||'';
   const pRef=fbMods.ref(fbDb,'rooms/'+room+'/pending');
-  fbMods.onValue(pRef,snap=>{
+  if(_pendingOff){_pendingOff();_pendingOff=null;}
+  _pendingOff=fbMods.onValue(pRef,snap=>{
     pendingData={};
     const data=snap.val();
     if(data)Object.entries(data).forEach(([k,v])=>{try{pendingData[k]=typeof v==='string'?JSON.parse(v):v;}catch(e){}});
@@ -5213,7 +5715,7 @@ async function acceptPending(key){
   stops.push(s);
   // Auto-taxa ARITANA
   if((s.store||'').toUpperCase()==='ARITANA'&&!s.value){
-    const match=detectarTaxaAritana(s.address||'');
+    const match=taxaAritanaDaParada(s);
     if(match){s.value=match.taxa;toast('💰 Taxa ARITANA: R$ '+match.taxa+' — '+match.bairro,'success');}
   }
   // Auto-taxa KS por cidade
@@ -5253,7 +5755,8 @@ function listenClientRequests(){
   const room=localStorage.getItem('sb_room_code')||'';
   if(!room)return;
   const crRef=fbMods.ref(fbDb,'rooms/'+room+'/client_requests');
-  fbMods.onValue(crRef,snap=>{
+  if(_crOff){_crOff();_crOff=null;}
+  _crOff=fbMods.onValue(crRef,snap=>{
     const data=snap.val();
     if(!data)return;
     /* reqId é a chave da SOLICITAÇÃO; a entrega alvo vem em req.orderKey.
@@ -5298,12 +5801,25 @@ async function showEditRequest(reqId,req){
   else toast('⚠️ Entrega não encontrada','error');
   rmClientRequest(reqId);
 }
+/* A loja pediu para cancelar e a resposta foi NÃO. Antes o pedido era só
+   descartado: a página dela continuava em "Cancelamento solicitado" para
+   sempre, e ela achava que a entrega não ia sair. O status volta a ser o
+   que era, com o carimbo `cancelNegado` que a página dela lê. */
+function avisarCancelamentoNegado(key){
+  const s=stops.find(x=>x&&x._trackKey===key)
+        ||history.flatMap(d=>d.stops||[]).find(x=>x&&x._trackKey===key);
+  if(!s&&!pendingData[key])return;
+  updateTracking(key, s?(s.done?'entregue':'aceito'):'',
+    s?{name:s.name||'',address:s.address||'',store:s.store||''}:null,
+    s&&s.done?dadosParaLoja(s):null,
+    {cancelNegado:new Date().toISOString()});
+}
 async function showCancelRequest(reqId,req){
   const key=chaveDoPedido(reqId,req);
   if(!await confirmarAcao({titulo:'❌ Pedido de cancelamento',
     texto:`O cliente quer CANCELAR a entrega de "${req.name||'?'}".`,
     detalhe:'Aceitando, a entrega fica assinalada como CANCELADA e a taxa vai a zero no fechamento.',
-    botao:'Aceitar cancelamento', perigo:true})){rmClientRequest(reqId);return;}
+    botao:'Aceitar cancelamento', perigo:true})){avisarCancelamentoNegado(key);rmClientRequest(reqId);return;}
   const markCancelled=s=>{ s.cancelled=true; s.value=0; s.paid=false; };
   const si=stops.findIndex(s=>s._trackKey===key);
   if(si>=0){
@@ -5323,8 +5839,10 @@ async function showCancelRequest(reqId,req){
     history.forEach(day=>day.stops.forEach(s=>{ if(s._trackKey===key){ markCancelled(s); found=true; } }));
     if(found){ saveHistory(); renderHome(); toast('🚫 Entrega de '+(req.name||'?')+' cancelada (taxa zerada)','success'); }
     // Ainda não aceita: basta tirar da fila de pendentes
-    else if(pendingData[key]){ rmPending(key); toast('🗑️ Pedido de '+(req.name||'?')+' cancelado','success'); }
-    else toast('⚠️ Entrega não encontrada','error');
+    /* Nos dois casos a loja precisa da resposta: sem o 'cancelado' no
+       tracking, a página dela ficava em "Cancelamento solicitado" para sempre. */
+    else if(pendingData[key]){ rmPending(key); updateTracking(key,'cancelado'); toast('🗑️ Pedido de '+(req.name||'?')+' cancelado','success'); }
+    else { updateTracking(key,'cancelado'); toast('⚠️ Entrega não encontrada','error'); }
   }
   rmClientRequest(reqId);
 }
@@ -5355,7 +5873,7 @@ async function rmClientRequest(reqId){
    O comprovante vai por referência (proofId), não embutido: o caminho
    /tracking tem teto de 8 KB nas regras do banco, e a loja só baixa a
    foto se tocar para ver. */
-async function updateTracking(key,status,stopInfo=null,entrega=null){
+async function updateTracking(key,status,stopInfo=null,entrega=null,extra=null){
   if(!fbDb)return;
   try{
     const room=localStorage.getItem('sb_room_code')||'';
@@ -5367,6 +5885,7 @@ async function updateTracking(key,status,stopInfo=null,entrega=null){
         if(entrega[k]) data[k]=entrega[k];
       });
     }
+    if(extra)Object.assign(data,extra);
     await s(r(fbDb,'rooms/'+room+'/tracking/'+key),JSON.stringify(data));
   }catch(e){console.error('tracking error:',e);}
 }
@@ -5439,18 +5958,37 @@ async function restoreAutoBackup(key){
   history = Array.isArray(b.history) ? b.history : [];
   if(b.cfg && typeof b.cfg==='object'){ cfg={...cfg,...b.cfg}; saveCfg(); }
   if(Array.isArray(b.expenses)) saveExpenses(b.expenses);
-  forcarCarimboAgora();
-  saveStops(); saveHistory();
+  forcarCarimboAgora(); forcarCarimboHistorico();
+  saveStops(); saveHistory(true);
   toast(`✅ Cópia de ${dia} restaurada`,'success');
   goNav('homeScreen','nav-home');
 }
 
 function exportBackup(){
-  const data={version:1,exportedAt:new Date().toISOString(),stops,history,cfg};
+  /* Despesas e repasses pagos vão junto: sem eles, trocar de aparelho pelo
+     backup zerava o lucro de todos os dias passados. */
+  const data={version:1,exportedAt:new Date().toISOString(),stops,history,cfg,
+    expenses:getExpenses(),repassHistory:getRepassHistory()};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const today=new Date().toLocaleDateString('pt-BR').replace(/\//g,'-');
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`speedboy_backup_${today}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
   toast('💾 Backup exportado!','success');
+}
+/* A confirmação diz quanto vem e quanto vai embora — importar por engano é
+   justamente onde os números importam. Arquivo sem histórico NÃO apaga o
+   histórico que existe; despesas e repasses pagos voltam junto. */
+function resumoDoBackup(data){
+  return Array.isArray(data.history)
+    ? `Vêm ${data.stops.length} parada(s) e ${data.history.length} dia(s) de histórico, SUBSTITUINDO as ${stops.length} parada(s) e ${history.length} dia(s) que você tem agora.`
+    : `Vêm ${data.stops.length} parada(s), SUBSTITUINDO as ${stops.length} de agora. O arquivo não traz histórico: os ${history.length} dia(s) que você tem ficam como estão.`;
+}
+function aplicarBackup(data){
+  stops=data.stops;
+  if(Array.isArray(data.history)) history=data.history;
+  if(Array.isArray(data.expenses)) saveExpenses(data.expenses);
+  if(Array.isArray(data.repassHistory)) localStorage.setItem('sb_repass_history',JSON.stringify(data.repassHistory));
+  if(data.cfg){cfg={...cfg,...data.cfg};saveCfg();}
+  forcarCarimboAgora();forcarCarimboHistorico();saveStops();saveHistory(true);
 }
 function importBackup(file){
   if(!file)return;
@@ -5460,16 +5998,11 @@ function importBackup(file){
       const data=JSON.parse(e.target.result);
       if(!data.version||!Array.isArray(data.stops)){toast('Backup inválido','error');return;}
       const quando=data.exportedAt?new Date(data.exportedAt).toLocaleDateString('pt-BR'):'data desconhecida';
-      /* O texto antigo era "Isso substituirá suas paradas e histórico" — não
-         dizia quanto vinha nem quanto ia embora. Importar por engano é
-         justamente onde os números importam. */
       if(!await confirmarAcao({titulo:'Importar backup',
         texto:`Importar o backup de ${quando}?`,
-        detalhe:`Vêm ${(data.stops||[]).length} parada(s) e ${(data.history||[]).length} dia(s) de histórico, SUBSTITUINDO as ${stops.length} parada(s) e ${history.length} dia(s) que você tem agora.`,
+        detalhe:resumoDoBackup(data),
         botao:'Importar', perigo:true}))return;
-      stops=data.stops||[];history=data.history||[];
-      if(data.cfg){cfg={...cfg,...data.cfg};saveCfg();}
-      forcarCarimboAgora();saveStops();saveHistory();
+      aplicarBackup(data);
       toast('✅ Backup importado!','success');
       goNav('homeScreen','nav-home');
     }catch(e){toast('Erro ao ler backup','error');}
@@ -5519,7 +6052,7 @@ async function clearHist(){
     botao:'Apagar tudo', perigo:true
   });
   if(!ok)return;
-  history=[];saveHistory();renderReport();
+  history=[];saveHistory(true);renderReport();
   toast('Histórico apagado','success');
 }
 
@@ -5530,8 +6063,14 @@ function deduplicateStops(){
   stops=stops.filter(function(s,i){
     // Dedup por _trackKey (pedidos de loja)
     if(s._trackKey){if(seen['tk_'+s._trackKey])return false;seen['tk_'+s._trackKey]=true;}
-    // Dedup por combinação nome+endereço+data (entradas manuais)
-    const combo=(s.name||'')+'|'+(s.address||'')+'|'+(s.deliveryDate||'');
+    /* Entrada manual: só é duplicata se TUDO bate — cliente, endereço,
+       data, loja, taxa, tipo e situação. Antes bastava nome + endereço:
+       duas entregas de verdade para o mesmo cliente (duas lojas, entrega
+       e troca) viravam uma. Sem nome não dá para afirmar nada: o "+3" das
+       lojas rápidas são três entregas, não uma repetida. Pedido de loja
+       já foi tratado acima, pela chave dele. */
+    if(s._trackKey||!(s.name||'').trim())return true;
+    const combo=[s.name,s.address||'',s.deliveryDate||'',s.store||'',parseMoney(s.value),s.serviceType||'entrega',s.done?1:0].join('|');
     if(seen['c_'+combo])return false;
     seen['c_'+combo]=true;
     return true;
@@ -6325,6 +6864,13 @@ function docAbrirFormulario(id){
 //  JavaScript iça para o topo. Mexa com cuidado.
 // ═══════════════════════════════════════════════════════
 checkNewDay();          // virou o dia? arquiva o de ontem antes de desenhar
+/* Histórico guardado por versões antigas traz cópias de parada pendente,
+   que apareciam como entrega nos "últimos 30 dias". Varre uma vez ao abrir. */
+{ const arrumado=apararHistorico(history);
+  const varreu=JSON.stringify(arrumado)!==JSON.stringify(history);
+  if(varreu) history=arrumado;
+  // E o retrato-base de cada entrega, para o carimbo só avançar com mudança de verdade.
+  if(basearHistorico()||varreu) localStorage.setItem('sb_history',JSON.stringify(history)); }
 updateStoreSelect();
 /* Antes de renderHome e de navPelaURL: a aba Repasses precisa existir na
    barra antes de alguém poder cair nela por #repasses. */

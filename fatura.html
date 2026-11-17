@@ -76,6 +76,14 @@ body{margin:0;background:var(--bg);color:var(--dark);font-family:'Barlow',system
 .fp-total span{color:#fff;font-weight:800;font-size:13px;letter-spacing:.5px;}
 .fp-total b{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;}
 
+/* ── como pagar ── */
+.fp-pix{margin-top:8px;background:#fff;border:1px solid var(--lgrey);border-left:4px solid var(--accent);border-radius:6px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px;}
+.fp-pix-txt{min-width:0;}
+.fp-pix-l{font-size:10.5px;font-weight:800;letter-spacing:.6px;color:var(--grey);}
+.fp-pix-chave{font-weight:800;font-size:16px;color:var(--dark);word-break:break-all;margin-top:2px;}
+.fp-pix-nome{font-size:12px;color:var(--grey);margin-top:1px;}
+.fp-pix-btn{flex-shrink:0;background:var(--dark);color:#fff;border:none;min-height:44px;padding:0 16px;font-size:14px;}
+
 /* ── barra de ações fixa ── */
 .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--lgrey);padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;justify-content:center;box-shadow:0 -4px 20px rgba(0,0,0,.06);}
 .bar .inner{width:100%;max-width:1000px;display:grid;grid-template-columns:2fr 1fr;gap:8px;}
@@ -155,7 +163,15 @@ function iniciar(){
 }
 
 function mostrar(){
-  DADOS = SBFatura.preview(DADOS, document.getElementById('fatura'));
+  /* Fatura gravada pela metade lançava exceção aqui, depois de o
+     "carregando" já ter sumido: a loja ficava olhando uma página em branco. */
+  try{
+    DADOS = SBFatura.preview(DADOS, document.getElementById('fatura'));
+  }catch(e){
+    console.error(e);
+    erro('Fatura inválida', 'Não foi possível ler os dados. Peça um novo link ao SPEEDBOY.');
+    return;
+  }
   document.getElementById('estado').style.display = 'none';
   document.getElementById('bar').style.display = '';
   document.getElementById('aviso').style.display = '';
@@ -180,6 +196,9 @@ function baixarPDF(){
 function falarWpp(){
   var tel = (DADOS && DADOS.emissor.telefone || '').replace(/\D/g, '');
   var msg = 'Olá! Sobre a fatura ' + (DADOS && DADOS.fatura.numero || '') + ':';
+  // Um 55 só: telefone do emissor salvo já com DDI virava 5555… e o
+  // WhatsApp abria sem contato nenhum.
+  if(tel.length >= 12 && tel.indexOf('55') === 0) tel = tel.slice(2);
   var url = tel ? 'https://wa.me/55' + tel + '?text=' + encodeURIComponent(msg)
                 : 'https://wa.me/?text=' + encodeURIComponent(msg);
   window.open(url, '_blank');

@@ -56,6 +56,7 @@ body{max-width:480px;margin:0 auto;padding-bottom:130px;}
 .stops-wrap{padding:0 16px;}
 .stop-card{background:var(--card);border-radius:var(--radius);border:1.5px solid var(--border);margin-bottom:10px;overflow:hidden;transition:border-color .2s,opacity .2s;}
 .stop-card.done{opacity:.5;border-color:var(--green);}
+.stop-card.done-pend,.fx-card.done-pend{border-color:var(--accent);}
 .stop-card.problema{border-color:var(--red);}
 .stop-card.proxima{border-color:var(--accent);box-shadow:0 0 0 1px rgba(245,197,24,.35);}
 .stop-hdr{display:flex;align-items:center;gap:10px;padding:14px;cursor:pointer;}
@@ -72,6 +73,10 @@ body{max-width:480px;margin:0 auto;padding-bottom:130px;}
 .stop-card.expanded .stop-actions{display:flex;}
 .btn-act{flex:1;min-width:100px;padding:14px;border-radius:10px;border:none;font-family:'Barlow',sans-serif;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;}
 .btn-act:active{transform:scale(.95);}
+.aviso-pend{margin:0 14px 12px;background:rgba(245,197,24,.12);border:1px solid var(--accent);border-radius:10px;padding:9px 11px;font-size:13px;font-weight:700;color:var(--text);line-height:1.5;}
+.btn-semfoto{display:block;width:calc(100% - 28px);min-height:48px;margin:0 14px 12px;background:rgba(255,82,82,.15);border:1.5px solid var(--red);color:var(--red);border-radius:10px;padding:10px 12px;font-family:'Barlow',sans-serif;font-weight:800;font-size:14px;line-height:1.4;cursor:pointer;}
+.fx-card .aviso-pend,.fx-card .btn-semfoto{margin:10px 0 0;width:100%;}
+.fx-card .aviso-pend{width:auto;}
 .aviso-prob{margin:0 14px 12px;background:rgba(255,82,82,.12);border:1px solid var(--red);border-radius:10px;padding:9px 11px;font-size:12px;color:var(--red);line-height:1.5;}
 /* ── Próxima parada: uma rota por vez ──
    A rota inteira aberta de uma vez só serve para planejar. Na rua, o que
@@ -156,6 +161,12 @@ body{max-width:480px;margin:0 auto;padding-bottom:130px;}
     <button type="button" class="btn-tool" id="btnOtimizar" onclick="otimizarRota()">⚡ Otimizar rota</button>
   </div>
   <div class="stops-wrap" id="stopsWrap"></div>
+</div>
+<div id="semSinalWrap" class="error-wrap">
+  <div style="font-size:64px;margin-bottom:16px">📴</div>
+  <div id="semSinalTitulo" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;color:var(--accent);margin-bottom:10px;">Sem sinal — tentando de novo</div>
+  <div id="semSinalTexto" style="font-size:14px;color:var(--muted);line-height:1.6;max-width:280px;margin-bottom:18px;">Assim que o sinal voltar a lista aparece sozinha.</div>
+  <button type="button" class="btn-confirmar" style="max-width:280px;min-height:52px;" onclick="location.reload()">🔄 Tentar de novo</button>
 </div>
 <div id="errorWrap" class="error-wrap">
   <div style="font-size:64px;margin-bottom:16px">⚠️</div>
@@ -253,7 +264,8 @@ var NOME_FIXO=_param('nome');
 var TEL_CENTRAL=String(_param('tel')).replace(/\D/g,'');
 var db=null;
 var repassData=null;
-var _salvando=false;
+var TEMPO_SEM_SINAL=10000;   // sem lista nenhuma depois disto: avisa em vez de girar para sempre
+var _doCache=false;          // a lista na tela veio do aparelho, não do servidor
 
 function modoFixo(){ return !!PAINEL; }
 
@@ -273,30 +285,64 @@ function init(){
   prepararInstalacao();
   if(modoFixo()) prepararPainelFixo();
 
+  /* O que o motoboy confirmou e ainda não subiu está guardado no aparelho:
+     lê a fila ANTES de desenhar qualquer lista, para a tela já nascer com
+     essas entregas marcadas. */
+  carregarFila();
+
   /* A lista guardada entra na tela ANTES de falar com o servidor. Sem sinal
      no meio da rua, o motoboy continua com os endereços do dia em vez de um
-     spinner eterno — e o Firebase enfileira as confirmações até voltar. */
+     spinner eterno — e as confirmações ficam na fila até o sinal voltar. */
   var cache=lerCache();
-  if(cache) aplicarRepasse(cache,true);
+  if(cache) aplicarRepasse(cache,true); else atualizarFaixa();
+
+  // Sem cache e sem resposta: depois de um tempo, diz a verdade em vez de girar
+  setTimeout(function(){ if(!repassData) mostrarSemSinal(false); },TEMPO_SEM_SINAL);
 
   try{firebase.initializeApp(FIREBASE_CONFIG);db=firebase.database();}
-  catch(e){ if(!cache) showError(); return; }
+  catch(e){
+    /* SDK que não carregou é falta de internet, não link ruim: "Link
+       inválido" faria o motoboy pedir link novo por um problema de sinal. */
+    if(typeof firebase==='undefined'){ if(!cache) mostrarSemSinal(true); return; }
+    if(!cache) showError();
+    return;
+  }
 
   // As regras do banco exigem sessão autenticada; só lê depois do login.
   // Best-effort enquanto as regras antigas (permissivas) estiverem publicadas.
   window.speedboyLoginAnonimo()
     .catch(function(e){ console.warn('Login anônimo falhou (seguindo mesmo assim):', e); })
-    .then(function(){ if(modoFixo()) ouvirPainelFixo(); else ouvirRepasse(); });
+    .then(function(){
+      if(modoFixo()) ouvirPainelFixo(); else ouvirRepasse();
+      enviarFila();   // abriu a página: o que ficou esperando tenta subir
+    });
 }
 
 function aplicarRepasse(dados,doCache){
-  repassData=dados;
+  _doCache=!!doCache;
+  if(!doCache&&dados&&Array.isArray(dados.deliveries)) podarFila(dados.deliveries);
+  // A fila vai por cima: snapshot do servidor ainda "pendente" não desfaz
+  // o que o motoboy já marcou e que não subiu.
+  repassData=reaplicarFila(dados);
   document.getElementById('loadingWrap').style.display='none';
+  document.getElementById('semSinalWrap').classList.remove('show');
   document.getElementById('mainWrap').style.display='block';
   document.getElementById('motoName').textContent=repassData.motoboy||'Motoboy';
   document.title='SPEEDBOY — '+(repassData.motoboy||'Entregas');
-  document.getElementById('avisoCache').style.display=doCache?'':'none';
   renderStops();
+  atualizarFaixa();
+}
+
+function mostrarSemSinal(semInternet){
+  if(repassData)return;
+  if(document.getElementById('errorWrap').classList.contains('show'))return;   // já é "link inválido"
+
+  document.getElementById('loadingWrap').style.display='none';
+  document.getElementById('semSinalTitulo').textContent=semInternet?'Sem internet':'Sem sinal — tentando de novo';
+  document.getElementById('semSinalTexto').textContent=semInternet
+    ?'Não consegui carregar o app. O link está certo — conecte-se à internet e toque em tentar de novo.'
+    :'Assim que o sinal voltar a lista aparece sozinha. O link está certo — não precisa pedir outro.';
+  document.getElementById('semSinalWrap').classList.add('show');
 }
 
 function ouvirRepasse(){
@@ -305,14 +351,11 @@ function ouvirRepasse(){
     var raw=snap.val();
     // Sem dado no servidor: se temos cache, ele continua valendo na tela
     if(!raw){ if(!repassData) showError(); return; }
-    /* Enquanto uma escrita nossa está em voo, o snapshot que volta é o
-       estado ANTERIOR — aplicá-lo apagaria da tela a confirmação que o
-       motoboy acabou de dar. */
-    if(_salvando)return;
     try{
       var dados=typeof raw==='string'?JSON.parse(raw):raw;
       guardarCache(dados);
       aplicarRepasse(dados,false);
+      enviarFila();   // chegou dado do servidor: há sinal, esvazia a fila
     }catch(e){console.error(e); if(!repassData) showError();}
   },function(e){
     console.warn('sem acesso ao repasse:',e);
@@ -331,16 +374,19 @@ function ouvirRepasse(){
    otimizada, sem tela de problema, sem valor nenhum: problema se resolve
    no botão verde de falar com o Luan. */
 var _nosFixos={};   // id do nó → payload, como está no banco
+var FONE_PADRAO='5527999165959';   // plantão SpeedBoy — igual ao LUAN_PHONE do pedido.html
 
 function prepararPainelFixo(){
   document.querySelector('.hero-tag').textContent='Suas entregas';
   if(NOME_FIXO) document.getElementById('motoName').textContent=NOME_FIXO;
+  /* O botão de ajuda aparece SEMPRE: endereço errado ou cliente ausente não
+     têm outro caminho dentro deste painel. Link sem `tel` cai no telefone
+     padrão da SpeedBoy (o mesmo LUAN_PHONE do pedido.html). */
   var ajuda=document.getElementById('fxAjuda');
-  if(TEL_CENTRAL){
-    ajuda.href='https://wa.me/'+(TEL_CENTRAL.length>11?TEL_CENTRAL:'55'+TEL_CENTRAL)+
-      '?text='+encodeURIComponent('Oi Luan, aqui é '+(NOME_FIXO||'a motoboy')+' — preciso de ajuda com uma entrega.');
-    ajuda.style.display='';
-  }
+  var fone=TEL_CENTRAL||FONE_PADRAO;
+  ajuda.href='https://wa.me/'+(fone.length>11?fone:'55'+fone)+
+    '?text='+encodeURIComponent('Oi Luan, aqui é '+(NOME_FIXO||'a motoboy')+' — preciso de ajuda com uma entrega.');
+  ajuda.style.display='';
   document.getElementById('toolsBar').style.display='none';
 }
 
@@ -351,7 +397,6 @@ function ouvirPainelFixo(){
   });
 }
 function aplicarSnapshotFixo(snap){
-  if(_salvando)return;
   var raw=snap.val()||{};
   var nos={};
   Object.keys(raw).forEach(function(id){
@@ -363,7 +408,8 @@ function aplicarSnapshotFixo(snap){
   _nosFixos=nos;
   var dados=montarPainelFixo(nos);
   guardarCache(dados);
-  aplicarRepasse(dados,false);
+  aplicarRepasse(dados,false);   // a fila vai por cima (reaplicarFila)
+  enviarFila();
 }
 
 /* Pendentes primeiro, na ordem em que a loja mandou; depois as feitas
@@ -392,31 +438,8 @@ function montarPainelFixo(nos){
   return {motoboy:nome||'Motoboy', fixo:true, hideTaxa:true, askReceiver:true, askPhoto:true, deliveries:lista};
 }
 
-/* Grava a confirmação só no nó daquela entrega. O nó guardado aqui é a
-   base: só os campos da confirmação mudam, o resto fica como a loja
-   mandou. */
-function salvarEntregaFixa(s){
-  var no=_nosFixos[s&&s._no];
-  if(!no) return Promise.reject(new Error('entrega não encontrada'));
-  var copia=JSON.parse(JSON.stringify(no));
-  var d=(copia.deliveries||[])[s._ni];
-  if(!d) return Promise.reject(new Error('entrega não encontrada'));
-  ['done','doneAt','receivedBy','proofId'].forEach(function(k){
-    if(s[k]===undefined||s[k]==='') delete d[k]; else d[k]=s[k];
-  });
-  _salvando=true;
-  return db.ref('rooms/'+ROOM+'/repass/'+s._no).set(JSON.stringify(copia))
-    .then(function(){
-      _salvando=false;
-      _nosFixos[s._no]=copia;
-      var dados=montarPainelFixo(_nosFixos);
-      guardarCache(dados);
-      repassData=dados;
-      // Entrega nova que a loja mandou DURANTE a gravação foi ignorada
-      // pelo listener; relê o que o banco já tem para ela não sumir.
-      db.ref('rooms/'+ROOM+'/repass').once('value',aplicarSnapshotFixo);
-    },function(e){ _salvando=false; console.error('salvarEntregaFixa:',e); throw e; });
-}
+/* A confirmação do painel fixo vai pela fila (enviarFila): só os campos da
+   entrega mudam, achada pelo stopId dentro do nó dela. */
 
 function renderFixo(){
   var items=repassData.deliveries||[];
@@ -439,14 +462,14 @@ function renderFixo(){
     if(s.store) info.push('🏪 '+esc(s.store));
     var fone=String(s.phone||'').replace(/\D/g,'');
     var corpo=s.done
-      ? '<div class="fx-ok">✅ Entregue '+esc(s.doneAt?hora(s.doneAt):'')+(s.receivedBy?' · Recebido por '+esc(s.receivedBy):'')+'</div>'
+      ? '<div class="fx-ok">✅ Entregue '+esc(s.doneAt?hora(s.doneAt):'')+(s.receivedBy?' · Recebido por '+esc(s.receivedBy):'')+'</div>'+avisosParada(s,i)
       : '<div class="fx-btns">'+
           '<button type="button" class="btn-act" onclick="navegarParada('+i+',\'waze\')" style="background:#33ccff;color:#001a26;">🚗 Waze</button>'+
           '<button type="button" class="btn-act" onclick="navegarParada('+i+',\'gmaps\')" style="background:#4285f4;color:#fff;">🗺️ Maps</button>'+
           (fone?'<a class="btn-act" href="tel:'+esc(fone)+'" style="background:var(--card2);color:var(--text);border:1px solid var(--border);">📞 Ligar</a>':'')+
         '</div>'+
         '<button type="button" class="fx-entregue" onclick="toggleDone('+i+')">✅ ENTREGUEI</button>';
-    return '<div class="fx-card'+(s.done?' done':'')+'">'+
+    return '<div class="fx-card'+classeFeita(s)+'">'+
       '<div class="fx-nome">'+(i+1)+'. '+esc(s.name||'Sem nome')+'</div>'+
       '<div class="fx-end">📍 '+esc(s.address||'')+'</div>'+
       (info.length?'<div class="fx-info">'+info.join('<br>')+'</div>':'')+
@@ -558,12 +581,14 @@ function renderStops(){
   wrap.innerHTML=items.map(function(s,i){
     var taxaStr=(!ocultarTaxa()&&s.taxa>0)?'R$ '+s.taxa.toFixed(2).replace('.',','):'';
     var tags=[s.serviceType==='retirada'?'📦':s.serviceType==='troca'?'🔄':'🛵',s.city||'',s.deliveryDate||''].filter(Boolean).join(' · ');
-    var classes='stop-card'+(s.done?' done':'')+(s.problem&&!s.done?' problema':'')+(i===prox?' proxima':'');
+    var classes='stop-card'+classeFeita(s)+(s.problem&&!s.done?' problema':'')+(i===prox?' proxima':'');
     var avisoProb=(s.problem&&!s.done)
       ? '<div class="aviso-prob">⚠️ <strong>'+esc(s.problem.titulo||'Problema')+'</strong>'+
         (s.problem.at?' · '+esc(hora(s.problem.at)):'')+
         (s.problem.detalhe?'<br>💬 '+esc(s.problem.detalhe):'')+'</div>'
       : '';
+    // Marca "aguardando sinal" / "sem comprovante": o que ainda não está no servidor
+    var avisoFila=avisosParada(s,i);
     var avisoOk=(s.done&&(s.receivedBy||s.doneAt))
       ? '<div class="aviso-prob" style="background:rgba(0,230,118,.1);border-color:var(--green);color:var(--green);">✅ '+
         (s.doneAt?esc(hora(s.doneAt)):'')+(s.receivedBy?' · Recebido por '+esc(s.receivedBy):'')+'</div>'
@@ -578,7 +603,7 @@ function renderStops(){
         '</div>'+
         (taxaStr?'<div class="stop-taxa">'+taxaStr+'</div>':'')+
       '</div>'+
-      avisoProb+avisoOk+
+      avisoProb+avisoOk+avisoFila+
       '<div class="stop-detail">'+
         (s.phone?'<div><strong>TEL </strong>'+esc(fmtPhone(s.phone))+'</div>':'')+
         (s.complement?'<div><strong>COMPL </strong>'+esc(s.complement)+'</div>':'')+
@@ -741,6 +766,12 @@ function otimizarRota(){
       if(!ordem){showToast('Serviço de rota indisponível','error');return null;}
       var feitas=repassData.deliveries.filter(function(s){return s.done;});
       repassData.deliveries=ordem.concat(semCoord,feitas);
+      /* Só a ORDEM vai para o servidor (por stopId, sobre o nó de agora):
+         parada que o dono removeu não ressuscita. */
+      var coords={};
+      repassData.deliveries.forEach(function(d){ if(d._lat&&d._lng) coords[idParada(d)]={lat:d._lat,lng:d._lng}; });
+      enfileirar({k:'Q'+Date.now().toString(36),tipo:'ordem',no:REPASS_ID,stopId:'',
+        ordem:repassData.deliveries.map(idParada),coords:coords,campos:{},at:Date.now()});
       salvarRepasse();
       renderStops();
       showToast('⚡ Rota otimizada — siga a ordem da lista','success');
@@ -755,6 +786,7 @@ function otimizarRota(){
 
 // ── ENTREGA ─────────────────────────────────────────────
 var _entregaIdx=-1;
+var _entregaKey='';
 var _fotoDataUrl='';
 
 function toggleDone(i){
@@ -766,10 +798,10 @@ function toggleDone(i){
   if(s.done&&modoFixo())return;
   if(s.done){
     // Reabrir: some tudo que a confirmação tinha gravado
-    s.done=false;
-    delete s.doneAt; delete s.receivedBy; delete s.proofId;
-    salvarRepasse(); renderStops();
-    showToast('↩️ Reaberta','success');
+    var it=novoItem('reabrir',s,{done:false,doneAt:null,receivedBy:null,proofId:null});
+    enfileirar(it);
+    reaplicarNaTela();
+    registrar(it,'↩️ Reaberta');
     return;
   }
   abrirEntrega(i);
@@ -778,6 +810,7 @@ function toggleDone(i){
 function abrirEntrega(i){
   _entregaIdx=i; _fotoDataUrl='';
   var s=repassData.deliveries[i];
+  _entregaKey=idParada(s);   // snapshot pode reordenar a lista com o modal aberto
   document.getElementById('entregaSub').textContent=(s.name||'Sem nome')+' · '+(s.address||'');
   document.getElementById('entregaRecebedor').value='';
   document.getElementById('campoRecebedor').style.display=repassData.askReceiver?'':'none';
@@ -890,55 +923,424 @@ function carimbarFoto(file,pos){
 
 function confirmarEntrega(){
   var i=_entregaIdx;
-  if(i<0||!repassData.deliveries[i])return;
-  var s=repassData.deliveries[i];
+  if(i<0)return;
+  /* Só pela identidade. Havia um "senão, a do índice i": se o dono tirava
+     a parada com o modal aberto, a confirmação — com a foto e o nome de
+     quem recebeu — caía na parada VIZINHA. */
+  var s=paradaPorId(repassData.deliveries,_entregaKey);
+  if(!s){ fecharEntrega(); showToast('Essa entrega saiu da sua lista — o Luan retirou','error'); return; }
   var recebedor=document.getElementById('entregaRecebedor').value.trim();
   if(repassData.askReceiver&&!recebedor){showToast('Informe quem recebeu','error');return;}
   if(repassData.askPhoto&&!_fotoDataUrl){showToast('Tire a foto do comprovante','error');return;}
 
-  var btn=document.getElementById('btnConfirmarEntrega');
-  btn.disabled=true; btn.textContent='⏳ Enviando...';
+  /* Sem sinal, o servidor nunca responde — e esperar por ele travava a tela
+     e perdia a confirmação (a entrega só é paga com ela). Por isso: 1º
+     grava no aparelho, 2º marca na tela e fecha o modal, 3º tenta enviar. */
+  var proofId='';
+  if(_fotoDataUrl) proofId='PF-'+Date.now().toString(36).toUpperCase()+Math.random().toString(36).slice(2,6).toUpperCase();
+  /* Entrega feita encerra o problema que estava aberto nela: o painel de
+     quem despachou não pode continuar marcando alerta vermelho numa
+     parada que já chegou. */
+  delete s.problem;
+  var item=novoItem('confirmar',s,{done:true,doneAt:new Date().toISOString(),
+    receivedBy:recebedor,proofId:proofId,problem:null});
+  if(proofId) item.proofId=proofId;
+  /* Primeiro a fila (é pequena), depois a foto (é grande): com o aparelho
+     quase cheio, a CONFIRMAÇÃO tem de caber antes de a foto disputar o
+     espaço. A foto tem chave própria; só fica na memória se não couber. */
+  var guardou=enfileirar(item);
+  if(proofId&&!guardarFoto(proofId,_fotoDataUrl)){ item.foto=_fotoDataUrl; item.fotoSoMemoria=true; guardarFila(); }
+  fecharEntrega();
+  reaplicarNaTela();
+  showToast('✅ Entrega marcada — enviando...','success');
 
-  var enviarProva=Promise.resolve('');
-  if(_fotoDataUrl){
-    var proofId='PF-'+Date.now().toString(36).toUpperCase()+Math.random().toString(36).slice(2,6).toUpperCase();
-    enviarProva=db.ref('rooms/'+ROOM+'/proofs/'+proofId).set(_fotoDataUrl)
-      .then(function(){return proofId;})
-      .catch(function(e){
-        console.error('comprovante:',e);
-        // No painel fixo a foto é o que paga a entrega: sem ela, não registra
-        if(modoFixo()) throw e;
-        showToast('Foto não subiu — entrega registrada mesmo assim','error');
-        return '';
-      });
-  }
-
-  enviarProva.then(function(proofId){
-    s.done=true;
-    s.doneAt=new Date().toISOString();
-    if(recebedor)s.receivedBy=recebedor;
-    if(proofId)s.proofId=proofId;
-    /* Entrega feita encerra o problema que estava aberto nela: o painel de
-       quem despachou não pode continuar marcando alerta vermelho numa
-       parada que já chegou. */
-    delete s.problem;
-    return salvarRepasse(s);
-  }).then(function(){
-    fecharEntrega();
-    renderStops();
-    showToast('✅ Entrega confirmada!','success');
-  }).catch(function(e){
-    console.error(e);
-    if(modoFixo()){
-      // Não registrou: a entrega volta a ser pendente, para tentar de novo
-      s.done=false; delete s.doneAt; delete s.receivedBy; delete s.proofId;
-      showToast('Não enviou — confira o sinal e tente de novo','error');
-    }else showToast('Erro ao salvar — tente de novo','error');
-  }).then(function(){
-    btn.disabled=false; btn.textContent='✅ Marcar como entregue';
-    validarEntrega();
+  salvarRepasse().then(function(){
+    var ainda=_fila.indexOf(item)>=0;
+    var semFoto=_fila.some(function(o){ return o.tipo==='foto'&&o.parado&&o.no===item.no&&o.stopId===item.stopId; });
+    if(semFoto) showToast('📷 Servidor recusou a foto — entrega registrada mesmo assim. Toque no cartão para reenviar a foto.','error');
+    else if(ainda&&item.foto&&item.fotoSoMemoria) showToast('📴 Salva, mas a foto não coube no aparelho — NÃO feche esta página até o sinal voltar','error');
+    else if(ainda&&guardou==='memoria') showToast('📴 Sem espaço no aparelho — NÃO feche esta página até o sinal voltar','error');
+    else if(ainda) showToast('📴 Salva neste aparelho — sobe quando o sinal voltar','');
+    else showToast('✅ Entrega confirmada!','success');
   });
 }
+
+// ── FILA DE ENVIO ───────────────────────────────────────
+/* Tudo que o motoboy faz (confirmar, reabrir, problema, resolvido, ordem da
+   rota) vira um ITEM numa fila guardada no localStorage ANTES de qualquer
+   envio. A tela é desenhada com a fila por cima do que o servidor diz
+   (reaplicarFila), e o item só sai da fila quando o servidor responde.
+
+   O servidor recebe só os campos daquela parada, achada pelo stopId, sobre
+   o estado ATUAL do nó (transaction). Endereço corrigido ou parada removida
+   pelo dono enquanto o motoboy estava sem sinal não são desfeitos.
+
+   Reenviar é seguro: mesmo proofId, mesmos campos — aplicar duas vezes dá o
+   mesmo resultado, então nunca nasce comprovante órfão nem entrega dobrada. */
+var TIMEOUT_ENVIO=15000;
+var _fila=[];
+var _voo=null;        // envio em andamento (uma passada por vez)
+var _pedido=false;    // chegou item novo durante a passada
+var _SEM_RESPOSTA={};
+var GRUPOS={confirmar:'feito',reabrir:'feito',foto:'feito',problema:'prob',resolvido:'prob',ordem:'ordem'};
+
+function chaveFila(){ return 'sb_moto_fila_'+ROOM+'_'+(PAINEL||REPASS_ID); }
+
+// Paradas se reconhecem pelo stopId; sem ele, por nome + endereço.
+function idParada(d){ return (d&&d.stopId)||('~'+((d&&d.name)||'')+'|'+((d&&d.address)||'')); }
+function noDaParada(d){ return (d&&d._no)||REPASS_ID; }   // painel fixo: um nó por entrega
+function paradaPorId(lista,id){
+  for(var i=0;i<(lista||[]).length;i++){ if(idParada(lista[i])===id) return lista[i]; }
+  return null;
+}
+
+function carregarFila(){
+  try{
+    var f=JSON.parse(localStorage.getItem(chaveFila())||'[]');
+    _fila=Array.isArray(f)?f.filter(function(it){ return it&&it.k&&it.tipo; }):[];
+  }catch(e){ _fila=[]; }
+  podarFila(null);
+}
+
+/* Foto "parada" (o servidor recusou) cuja parada não existe mais não tem
+   cartão para ser tocada: ficava para sempre na fila, com o aviso na faixa
+   e meio mega de foto ocupando o aparelho. Sai quando a lista do SERVIDOR
+   não tem mais a parada, ou depois de 3 dias. */
+var VALIDADE_FOTO_PARADA=3*24*3600*1000;
+function podarFila(listaDoServidor){
+  var antes=_fila.length;
+  _fila=_fila.filter(function(it){
+    if(!(it.tipo==='foto'&&it.parado)) return true;
+    var velha=Date.now()-(it.at||0)>VALIDADE_FOTO_PARADA;
+    var semParada=listaDoServidor&&!acharDoItem(listaDoServidor,it);
+    if(!velha&&!semParada) return true;
+    apagarFoto(it.proofId);
+    return false;
+  });
+  if(_fila.length!==antes) guardarFila();
+}
+
+/* Cada foto mora numa chave PRÓPRIA do aparelho (sb_moto_foto_<proofId>);
+   a fila guarda só a referência. Antes a foto ia dentro do item da fila:
+   quando a segunda foto estourava a cota, a fila inteira era regravada sem
+   foto nenhuma — inclusive a da primeira entrega, que já estava salva. Se
+   a aba morresse ali, as duas confirmações subiam sem comprovante (e no
+   painel fixo é a foto que paga a entrega). Agora a foto que não coube
+   fica só na memória e as que já estavam guardadas continuam guardadas. */
+function chaveFoto(proofId){ return 'sb_moto_foto_'+proofId; }
+function guardarFoto(proofId,dataUrl){
+  try{ localStorage.setItem(chaveFoto(proofId),dataUrl); return true; }catch(e){ return false; }
+}
+function lerFoto(proofId){
+  try{ return localStorage.getItem(chaveFoto(proofId))||''; }catch(e){ return ''; }
+}
+function apagarFoto(proofId){
+  try{ if(proofId) localStorage.removeItem(chaveFoto(proofId)); }catch(e){}
+}
+function fotoDoItem(item){ return item.foto||lerFoto(item.proofId); }
+
+/* Devolve 'ok' ou 'memoria' (nem a fila coube — só vale enquanto a página
+   estiver aberta). A foto nunca vai dentro da fila. */
+function guardarFila(){
+  var leve=_fila.map(function(it){
+    if(!it.foto) return it;
+    var c={};
+    Object.keys(it).forEach(function(k){ if(k!=='foto') c[k]=it[k]; });
+    return c;
+  });
+  try{ localStorage.setItem(chaveFila(),JSON.stringify(leve)); return 'ok'; }catch(e){}
+  return 'memoria';
+}
+
+function novoItem(tipo,s,campos){
+  return {k:'Q'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    tipo:tipo,no:noDaParada(s),stopId:idParada(s),campos:campos||{},at:Date.now()};
+}
+
+function mesmoAlvo(a,b){
+  if(a.no!==b.no) return false;
+  if(a.tipo==='ordem'||b.tipo==='ordem') return a.tipo===b.tipo;
+  return a.stopId===b.stopId;
+}
+/* Item novo substitui o anterior do mesmo assunto na mesma parada (entregou
+   e reabriu = só vale o último). */
+function enfileirar(item){
+  _fila=_fila.filter(function(o){ return !(GRUPOS[o.tipo]===GRUPOS[item.tipo]&&mesmoAlvo(o,item)); });
+  _fila.push(item);
+  return guardarFila();
+}
+function tirarDaFila(item){
+  var i=_fila.indexOf(item);
+  if(i>=0){ _fila.splice(i,1); guardarFila(); }
+  reaplicarNaTela();
+}
+
+// ── aplicar um item (puro: serve para a tela e para o servidor) ──
+function aplicarCampos(d,campos){
+  Object.keys(campos||{}).forEach(function(k){
+    var v=campos[k];
+    if(v===null||v===undefined||v==='') delete d[k]; else d[k]=v;
+  });
+}
+function acharDoItem(lista,item){
+  for(var i=0;i<(lista||[]).length;i++){
+    var d=lista[i];
+    if(idParada(d)===item.stopId&&(d._no===undefined||d._no===item.no)) return d;
+  }
+  return null;
+}
+/* Nova ordem por stopId. Parada que o dono acrescentou fica no fim; parada
+   que ele removeu NÃO volta (só entra quem existe na lista de agora). */
+function reordenar(lista,ids,coords){
+  var por={};
+  lista.forEach(function(d){ var id=idParada(d); if(!por[id]) por[id]=d; });
+  var usadas=[], out=[];
+  (ids||[]).forEach(function(id){
+    var d=por[id];
+    if(d&&usadas.indexOf(d)<0){ usadas.push(d); out.push(d); }
+  });
+  lista.forEach(function(d){ if(usadas.indexOf(d)<0) out.push(d); });
+  out.forEach(function(d){
+    var c=coords&&coords[idParada(d)];
+    if(c&&!d._lat){ d._lat=c.lat; d._lng=c.lng; }
+  });
+  return out;
+}
+// Lista nova com o item aplicado; null se a parada não existe mais.
+function aplicarItemNaLista(lista,item){
+  if(item.tipo==='ordem') return reordenar(lista,item.ordem,item.coords);
+  var d=acharDoItem(lista,item);
+  if(!d) return null;
+  aplicarCampos(d,item.campos);
+  return lista;
+}
+/* O nó do repasse é uma string JSON — e continua sendo: o index.html lê
+   done, doneAt, receivedBy, proofId e problem desse JSON. Devolve o JSON
+   novo, ou null se a parada não está mais lá. */
+function aplicarItemNoRepasse(cru,item){
+  var rp;
+  try{ rp=typeof cru==='string'?JSON.parse(cru):JSON.parse(JSON.stringify(cru)); }catch(e){ return null; }
+  if(!rp||!Array.isArray(rp.deliveries)) return null;
+  var nova=aplicarItemNaLista(rp.deliveries,item);
+  if(!nova) return null;
+  rp.deliveries=nova;
+  return JSON.stringify(rp);
+}
+
+/* A lista da tela = o que o servidor disse + a fila por cima. Devolve cópia
+   (o cache em disco continua com o que o servidor disse). */
+function reaplicarFila(dados){
+  if(!dados||!Array.isArray(dados.deliveries)) return dados;
+  var c=JSON.parse(JSON.stringify(dados));
+  c.deliveries.forEach(function(d){ delete d._pend; delete d._semFoto; });
+  _fila.forEach(function(item){
+    if(item.tipo==='ordem'){ if(!modoFixo()) c.deliveries=reordenar(c.deliveries,item.ordem,item.coords); return; }
+    var d=acharDoItem(c.deliveries,item);
+    if(!d) return;
+    if(item.tipo==='foto'&&item.parado){ d._semFoto=true; return; }
+    aplicarCampos(d,item.campos);
+    d._pend=item.tipo;
+  });
+  return c;
+}
+function reaplicarNaTela(){
+  if(!repassData) return;
+  repassData=reaplicarFila(repassData);
+  renderStops();
+  atualizarFaixa();
+}
+
+function classeFeita(s){
+  if(!s.done) return '';
+  return (s._pend||s._semFoto)?' done-pend':' done';
+}
+function avisosParada(s,i){
+  var h='';
+  if(s._pend) h+='<div class="aviso-pend">'+(s._pend==='confirmar'?'✅ Entregue — ':'')+'⏳ aguardando sinal · salvo neste aparelho</div>';
+  if(s._semFoto) h+='<button type="button" class="btn-semfoto" onclick="event.stopPropagation();reenviarFoto('+i+')">📷 Sem comprovante — toque para reenviar a foto</button>';
+  return h;
+}
+
+function plural(n,um,varios){ return n+' '+(n===1?um:varios); }
+// A faixa de cima diz o que é verdade agora: de onde vem a lista e o que espera para subir.
+function atualizarFaixa(){
+  var el=document.getElementById('avisoCache');
+  if(!el) return;
+  var conf=0,outros=0,semFoto=0,soMemoria=false,negado=false;
+  var lista=(repassData&&repassData.deliveries)||[];
+  _fila.forEach(function(it){
+    if(it.tipo==='foto'&&it.parado){ if(acharDoItem(lista,it)) semFoto++; }
+    else if(it.tipo==='confirmar') conf++;
+    else outros++;
+    if(it.foto&&it.fotoSoMemoria&&!it.fotoEnviada) soMemoria=true;
+    if((it.negadas||0)>=2) negado=true;
+  });
+  var t=[];
+  if(_doCache) t.push('📴 Sem sinal — esta é a lista da última vez que o app conectou.');
+  if(conf||outros){
+    t.push('⏳ '+(conf?plural(conf,'confirmação de entrega','confirmações de entrega'):'')+
+      (conf&&outros?' e ':'')+(outros?plural(outros,'outro registro','outros registros'):'')+
+      ' salvo(s) neste aparelho, esperando o sinal para subir — sobem sozinhos quando voltar.');
+  }else if(_doCache) t.push('O que você marcar fica salvo neste aparelho e sobe quando o sinal voltar.');
+  if(semFoto) t.push('📷 '+plural(semFoto,'entrega sem comprovante no servidor','entregas sem comprovante no servidor')+' — toque no cartão para reenviar a foto.');
+  if(soMemoria) t.push('⚠️ A foto não coube na memória do aparelho: NÃO feche esta página até o sinal voltar.');
+  if(negado) t.push('⚠️ O servidor não está aceitando o envio. Não apague nada: avise o Luan.');
+  el.textContent=t.join(' ');
+  el.style.display=t.length?'':'none';
+}
+
+// ── enviar ──
+function comTimeout(promessa){
+  return new Promise(function(res,rej){
+    var t=setTimeout(function(){ res(_SEM_RESPOSTA); },TIMEOUT_ENVIO);
+    promessa.then(function(v){ clearTimeout(t); res(v); },function(e){ clearTimeout(t); rej(e); });
+  });
+}
+// Recusa do servidor (regra/tamanho) é diferente de falta de sinal: sinal não rejeita, só espera.
+function ehRecusa(e){ return /permission|denied|invalid|too large|exceed/i.test(String((e&&(e.code||e.message))||'')); }
+
+/* Envia uma passada da fila, em ordem. Sem resposta em ~15 s não é erro:
+   o item continua na fila e a próxima passada (abrir a página, evento
+   `online`, snapshot do servidor) tenta de novo. Devolve uma promessa que
+   sempre resolve. */
+function salvarRepasse(){ return enviarFila(); }
+function enviarFila(){
+  if(!db) return Promise.resolve();
+  if(_voo){ _pedido=true; return _voo; }
+  var lote=_fila.filter(function(it){ return !it.parado; });
+  if(!lote.length) return Promise.resolve();
+  var parar=false;
+  var passo=lote.reduce(function(p,item){
+    return p.then(function(){
+      if(parar||_fila.indexOf(item)<0) return null;
+      return enviarItem(item).then(function(r){ if(r==='timeout') parar=true; });
+    });
+  },Promise.resolve());
+  function fim(){
+    _voo=null;
+    var denovo=_pedido&&!parar; _pedido=false;
+    reaplicarNaTela();
+    return denovo?enviarFila():undefined;
+  }
+  _voo=passo.then(fim,function(e){ console.error('fila:',e); return fim(); });
+  return _voo;
+}
+
+function enviarItem(item){
+  return enviarFoto(item).then(function(r){
+    return r==='ok'?gravarItem(item):r;
+  });
+}
+
+/* A foto sobe ANTES da confirmação, com o proofId que já está no item — o
+   mesmo em toda tentativa. */
+function enviarFoto(item,jaRefezLogin){
+  if(!item.proofId||item.fotoEnviada) return Promise.resolve('ok');
+  var foto=fotoDoItem(item);
+  if(!foto) return Promise.resolve(fotoPerdida(item));   // só estava na memória e a página foi fechada
+  return comTimeout(db.ref('rooms/'+ROOM+'/proofs/'+item.proofId).set(foto)).then(function(r){
+    if(r===_SEM_RESPOSTA) return 'timeout';
+    item.fotoEnviada=true; delete item.foto; delete item.fotoSoMemoria; delete item.negadas;
+    apagarFoto(item.proofId);
+    guardarFila();
+    return 'ok';
+  },function(e){
+    console.error('comprovante:',e);
+    if(!ehRecusa(e)) return 'timeout';
+    /* "Permissão negada" pode não ser a foto: é o que o banco responde
+       quando a sessão não abriu (painel aberto sem sinal, login anônimo
+       falhou). Tratar isso direto como recusa arrancava o comprovante da
+       confirmação. Então: refaz o login e tenta UMA vez de novo, na hora.
+       Recusou outra vez, aí é recusa — a entrega segue sem a foto, com
+       aviso no cartão. No painel fixo nem assim: lá a foto é o que paga,
+       a confirmação fica esperando e a faixa manda avisar o Luan. */
+    if(!jaRefezLogin) return refazerLogin().then(function(){ return enviarFoto(item,true); });
+    item.negadas=(item.negadas||0)+1; guardarFila();
+    if(modoFixo()) return 'timeout';
+    return fotoRecusada(item);
+  });
+}
+function refazerLogin(){
+  var p;
+  try{ p=window.speedboyLoginAnonimo?window.speedboyLoginAnonimo():null; }catch(e){ p=null; }
+  return comTimeout(Promise.resolve(p).catch(function(){})).then(function(){},function(){});
+}
+/* A foto não está mais no aparelho (não coube e a página foi fechada).
+   No repasse comum a entrega segue sem comprovante, com aviso no cartão;
+   no painel fixo a confirmação NÃO sobe sem foto: volta a ficar pendente
+   para a entregadora fotografar de novo. */
+function fotoPerdida(item){
+  if(modoFixo()&&item.tipo==='confirmar'){
+    tirarDaFila(item);
+    showToast('📷 A foto de uma entrega se perdeu — confirme de novo com a foto','error');
+    return 'perdida';
+  }
+  return fotoRecusada(item);
+}
+/* O servidor recusou a foto: a entrega continua valendo (segue sem proofId) e
+   a foto vira um item parado — o cartão avisa e o toque reenvia. */
+function fotoRecusada(item){
+  if(item.tipo==='foto'){ item.parado=true; guardarFila(); return 'recusada'; }
+  _fila.push({k:'Q'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),tipo:'foto',parado:true,
+    no:item.no,stopId:item.stopId,proofId:item.proofId,foto:item.foto,
+    fotoSoMemoria:item.fotoSoMemoria,campos:{proofId:item.proofId},at:Date.now()});
+  delete item.campos.proofId; item.proofId=''; delete item.foto; delete item.fotoSoMemoria;
+  guardarFila();
+  return 'ok';
+}
+
+/* Aplica SÓ os campos do item sobre o nó como o servidor o tem agora. A 1ª
+   passada da transaction costuma vir sem dado (devolve o mesmo, o SDK refaz
+   com o valor real). `false`: sem eventos locais intermediários. */
+function gravarItem(item){
+  return new Promise(function(res){
+    var achou=true;
+    var timer=setTimeout(function(){ res('timeout'); },TIMEOUT_ENVIO);
+    db.ref('rooms/'+ROOM+'/repass/'+item.no).transaction(function(atual){
+      if(atual===null||atual===undefined) return atual;
+      var novo=aplicarItemNoRepasse(atual,item);
+      if(novo===null){ achou=false; return undefined; }   // parada sumiu: não ressuscita
+      return novo;
+    },function(err,gravou,snap){
+      clearTimeout(timer);
+      if(err){ console.error('repasse:',err); res('erro'); return; }
+      var sumiu=!achou||(gravou&&snap&&snap.val()==null);
+      if(sumiu){ tirarDaFila(item); res('sumiu'); return; }
+      if(!gravou){ res('erro'); return; }
+      tirarDaFila(item);
+      res('ok');
+    },false);
+  });
+}
+
+function reenviarFoto(i){
+  var s=repassData&&repassData.deliveries[i];
+  if(!s) return;
+  var id=idParada(s), no=noDaParada(s);
+  var it=null;
+  _fila.forEach(function(o){ if(o.tipo==='foto'&&o.parado&&o.stopId===id&&o.no===no) it=o; });
+  if(!it) return;
+  if(!fotoDoItem(it)){ showToast('A foto não está mais neste aparelho — fale com o Luan','error'); return; }
+  it.parado=false; delete it.negadas; guardarFila();
+  showToast('📷 Enviando a foto...','');
+  salvarRepasse().then(function(){
+    if(_fila.indexOf(it)<0) showToast('✅ Comprovante enviado','success');
+    else if(it.parado) showToast('Servidor recusou a foto de novo — fale com o Luan','error');
+    else showToast('📴 Foto guardada — sobe quando o sinal voltar','');
+    reaplicarNaTela();
+  });
+}
+
+/* Reabrir, problema e resolvido: entram na fila e só dizem "registrado"
+   depois que o servidor confirmou. Sem sinal, o aviso diz que está salvo. */
+function registrar(item,msgOk){
+  showToast('⏳ Salvo — enviando...','');
+  return salvarRepasse().then(function(){
+    if(_fila.indexOf(item)<0) showToast(msgOk,'success');
+    else showToast('📴 Salvo neste aparelho — sobe quando o sinal voltar','');
+  });
+}
+
 
 // ── PROBLEMA NA ENTREGA ─────────────────────────────────
 /* Mensagens prontas. O motoboy parado na porta de um prédio não vai
@@ -982,12 +1384,14 @@ var MOTIVOS=[
 ];
 
 var _probIdx=-1;
+var _probKey='';
 var _probMotivo=null;
 
 function abrirProb(i){
   _probIdx=i; _probMotivo=null;
   var s=repassData.deliveries[i];
   if(!s)return;
+  _probKey=idParada(s);
   var contato=s.storePhone?('Vai para '+(s.storeIsPlantao?'o plantão SPEEDBOY':('🏪 '+(s.store||'a loja')))):'Nenhum WhatsApp cadastrado para esta entrega';
   document.getElementById('probSub').textContent=(s.name||'Sem nome')+' · '+contato;
   document.getElementById('probLista').innerHTML=MOTIVOS.map(function(m,mi){
@@ -1035,17 +1439,19 @@ function textoDoProblema(s,motivo,detalhe){
 function enviarProblema(){
   var i=_probIdx;
   if(i<0||!_probMotivo)return;
-  var s=repassData.deliveries[i];
-  if(!s)return;
+  var s=paradaPorId(repassData.deliveries,_probKey);
+  if(!s){ fecharProb(); showToast('Essa entrega saiu da sua lista — o Luan retirou','error'); return; }
   var detalhe=document.getElementById('probTexto').value.trim();
   if(!detalhe){showToast('Escreva o que aconteceu','error');return;}
 
   /* Registrar ANTES de abrir o WhatsApp. Abrir o WhatsApp tira o navegador
      da frente, e em muitos celulares a aba volta recarregada — o que ficou
-     por gravar não grava. */
+     por gravar não grava. Por isso o registro entra na fila do aparelho
+     primeiro; o envio ao servidor segue em paralelo. */
   s.problem={tipo:_probMotivo.id,titulo:_probMotivo.titulo,detalhe:detalhe,at:new Date().toISOString()};
+  enfileirar(novoItem('problema',s,{problem:s.problem}));
   salvarRepasse();
-  renderStops();
+  reaplicarNaTela();
 
   var msg=textoDoProblema(s,_probMotivo,detalhe);
   var fone=String(s.storePhone||'').replace(/\D/g,'');
@@ -1054,17 +1460,21 @@ function enviarProblema(){
     : 'https://wa.me/?text='+encodeURIComponent(msg);
   fecharProb();
   window.open(url,'_blank');
-  showToast(fone?'⚠️ Problema enviado para a loja':'⚠️ Registrado — escolha o contato no WhatsApp','success');
+  /* O que é verdade aqui: o registro está salvo e o WhatsApp abriu. A loja
+     só recebe a mensagem quando o motoboy tocar em "enviar" lá. */
+  showToast(fone?'⚠️ Registrado — WhatsApp aberto, toque em enviar':'⚠️ Registrado — escolha o contato no WhatsApp e toque em enviar','success');
 }
 
 function resolverProblema(){
   var i=_probIdx;
-  if(i<0||!repassData.deliveries[i])return;
-  delete repassData.deliveries[i].problem;
-  salvarRepasse();
+  if(i<0)return;
+  var s=paradaPorId(repassData.deliveries,_probKey);
+  if(!s){ fecharProb(); showToast('Essa entrega saiu da sua lista — o Luan retirou','error'); return; }
+  var it=novoItem('resolvido',s,{problem:null});
+  enfileirar(it);
   fecharProb();
-  renderStops();
-  showToast('✅ Problema encerrado','success');
+  reaplicarNaTela();
+  registrar(it,'✅ Problema encerrado');
 }
 
 // ── APOIO ───────────────────────────────────────────────
@@ -1073,19 +1483,6 @@ function toggleMCard(i){
   var was=c.classList.contains('expanded');
   document.querySelectorAll('.stop-card').forEach(function(x){x.classList.remove('expanded');});
   if(!was)c.classList.add('expanded');
-}
-
-function salvarRepasse(entrega){
-  if(modoFixo()) return db ? salvarEntregaFixa(entrega) : Promise.reject(new Error('sem conexão'));
-  if(!db||!ROOM||!REPASS_ID||!repassData)return Promise.resolve();
-  /* _coords existe só para calcular a rota; _lat/_lng ficam, porque é o que
-     abre o Waze no ponto exato depois. */
-  var copia=JSON.parse(JSON.stringify(repassData));
-  (copia.deliveries||[]).forEach(function(d){ delete d._coords; });
-  _salvando=true;
-  return db.ref('rooms/'+ROOM+'/repass/'+REPASS_ID).set(JSON.stringify(copia))
-    .catch(function(e){ console.error('salvarRepasse:',e); showToast('Sem sinal — tente de novo','error'); throw e; })
-    .then(function(r){ _salvando=false; return r; }, function(e){ _salvando=false; throw e; });
 }
 
 function openWpp(i){
@@ -1117,6 +1514,7 @@ document.getElementById('entregaModal').addEventListener('click',function(e){if(
 
 function showError(){
   document.getElementById('loadingWrap').style.display='none';
+  document.getElementById('semSinalWrap').classList.remove('show');
   document.getElementById('errorWrap').classList.add('show');
 }
 
@@ -1144,6 +1542,8 @@ if('serviceWorker' in navigator){
   });
 }
 
+// Sinal voltou: o que ficou esperando no aparelho tenta subir
+window.addEventListener('online',function(){ enviarFila(); });
 window.addEventListener('load',init);
 </script>
 </body>
